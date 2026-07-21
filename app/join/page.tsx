@@ -48,7 +48,7 @@ function JoinForm() {
           </p>
         </div>
         <label className="text-sm font-medium text-slate-700">
-          Session code
+          Session key
           <input
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}

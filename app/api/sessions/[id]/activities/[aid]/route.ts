@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getAuthorizedSession } from "@/lib/sessions";
+import { authorizeSession } from "@/lib/sessions";
 
 // Close an activity: participants return to the current agenda step.
 // Responses are retained for a future export/report feature.
@@ -9,7 +9,7 @@ export async function PATCH(
   ctx: { params: Promise<{ id: string; aid: string }> }
 ) {
   const { id, aid } = await ctx.params;
-  const session = await getAuthorizedSession(id, req.headers.get("x-facilitator-key"));
+  const session = await authorizeSession(req, id);
   if (!session) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }

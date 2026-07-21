@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { query } from "@/lib/db";
-import { getAuthorizedSession } from "@/lib/sessions";
+import { authorizeSession } from "@/lib/sessions";
 
 export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
   const { id } = await ctx.params;
-  const session = await getAuthorizedSession(id, req.headers.get("x-facilitator-key"));
+  const session = await authorizeSession(req, id);
   if (!session) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }

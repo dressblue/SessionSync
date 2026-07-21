@@ -26,6 +26,9 @@ export interface StatePayload {
     status: "lobby" | "live" | "ended";
     currentStep: number;
     refreshEpoch: number;
+    courseId: string | null;
+    joinKey: string | null;
+    joinKeyExpires: string | null;
   };
   activity: ActivityState | null;
   steps: { id: string; title: string; kind: string; content: string }[];

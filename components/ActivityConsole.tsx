@@ -6,7 +6,7 @@ import { ActivityPanel } from "./ActivityPanel";
 
 interface Props {
   sessionId: string;
-  facilitatorKey: string;
+  authHeaders: Record<string, string>;
   activity: ActivityState | null;
   onChanged: () => void;
 }
@@ -15,7 +15,7 @@ interface Props {
 // watch live results, close to return everyone to the agenda step.
 export function ActivityConsole({
   sessionId,
-  facilitatorKey,
+  authHeaders,
   activity,
   onChanged,
 }: Props) {
@@ -34,7 +34,7 @@ export function ActivityConsole({
         method,
         headers: {
           "Content-Type": "application/json",
-          "x-facilitator-key": facilitatorKey,
+          ...authHeaders,
         },
         body: body === undefined ? undefined : JSON.stringify(body),
       });

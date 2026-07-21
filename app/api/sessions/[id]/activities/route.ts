@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { query } from "@/lib/db";
-import { getAuthorizedSession } from "@/lib/sessions";
+import { authorizeSession } from "@/lib/sessions";
 
 // Facilitator pushes a new activity (vote or column feedback). Any open
 // activity is closed first — one activity is live at a time.
@@ -10,7 +10,7 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> }
 ) {
   const { id } = await ctx.params;
-  const session = await getAuthorizedSession(id, req.headers.get("x-facilitator-key"));
+  const session = await authorizeSession(req, id);
   if (!session) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }

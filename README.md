@@ -5,7 +5,7 @@ agenda, shares a join link in Zoom chat, and drives every participant's screen
 through the agenda in sync — with presence, reconnect, and device-switch
 support.
 
-## Phase 1 (current)
+## Current capabilities
 
 - Create a session, build/edit/reorder a markdown agenda
 - Join by link or 6-character code with just a name (no account)
@@ -32,8 +32,19 @@ npm install
 npm run dev
 ```
 
+## Courses & keys
+
+- Facilitators create courses (1+ sessions each) and invite co-facilitators by
+  sharing the stable course code; every team member can tailor content and
+  lead sessions.
+- Students join a session with a randomized key that expires after 24 hours
+  (rotate/revoke any time); legacy standalone sessions keep their stable code.
+- `scripts/seed-247dad.mjs` seeds the 24:7 Dad(R) A.M. facilitation companion
+  (12 sessions keyed to the licensed NFI slide deck).
+
 ## Roadmap
 
-- Phase 2: content blocks (slides/images, embedded video, rich text)
-- Phase 3: interactivity (polls, activities, personal + shared notes, export)
-- Phase 4: Zoom App wrapper (Zoom Apps SDK, in-client embed, invitations)
+- Content blocks (slides/images, embedded video)
+- Session artifact/export (attendance, notes, activity results)
+- Zoom App wrapper (Zoom Apps SDK, in-client embed, invitations)
+- Real accounts (Clerk) replacing the interim facilitator identities

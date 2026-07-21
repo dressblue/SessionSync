@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getAuthorizedSession, getSteps } from "@/lib/sessions";
+import { authorizeSession, getSteps } from "@/lib/sessions";
 
 type Ctx = { params: Promise<{ id: string; stepId: string }> };
 
 export async function PATCH(req: Request, ctx: Ctx) {
   const { id, stepId } = await ctx.params;
-  const session = await getAuthorizedSession(id, req.headers.get("x-facilitator-key"));
+  const session = await authorizeSession(req, id);
   if (!session) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
@@ -51,7 +51,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
 export async function DELETE(req: Request, ctx: Ctx) {
   const { id, stepId } = await ctx.params;
-  const session = await getAuthorizedSession(id, req.headers.get("x-facilitator-key"));
+  const session = await authorizeSession(req, id);
   if (!session) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }

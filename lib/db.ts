@@ -140,4 +140,45 @@ async function ensureSchema(
   await run(
     `CREATE INDEX IF NOT EXISTS idx_responses_activity ON activity_responses(activity_id);`
   );
+  // Phase 3: courses, facilitator identities, rotating student keys
+  await run(`
+    CREATE TABLE IF NOT EXISTS facilitators (
+      id UUID PRIMARY KEY,
+      name TEXT NOT NULL,
+      key TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS courses (
+      id UUID PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      code TEXT UNIQUE NOT NULL,
+      created_by UUID,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS course_facilitators (
+      course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      facilitator_id UUID NOT NULL REFERENCES facilitators(id) ON DELETE CASCADE,
+      role TEXT NOT NULL DEFAULT 'facilitator',
+      added_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (course_id, facilitator_id)
+    );
+  `);
+  await run(
+    `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS course_id UUID;`
+  );
+  await run(
+    `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEFAULT 0;`
+  );
+  await run(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS join_key TEXT;`);
+  await run(
+    `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS join_key_expires TIMESTAMPTZ;`
+  );
+  await run(
+    `CREATE INDEX IF NOT EXISTS idx_sessions_course ON sessions(course_id, position);`
+  );
 }

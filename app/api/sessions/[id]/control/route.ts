@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getAuthorizedSession, getSteps } from "@/lib/sessions";
+import { authorizeSession, getSteps } from "@/lib/sessions";
 
 // Facilitator navigation: start/end the session, move between agenda steps.
 export async function POST(
@@ -8,7 +8,7 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> }
 ) {
   const { id } = await ctx.params;
-  const session = await getAuthorizedSession(id, req.headers.get("x-facilitator-key"));
+  const session = await authorizeSession(req, id);
   if (!session) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }

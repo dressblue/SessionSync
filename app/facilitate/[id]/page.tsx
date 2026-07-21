@@ -5,11 +5,17 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useSessionState } from "@/components/useSessionState";
 import { Markdown } from "@/components/Markdown";
 import { ActivityConsole } from "@/components/ActivityConsole";
+import {
+  facilitatorHeaders,
+  loadFacilitatorIdentity,
+  type FacilitatorIdentity,
+} from "@/components/identity";
 
 function Console() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const [key, setKey] = useState<string | null>(null);
+  const [identity, setIdentity] = useState<FacilitatorIdentity | null>(null);
   const [checked, setChecked] = useState(false);
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
@@ -28,6 +34,7 @@ function Console() {
     const resolved = urlKey ?? stored;
     if (urlKey) localStorage.setItem(`ss_facilitator_${id}`, urlKey);
     setKey(resolved);
+    setIdentity(loadFacilitatorIdentity());
     setChecked(true);
     setOrigin(window.location.origin);
     // Restore an unsent "add step" draft after a reload or dropped tab.
@@ -66,7 +73,8 @@ function Console() {
           method,
           headers: {
             "Content-Type": "application/json",
-            "x-facilitator-key": key ?? "",
+            ...(key ? { "x-facilitator-key": key } : {}),
+            ...facilitatorHeaders(identity),
           },
           body: body === undefined ? undefined : JSON.stringify(body),
         });
@@ -81,7 +89,7 @@ function Console() {
         return false;
       }
     },
-    [key, refresh]
+    [key, identity, refresh]
   );
 
   const control = (action: string, step?: number) =>
@@ -128,14 +136,15 @@ function Console() {
 
   if (!checked) return null;
 
-  if (!key) {
+  if (!key && !identity) {
     return (
       <main className="flex-1 flex items-center justify-center px-6 text-center">
         <div>
-          <h1 className="text-xl font-semibold">Facilitator key missing</h1>
+          <h1 className="text-xl font-semibold">Facilitator access needed</h1>
           <p className="text-slate-500 mt-2 max-w-md">
-            Open this console using the full facilitator link you received when
-            the session was created (it contains a <code>?key=…</code> secret).
+            Open this console from your course page in the facilitator portal,
+            or use the full facilitator link (it contains a <code>?key=…</code>{" "}
+            secret).
           </p>
         </div>
       </main>
@@ -151,7 +160,21 @@ function Console() {
   }
 
   const { session, steps, participants, activity } = state;
-  const joinUrl = origin ? `${origin}/join?code=${session.code}` : "";
+  const isCourseSession = !!session.courseId;
+  const keyActive =
+    !!session.joinKey &&
+    !!session.joinKeyExpires &&
+    new Date(session.joinKeyExpires).getTime() > Date.now();
+  const studentCode = isCourseSession ? (keyActive ? session.joinKey : null) : session.code;
+  const joinUrl = origin && studentCode ? `${origin}/join?code=${studentCode}` : "";
+  const keyExpiryLabel = (() => {
+    if (!session.joinKeyExpires) return "";
+    const ms = new Date(session.joinKeyExpires).getTime() - Date.now();
+    if (ms <= 0) return "expired";
+    const h = Math.floor(ms / 3_600_000);
+    const m = Math.floor((ms % 3_600_000) / 60_000);
+    return h > 0 ? `expires in ${h}h ${m}m` : `expires in ${m}m`;
+  })();
   const current = steps[session.currentStep];
   const online = participants.filter((p) => p.online);
 
@@ -165,9 +188,18 @@ function Console() {
     <div className="flex-1 min-h-screen">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center gap-4">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
-            Facilitator console
-          </p>
+          {isCourseSession ? (
+            <a
+              href={`/course/${session.courseId}`}
+              className="text-xs text-slate-400 hover:text-slate-600"
+            >
+              ← Back to course
+            </a>
+          ) : (
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+              Facilitator console
+            </p>
+          )}
           <h1 className="text-xl font-bold truncate">{session.title}</h1>
         </div>
         <span
@@ -254,7 +286,10 @@ function Console() {
           {session.status === "live" && (
             <ActivityConsole
               sessionId={id}
-              facilitatorKey={key}
+              authHeaders={{
+                ...(key ? { "x-facilitator-key": key } : {}),
+                ...facilitatorHeaders(identity),
+              }}
               activity={activity}
               onChanged={refresh}
             />
@@ -400,44 +435,71 @@ function Console() {
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
             <h2 className="font-semibold mb-1">Invite participants</h2>
             <p className="text-sm text-slate-500 mb-3">
-              Paste the link into Zoom chat, or share the code.
+              {isCourseSession
+                ? "Students join with a randomized key that expires after 24 hours."
+                : "Paste the link into Zoom chat, or share the code."}
             </p>
-            <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-center mb-3">
-              <span className="font-mono text-2xl tracking-[0.3em] font-semibold">
-                {session.code}
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => copy(joinUrl, "link")}
-                className="flex-1 rounded-lg bg-indigo-600 text-white px-3 py-2 text-sm font-medium hover:bg-indigo-700 transition"
-              >
-                {copied === "link" ? "Copied!" : "Copy join link"}
-              </button>
-              <button
-                onClick={() => copy(session.code, "code")}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-100 transition"
-              >
-                {copied === "code" ? "Copied!" : "Copy code"}
-              </button>
-            </div>
-            {joinUrl && (
-              <p className="mt-2 text-xs text-slate-400 break-all">{joinUrl}</p>
-            )}
-            <div className="mt-4 border-t border-slate-100 pt-3">
-              <p className="text-xs text-slate-400 mb-1.5">
-                Facilitating from another device? This link is your control key —
-                don&apos;t share it with participants.
+            {studentCode ? (
+              <>
+                <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-center mb-1">
+                  <span className="font-mono text-2xl tracking-[0.3em] font-semibold">
+                    {studentCode}
+                  </span>
+                </div>
+                {isCourseSession && (
+                  <p className="text-xs text-slate-400 text-center mb-2">
+                    {keyExpiryLabel}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => copy(joinUrl, "link")}
+                    className="flex-1 rounded-lg bg-indigo-600 text-white px-3 py-2 text-sm font-medium hover:bg-indigo-700 transition"
+                  >
+                    {copied === "link" ? "Copied!" : "Copy join link"}
+                  </button>
+                  <button
+                    onClick={() => copy(studentCode, "code")}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-100 transition"
+                  >
+                    {copied === "code" ? "Copied!" : "Copy key"}
+                  </button>
+                </div>
+                {joinUrl && (
+                  <p className="mt-2 text-xs text-slate-400 break-all">{joinUrl}</p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-slate-400 mb-2">
+                No active student key.
               </p>
+            )}
+            {isCourseSession && (
               <button
                 onClick={() =>
-                  copy(`${origin}/facilitate/${id}?key=${key}`, "fkey")
+                  api(`/api/sessions/${id}/joinkey`, "POST", { ttlHours: 24 })
                 }
-                className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
+                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
               >
-                {copied === "fkey" ? "Copied!" : "Copy facilitator link"}
+                {keyActive ? "Rotate student key" : "Generate 24-hour student key"}
               </button>
-            </div>
+            )}
+            {key && (
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <p className="text-xs text-slate-400 mb-1.5">
+                  Facilitating from another device? This link is your control
+                  key — don&apos;t share it with participants.
+                </p>
+                <button
+                  onClick={() =>
+                    copy(`${origin}/facilitate/${id}?key=${key}`, "fkey")
+                  }
+                  className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
+                >
+                  {copied === "fkey" ? "Copied!" : "Copy facilitator link"}
+                </button>
+              </div>
+            )}
           </section>
 
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">

@@ -44,6 +44,9 @@ export async function GET(
       status: session.status,
       currentStep: session.current_step,
       refreshEpoch: session.refresh_epoch,
+      courseId: session.course_id,
+      joinKey: session.join_key,
+      joinKeyExpires: session.join_key_expires,
     },
     activity,
     steps: steps.map((s) => ({

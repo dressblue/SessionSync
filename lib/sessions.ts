@@ -1,5 +1,9 @@
 import { randomUUID, randomBytes } from "crypto";
 import { query } from "./db";
+import {
+  getFacilitatorFromRequest,
+  isCourseFacilitator,
+} from "./facilitators";
 
 export type SessionStatus = "lobby" | "live" | "ended";
 
@@ -12,6 +16,10 @@ export interface SessionRow {
   current_step: number;
   refresh_epoch: number;
   active_activity: string | null;
+  course_id: string | null;
+  position: number;
+  join_key: string | null;
+  join_key_expires: string | null;
 }
 
 export interface ActivityRow {
@@ -67,7 +75,11 @@ function makeCode(length = 6): string {
   return out;
 }
 
-export async function createSession(title: string): Promise<SessionRow> {
+export async function createSession(
+  title: string,
+  courseId: string | null = null,
+  position = 0
+): Promise<SessionRow> {
   const id = randomUUID();
   const facilitatorKey = randomBytes(24).toString("base64url");
   // Retry on the (unlikely) code collision.
@@ -75,9 +87,9 @@ export async function createSession(title: string): Promise<SessionRow> {
     const code = makeCode();
     try {
       const res = await query<SessionRow>(
-        `INSERT INTO sessions (id, title, code, facilitator_key)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
-        [id, title, code, facilitatorKey]
+        `INSERT INTO sessions (id, title, code, facilitator_key, course_id, position)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [id, title, code, facilitatorKey, courseId, position]
       );
       return res.rows[0];
     } catch (err) {
@@ -109,6 +121,30 @@ export async function getAuthorizedSession(
   const session = await getSession(id);
   if (!session || session.facilitator_key !== key) return null;
   return session;
+}
+
+/**
+ * Facilitator authorization for a session: either the legacy per-session
+ * secret key, or a signed-in facilitator who is on the session's course team.
+ */
+export async function authorizeSession(
+  req: Request,
+  sessionId: string
+): Promise<SessionRow | null> {
+  const session = await getSession(sessionId);
+  if (!session) return null;
+  const legacy = req.headers.get("x-facilitator-key");
+  if (legacy && legacy === session.facilitator_key) return session;
+  if (session.course_id) {
+    const facilitator = await getFacilitatorFromRequest(req);
+    if (
+      facilitator &&
+      (await isCourseFacilitator(session.course_id, facilitator.id))
+    ) {
+      return session;
+    }
+  }
+  return null;
 }
 
 export async function getSteps(sessionId: string): Promise<StepRow[]> {

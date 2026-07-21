@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { query } from "@/lib/db";
-import { getSessionByCode } from "@/lib/sessions";
+import { getSessionByCode, type SessionRow } from "@/lib/sessions";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -10,9 +10,30 @@ export async function POST(req: Request) {
   if (!code || !name) {
     return NextResponse.json({ error: "Code and name are required" }, { status: 400 });
   }
-  const session = await getSessionByCode(code);
+  const raw = code.trim().toUpperCase();
+  // Course sessions are entered with a rotating 24-hour student key.
+  const keyed = await query<SessionRow>(
+    `SELECT * FROM sessions WHERE join_key = $1 ORDER BY join_key_expires DESC LIMIT 1`,
+    [raw]
+  );
+  let session: SessionRow | null = keyed.rows[0] ?? null;
+  if (session) {
+    if (
+      !session.join_key_expires ||
+      new Date(session.join_key_expires).getTime() <= Date.now()
+    ) {
+      return NextResponse.json(
+        { error: "That session key has expired — ask your facilitator for a fresh one" },
+        { status: 410 }
+      );
+    }
+  } else {
+    // Legacy standalone sessions still join by their stable code.
+    const byCode = await getSessionByCode(raw);
+    session = byCode && !byCode.course_id ? byCode : null;
+  }
   if (!session) {
-    return NextResponse.json({ error: "No session found for that code" }, { status: 404 });
+    return NextResponse.json({ error: "No session found for that key" }, { status: 404 });
   }
   // Rejoining with the same name reclaims the existing identity (reconnect or
   // device switch) instead of creating a roster duplicate.
