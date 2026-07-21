@@ -1,0 +1,42 @@
+import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
+import { query } from "@/lib/db";
+import { getSessionByCode } from "@/lib/sessions";
+
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => null);
+  const code = typeof body?.code === "string" ? body.code : "";
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  if (!code || !name) {
+    return NextResponse.json({ error: "Code and name are required" }, { status: 400 });
+  }
+  const session = await getSessionByCode(code);
+  if (!session) {
+    return NextResponse.json({ error: "No session found for that code" }, { status: 404 });
+  }
+  // Rejoining with the same name reclaims the existing identity (reconnect or
+  // device switch) instead of creating a roster duplicate.
+  const trimmed = name.slice(0, 80).trim();
+  const existing = await query<{ id: string }>(
+    `SELECT id FROM participants WHERE session_id = $1 AND lower(name) = lower($2)`,
+    [session.id, trimmed]
+  );
+  let participantId: string;
+  if (existing.rows[0]) {
+    participantId = existing.rows[0].id;
+    await query(`UPDATE participants SET last_seen = now() WHERE id = $1`, [
+      participantId,
+    ]);
+  } else {
+    participantId = randomUUID();
+    await query(
+      `INSERT INTO participants (id, session_id, name) VALUES ($1, $2, $3)`,
+      [participantId, session.id, trimmed]
+    );
+  }
+  return NextResponse.json({
+    sessionId: session.id,
+    participantId,
+    title: session.title,
+  });
+}

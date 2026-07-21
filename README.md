@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SessionSync
 
-## Getting Started
+An interactive companion for Zoom sessions: the facilitator builds a structured
+agenda, shares a join link in Zoom chat, and drives every participant's screen
+through the agenda in sync — with presence, reconnect, and device-switch
+support.
 
-First, run the development server:
+## Phase 1 (current)
+
+- Create a session, build/edit/reorder a markdown agenda
+- Join by link or 6-character code with just a name (no account)
+- Facilitator-controlled synced navigation (start / next / back / goto / end)
+- Live roster with online presence
+- Reconnect-safe: all state is server-side; facilitator drafts persist locally
+- Device switch: participants get a personal resume link (and rejoining with
+  the same name reclaims the identity); the facilitator link works anywhere
+
+## Architecture notes
+
+- Next.js (App Router) + Tailwind
+- Postgres via `DATABASE_URL` (Neon in production); with no `DATABASE_URL`,
+  an embedded PGlite database under `.data/pglite` is used for local dev
+- Sync transport is short-interval polling behind `components/useSessionState.ts`
+  — designed to be swapped for a push service (Liveblocks/Ably) later
+- Facilitator auth is a per-session secret key in the console URL; participant
+  identity is a per-session UUID. Clerk-based accounts come in a later phase.
+
+## Run
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Roadmap
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Phase 2: content blocks (slides/images, embedded video, rich text)
+- Phase 3: interactivity (polls, activities, personal + shared notes, export)
+- Phase 4: Zoom App wrapper (Zoom Apps SDK, in-client embed, invitations)
