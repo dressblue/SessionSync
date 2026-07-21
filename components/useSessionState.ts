@@ -2,20 +2,38 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+export interface ActivityEntry {
+  id: string;
+  column: number;
+  value: string;
+  name: string;
+  mine: boolean;
+  highlighted: boolean;
+  hidden: boolean;
+}
+
 export interface ActivityState {
   id: string;
-  kind: "vote" | "columns";
+  kind: "vote" | "columns" | "likert";
   prompt: string;
+  phase?: "collect" | "rate";
   options?: string[];
   columns?: string[];
   votes?: { counts: number[]; total: number; myVote: number | null };
-  entries?: {
-    id: string;
-    column: number;
-    value: string;
-    name: string;
-    mine: boolean;
-  }[];
+  entries?: ActivityEntry[];
+  scale?: number;
+  items?: string[];
+  ratings?: { avg: number | null; count: number; mine: number | null }[];
+}
+
+export interface StepTool {
+  id: string;
+  kind: "vote" | "columns" | "likert";
+  prompt: string;
+  options?: string[];
+  columns?: string[];
+  items?: string[];
+  sourcing?: "participants";
 }
 
 export interface StatePayload {
@@ -31,7 +49,13 @@ export interface StatePayload {
     joinKeyExpires: string | null;
   };
   activity: ActivityState | null;
-  steps: { id: string; title: string; kind: string; content: string }[];
+  steps: {
+    id: string;
+    title: string;
+    kind: string;
+    content: string;
+    tools: StepTool[];
+  }[];
   participants: { id: string; name: string; online: boolean }[];
 }
 
@@ -39,9 +63,14 @@ export interface StatePayload {
 // service (Liveblocks/Ably) later only replaces this hook.
 export function useSessionState(
   sessionId: string,
-  opts: { participantId?: string; intervalMs?: number } = {}
+  opts: {
+    participantId?: string;
+    intervalMs?: number;
+    headers?: Record<string, string>;
+  } = {}
 ) {
-  const { participantId, intervalMs = 1500 } = opts;
+  const { participantId, intervalMs = 1500, headers } = opts;
+  const headersKey = JSON.stringify(headers ?? {});
   const [state, setState] = useState<StatePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const stoppedRef = useRef(false);
@@ -54,6 +83,7 @@ export function useSessionState(
         : "";
       const res = await fetch(`/api/sessions/${sessionId}/state${qs}`, {
         cache: "no-store",
+        headers: JSON.parse(headersKey),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -64,7 +94,7 @@ export function useSessionState(
     } catch (e) {
       setError(e instanceof Error ? e.message : "Connection lost");
     }
-  }, [sessionId, participantId]);
+  }, [sessionId, participantId, headersKey]);
 
   useEffect(() => {
     stoppedRef.current = false;

@@ -3,8 +3,24 @@ import { randomUUID } from "crypto";
 import { query } from "@/lib/db";
 import { authorizeSession } from "@/lib/sessions";
 
-// Facilitator pushes a new activity (vote or column feedback). Any open
-// activity is closed first — one activity is live at a time.
+const cleanList = (v: unknown, max: number): string[] =>
+  Array.isArray(v)
+    ? v
+        .map((o: unknown) => (typeof o === "string" ? o.trim() : ""))
+        .filter(Boolean)
+        .slice(0, max)
+    : [];
+
+// Facilitator pushes a new activity. Any open activity is closed first —
+// one activity is live at a time.
+//
+// Kinds:
+//  vote    — population survey (pick one, live head-count)
+//  likert  — scoring survey (rate each item 1..scale, live averages)
+//  columns — moderated comment board (1–4 titled columns)
+// vote and likert accept sourcing: "participants" — options/items are
+// collected from the group first (phase "collect"), then the facilitator
+// advances to the voting/rating phase.
 export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
@@ -17,32 +33,41 @@ export async function POST(
   const body = await req.json().catch(() => null);
   const kind = body?.kind;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+  const sourced = body?.sourcing === "participants";
   if (!prompt) {
     return NextResponse.json({ error: "A prompt is required" }, { status: 400 });
   }
 
   let config: Record<string, unknown>;
   if (kind === "vote") {
-    const options = Array.isArray(body?.options)
-      ? body.options
-          .map((o: unknown) => (typeof o === "string" ? o.trim() : ""))
-          .filter(Boolean)
-          .slice(0, 6)
-      : [];
-    if (options.length < 2) {
-      return NextResponse.json(
-        { error: "A vote needs at least two options" },
-        { status: 400 }
-      );
+    if (sourced) {
+      config = { phase: "collect" };
+    } else {
+      const options = cleanList(body?.options, 8);
+      if (options.length < 2) {
+        return NextResponse.json(
+          { error: "A vote needs at least two options" },
+          { status: 400 }
+        );
+      }
+      config = { options };
     }
-    config = { options };
+  } else if (kind === "likert") {
+    const scale = 5;
+    if (sourced) {
+      config = { phase: "collect", scale };
+    } else {
+      const items = cleanList(body?.items, 12);
+      if (items.length < 1) {
+        return NextResponse.json(
+          { error: "A scoring survey needs at least one item" },
+          { status: 400 }
+        );
+      }
+      config = { items, scale };
+    }
   } else if (kind === "columns") {
-    const columns = Array.isArray(body?.columns)
-      ? body.columns
-          .map((c: unknown) => (typeof c === "string" ? c.trim() : ""))
-          .filter(Boolean)
-          .slice(0, 4)
-      : [];
+    const columns = cleanList(body?.columns, 4);
     if (columns.length < 1) {
       return NextResponse.json(
         { error: "Column feedback needs at least one titled column" },

@@ -28,6 +28,13 @@ function Console() {
   const [editContent, setEditContent] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Step-tool editor state
+  const [toolsOpenFor, setToolsOpenFor] = useState<string | null>(null);
+  const [toolKind, setToolKind] = useState<"vote" | "likert" | "columns">("vote");
+  const [toolPrompt, setToolPrompt] = useState("");
+  const [toolList, setToolList] = useState("");
+  const [toolSourced, setToolSourced] = useState(false);
+
   useEffect(() => {
     const urlKey = searchParams.get("key");
     const stored = localStorage.getItem(`ss_facilitator_${id}`);
@@ -63,7 +70,14 @@ function Console() {
     }
   }, [checked, id, newTitle, newContent]);
 
-  const { state, error, refresh } = useSessionState(id, { intervalMs: 2000 });
+  const authHeaders = {
+    ...(key ? { "x-facilitator-key": key } : {}),
+    ...facilitatorHeaders(identity),
+  };
+  const { state, error, refresh } = useSessionState(id, {
+    intervalMs: 2000,
+    headers: authHeaders,
+  });
 
   const api = useCallback(
     async (path: string, method: string, body?: unknown) => {
@@ -122,6 +136,49 @@ function Console() {
       content: editContent,
     });
     if (ok) setEditingId(null);
+  }
+
+  async function addTool(stepId: string) {
+    const list = toolList
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const body: Record<string, unknown> = {
+      kind: toolKind,
+      prompt: toolPrompt,
+    };
+    if (toolKind === "columns") body.columns = list;
+    else if (toolSourced) body.sourcing = "participants";
+    else if (toolKind === "vote") body.options = list;
+    else body.items = list;
+    const ok = await api(
+      `/api/sessions/${id}/steps/${stepId}/tools`,
+      "POST",
+      body
+    );
+    if (ok) {
+      setToolPrompt("");
+      setToolList("");
+      setToolSourced(false);
+    }
+  }
+
+  function launchTool(tool: {
+    kind: string;
+    prompt: string;
+    options?: string[];
+    columns?: string[];
+    items?: string[];
+    sourcing?: string;
+  }) {
+    api(`/api/sessions/${id}/activities`, "POST", {
+      kind: tool.kind,
+      prompt: tool.prompt,
+      options: tool.options,
+      columns: tool.columns,
+      items: tool.items,
+      sourcing: tool.sourcing,
+    });
   }
 
   async function copy(text: string, tag: string) {
@@ -267,6 +324,31 @@ function Console() {
                   Now showing — step {session.currentStep + 1} of {steps.length}
                 </p>
                 <h3 className="font-semibold">{current.title}</h3>
+                {current.tools.length > 0 && (
+                  <ul className="mt-2 flex flex-col gap-1.5">
+                    {current.tools.map((t) => (
+                      <li
+                        key={t.id}
+                        className="flex items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-2"
+                      >
+                        <span className="text-[10px] font-bold uppercase text-indigo-500 shrink-0">
+                          {t.kind === "vote"
+                            ? "Vote"
+                            : t.kind === "likert"
+                              ? "Score"
+                              : "Board"}
+                        </span>
+                        <span className="text-sm min-w-0 truncate">{t.prompt}</span>
+                        <button
+                          onClick={() => launchTool(t)}
+                          className="ml-auto shrink-0 rounded-md bg-indigo-600 text-white px-2.5 py-1 text-xs font-semibold hover:bg-indigo-700"
+                        >
+                          Launch
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {current.content && (
                   <div className="mt-2 max-h-48 overflow-y-auto text-sm border border-slate-100 rounded-lg p-3 bg-slate-50">
                     <Markdown>{current.content}</Markdown>
@@ -376,6 +458,21 @@ function Console() {
                           ↓
                         </button>
                         <button
+                          onClick={() => {
+                            setToolsOpenFor(toolsOpenFor === s.id ? null : s.id);
+                            setToolPrompt("");
+                            setToolList("");
+                            setToolSourced(false);
+                          }}
+                          className={`rounded-md px-2 py-1 text-xs hover:bg-slate-100 ${
+                            s.tools.length > 0
+                              ? "text-indigo-600 font-medium"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          Tools{s.tools.length > 0 ? ` (${s.tools.length})` : ""}
+                        </button>
+                        <button
                           onClick={() => beginEdit(s)}
                           className="rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-slate-100"
                         >
@@ -390,6 +487,102 @@ function Console() {
                           className="rounded-md px-2 py-1 text-xs text-rose-500 hover:bg-rose-50"
                         >
                           Delete
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {toolsOpenFor === s.id && editingId !== s.id && (
+                    <div className="border-t border-slate-100 bg-slate-50/60 rounded-b-lg p-3 flex flex-col gap-2">
+                      {s.tools.length > 0 && (
+                        <ul className="flex flex-col gap-1">
+                          {s.tools.map((t) => (
+                            <li
+                              key={t.id}
+                              className="flex items-center gap-2 text-xs bg-white rounded-md border border-slate-200 px-2.5 py-1.5"
+                            >
+                              <span className="font-bold uppercase text-[10px] text-indigo-500 shrink-0">
+                                {t.kind === "vote"
+                                  ? "Vote"
+                                  : t.kind === "likert"
+                                    ? "Score"
+                                    : "Board"}
+                              </span>
+                              <span className="min-w-0 truncate">{t.prompt}</span>
+                              {t.sourcing === "participants" && (
+                                <span className="text-slate-400 shrink-0">
+                                  (participant-sourced)
+                                </span>
+                              )}
+                              <button
+                                onClick={() =>
+                                  api(
+                                    `/api/sessions/${id}/steps/${s.id}/tools/${t.id}`,
+                                    "DELETE"
+                                  )
+                                }
+                                className="ml-auto text-slate-300 hover:text-rose-500"
+                                aria-label="Remove tool"
+                              >
+                                ×
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <select
+                            value={toolKind}
+                            onChange={(e) =>
+                              setToolKind(
+                                e.target.value as "vote" | "likert" | "columns"
+                              )
+                            }
+                            className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white"
+                          >
+                            <option value="vote">Vote (pick one)</option>
+                            <option value="likert">Scoring survey (1–5)</option>
+                            <option value="columns">Comment board</option>
+                          </select>
+                          {toolKind !== "columns" && (
+                            <label className="flex items-center gap-1 text-xs text-slate-500">
+                              <input
+                                type="checkbox"
+                                checked={toolSourced}
+                                onChange={(e) => setToolSourced(e.target.checked)}
+                              />
+                              participants suggest the choices
+                            </label>
+                          )}
+                        </div>
+                        <input
+                          value={toolPrompt}
+                          onChange={(e) => setToolPrompt(e.target.value)}
+                          placeholder="Prompt / question shown to participants"
+                          maxLength={300}
+                          className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        {!(toolKind !== "columns" && toolSourced) && (
+                          <textarea
+                            value={toolList}
+                            onChange={(e) => setToolList(e.target.value)}
+                            rows={3}
+                            placeholder={
+                              toolKind === "columns"
+                                ? "Column titles, one per line (1–4) — e.g. each question"
+                                : toolKind === "vote"
+                                  ? "Options, one per line (2–8)"
+                                  : "Items to score, one per line (1–12)"
+                            }
+                            className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        )}
+                        <button
+                          onClick={() => addTool(s.id)}
+                          disabled={!toolPrompt.trim()}
+                          className="self-start rounded-md bg-slate-800 text-white px-3 py-1.5 text-xs font-medium hover:bg-slate-900 disabled:opacity-40"
+                        >
+                          Add tool to this step
                         </button>
                       </div>
                     </div>

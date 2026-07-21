@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import {
+  authorizeSession,
   getActiveActivity,
   getParticipants,
   getSession,
   getSteps,
+  getStepTools,
 } from "@/lib/sessions";
 
 const ONLINE_WINDOW_MS = 12_000;
@@ -29,10 +31,16 @@ export async function GET(
     );
   }
 
-  const [steps, participants, activity] = await Promise.all([
+  // Facilitator polls carry auth headers; their view includes hidden entries
+  // (flagged) and each step's attached tools.
+  const facilitatorView = !!(await authorizeSession(req, id));
+  const [steps, participants, activity, toolsByStep] = await Promise.all([
     getSteps(id),
     getParticipants(id),
-    getActiveActivity(session, participantId),
+    getActiveActivity(session, participantId, facilitatorView),
+    facilitatorView
+      ? getStepTools(id)
+      : Promise.resolve({} as Awaited<ReturnType<typeof getStepTools>>),
   ]);
   const now = Date.now();
 
@@ -54,6 +62,15 @@ export async function GET(
       title: s.title,
       kind: s.kind,
       content: s.content,
+      tools: (toolsByStep[s.id] ?? []).map((t) => {
+        let config: Record<string, unknown> = {};
+        try {
+          config = JSON.parse(t.config);
+        } catch {
+          /* empty config */
+        }
+        return { id: t.id, kind: t.kind, prompt: t.prompt, ...config };
+      }),
     })),
     participants: participants.map((p) => ({
       id: p.id,

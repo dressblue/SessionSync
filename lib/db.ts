@@ -181,4 +181,25 @@ async function ensureSchema(
   await run(
     `CREATE INDEX IF NOT EXISTS idx_sessions_course ON sessions(course_id, position);`
   );
+  // Phase 4: step-linked tools, response moderation, likert surveys
+  await run(`
+    CREATE TABLE IF NOT EXISTS step_tools (
+      id UUID PRIMARY KEY,
+      step_id UUID NOT NULL REFERENCES steps(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      config TEXT NOT NULL DEFAULT '{}',
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await run(
+    `CREATE INDEX IF NOT EXISTS idx_step_tools_step ON step_tools(step_id, position);`
+  );
+  await run(
+    `ALTER TABLE activity_responses ADD COLUMN IF NOT EXISTS highlighted BOOLEAN NOT NULL DEFAULT false;`
+  );
+  await run(
+    `ALTER TABLE activity_responses ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT false;`
+  );
 }

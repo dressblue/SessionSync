@@ -43,11 +43,61 @@ export async function POST(
     return NextResponse.json({ error: "No open activity" }, { status: 409 });
   }
 
-  let config: { options?: string[]; columns?: string[] } = {};
+  let config: {
+    options?: string[];
+    columns?: string[];
+    items?: string[];
+    phase?: string;
+    scale?: number;
+  } = {};
   try {
     config = JSON.parse(activity.config);
   } catch {
     /* treated as empty below */
+  }
+
+  // Collect phase (participant-sourced vote/likert): suggestions land in the
+  // reserved collect column (-1) for facilitator moderation.
+  if (config.phase === "collect") {
+    const value = typeof body?.value === "string" ? body.value.trim() : "";
+    if (!value) {
+      return NextResponse.json({ error: "Nothing to add" }, { status: 400 });
+    }
+    await query(
+      `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+       VALUES ($1, $2, $3, -1, $4)`,
+      [randomUUID(), activity.id, participantId, value.slice(0, 160)]
+    );
+    return NextResponse.json({ ok: true });
+  }
+
+  if (activity.kind === "likert") {
+    const itemIndex = body?.itemIndex;
+    const rating = body?.rating;
+    const items = config.items ?? [];
+    const scale = config.scale ?? 5;
+    if (
+      !Number.isInteger(itemIndex) ||
+      itemIndex < 0 ||
+      itemIndex >= items.length ||
+      !Number.isInteger(rating) ||
+      rating < 1 ||
+      rating > scale
+    ) {
+      return NextResponse.json({ error: "Invalid rating" }, { status: 400 });
+    }
+    // One rating per participant per item; re-rating replaces it.
+    await query(
+      `DELETE FROM activity_responses
+       WHERE activity_id = $1 AND participant_id = $2 AND column_index = $3`,
+      [activity.id, participantId, itemIndex]
+    );
+    await query(
+      `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [randomUUID(), activity.id, participantId, itemIndex, String(rating)]
+    );
+    return NextResponse.json({ ok: true });
   }
 
   if (activity.kind === "vote") {
@@ -79,7 +129,7 @@ export async function POST(
     await query(
       `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
        VALUES ($1, $2, $3, $4, $5)`,
-      [randomUUID(), activity.id, participantId, column, value.slice(0, 160)]
+      [randomUUID(), activity.id, participantId, column, value.slice(0, 280)]
     );
   }
   return NextResponse.json({ ok: true });

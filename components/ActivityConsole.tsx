@@ -11,17 +11,22 @@ interface Props {
   onChanged: () => void;
 }
 
-// Facilitator's activity station: build & push a vote or column feedback,
-// watch live results, close to return everyone to the agenda step.
+type Kind = "vote" | "likert" | "columns";
+type Sourcing = "facilitator" | "participants";
+
+// Facilitator's activity station: build & push a population vote, a scoring
+// survey (likert), or a moderated comment board; watch live results; for
+// participant-sourced surveys, advance from collecting to voting/rating.
 export function ActivityConsole({
   sessionId,
   authHeaders,
   activity,
   onChanged,
 }: Props) {
-  const [kind, setKind] = useState<"vote" | "columns">("vote");
+  const [kind, setKind] = useState<Kind>("vote");
+  const [sourcing, setSourcing] = useState<Sourcing>("facilitator");
   const [prompt, setPrompt] = useState("");
-  const [optionsText, setOptionsText] = useState("");
+  const [listText, setListText] = useState("");
   const [columns, setColumns] = useState<string[]>(["", ""]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -32,10 +37,7 @@ export function ActivityConsole({
     try {
       const res = await fetch(path, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders,
-        },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
       if (!res.ok) {
@@ -54,21 +56,24 @@ export function ActivityConsole({
 
   async function push(e: React.FormEvent) {
     e.preventDefault();
-    const body =
-      kind === "vote"
-        ? {
-            kind,
-            prompt,
-            options: optionsText
-              .split("\n")
-              .map((s) => s.trim())
-              .filter(Boolean),
-          }
-        : { kind, prompt, columns: columns.map((c) => c.trim()).filter(Boolean) };
+    const list = listText
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const body: Record<string, unknown> = { kind, prompt };
+    if (kind === "columns") {
+      body.columns = columns.map((c) => c.trim()).filter(Boolean);
+    } else if (sourcing === "participants") {
+      body.sourcing = "participants";
+    } else if (kind === "vote") {
+      body.options = list;
+    } else {
+      body.items = list;
+    }
     const ok = await call(`/api/sessions/${sessionId}/activities`, "POST", body);
     if (ok) {
       setPrompt("");
-      setOptionsText("");
+      setListText("");
       setColumns(["", ""]);
     }
   }
@@ -76,36 +81,65 @@ export function ActivityConsole({
   if (activity) {
     return (
       <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-        <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <h2 className="font-semibold">
             Live activity{" "}
             <span className="text-xs font-normal text-slate-400">
               — participants see this now
             </span>
           </h2>
-          <button
-            onClick={() =>
-              call(
-                `/api/sessions/${sessionId}/activities/${activity.id}`,
-                "PATCH",
-                { status: "closed" }
-              )
-            }
-            disabled={busy}
-            className="rounded-lg border border-rose-300 text-rose-700 px-3 py-1.5 text-xs font-medium hover:bg-rose-50 disabled:opacity-40"
-          >
-            Close activity
-          </button>
+          <div className="flex items-center gap-2">
+            {activity.phase === "collect" && (
+              <button
+                onClick={() =>
+                  call(
+                    `/api/sessions/${sessionId}/activities/${activity.id}`,
+                    "PATCH",
+                    { advance: true }
+                  )
+                }
+                disabled={busy}
+                className="rounded-lg bg-indigo-600 text-white px-3 py-1.5 text-xs font-semibold hover:bg-indigo-700 disabled:opacity-40"
+              >
+                {activity.kind === "vote" ? "Open the vote" : "Start scoring"}
+              </button>
+            )}
+            <button
+              onClick={() =>
+                call(
+                  `/api/sessions/${sessionId}/activities/${activity.id}`,
+                  "PATCH",
+                  { status: "closed" }
+                )
+              }
+              disabled={busy}
+              className="rounded-lg border border-rose-300 text-rose-700 px-3 py-1.5 text-xs font-medium hover:bg-rose-50 disabled:opacity-40"
+            >
+              Close activity
+            </button>
+          </div>
         </div>
         <ActivityPanel
           activity={activity}
           sessionId={sessionId}
+          moderationHeaders={authHeaders}
           onChanged={onChanged}
         />
+        <p className="mt-2 text-xs text-slate-400">
+          Moderation: ✓ highlights an entry for everyone; − hides it from
+          participants (you still see it struck through; ↺ restores it).
+        </p>
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       </section>
     );
   }
+
+  const segBtn = (active: boolean) =>
+    `rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+      active
+        ? "bg-white text-indigo-700 shadow-sm"
+        : "text-slate-500 hover:text-slate-700"
+    }`;
 
   return (
     <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
@@ -114,23 +148,40 @@ export function ActivityConsole({
         {(
           [
             ["vote", "Vote"],
-            ["columns", "Column feedback"],
+            ["likert", "Scoring survey"],
+            ["columns", "Comment board"],
           ] as const
         ).map(([k, label]) => (
           <button
             key={k}
             type="button"
             onClick={() => setKind(k)}
-            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-              kind === k
-                ? "bg-white text-indigo-700 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
+            className={segBtn(kind === k)}
           >
             {label}
           </button>
         ))}
       </div>
+
+      {kind !== "columns" && (
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-1 mb-3 w-fit">
+          {(
+            [
+              ["facilitator", "I provide the choices"],
+              ["participants", "Participants suggest first"],
+            ] as const
+          ).map(([s, label]) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setSourcing(s)}
+              className={segBtn(sourcing === s)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <form onSubmit={push} className="flex flex-col gap-2">
         <input
@@ -139,21 +190,15 @@ export function ActivityConsole({
           placeholder={
             kind === "vote"
               ? "Question, e.g. Which risk concerns you most?"
-              : "Prompt, e.g. One word for each: what worked, what didn't"
+              : kind === "likert"
+                ? "Prompt, e.g. Rate how strongly each applies to you"
+                : "Prompt, e.g. Answer both questions below"
           }
           maxLength={300}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
 
-        {kind === "vote" ? (
-          <textarea
-            value={optionsText}
-            onChange={(e) => setOptionsText(e.target.value)}
-            rows={4}
-            placeholder={"One option per line (2–6)\nOption A\nOption B"}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        ) : (
+        {kind === "columns" ? (
           <div className="flex flex-col gap-1.5">
             {columns.map((c, i) => (
               <div key={i} className="flex gap-1.5">
@@ -164,8 +209,8 @@ export function ActivityConsole({
                       cols.map((v, j) => (j === i ? e.target.value : v))
                     )
                   }
-                  placeholder={`Column ${i + 1} title`}
-                  maxLength={80}
+                  placeholder={`Column ${i + 1} title (e.g. a question)`}
+                  maxLength={120}
                   className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 {columns.length > 1 && (
@@ -192,9 +237,29 @@ export function ActivityConsole({
               </button>
             )}
             <p className="text-[11px] text-slate-400">
-              1–3 columns show as a stack of titled cells; 4 shows as a 2×2 grid.
+              1–3 columns show as a stack of titled cells; 4 shows as a 2×2
+              grid. You can highlight (✓) or hide entries as they arrive.
             </p>
           </div>
+        ) : sourcing === "facilitator" ? (
+          <textarea
+            value={listText}
+            onChange={(e) => setListText(e.target.value)}
+            rows={4}
+            placeholder={
+              kind === "vote"
+                ? "One option per line (2–8)\nChocolate\nVanilla"
+                : "One item to score per line (1–12)"
+            }
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        ) : (
+          <p className="text-[11px] text-slate-400">
+            Participants will suggest the{" "}
+            {kind === "vote" ? "options" : "items"} first. You can hide
+            off-topic suggestions, then open the{" "}
+            {kind === "vote" ? "vote" : "1–5 scoring"} when the list is ready.
+          </p>
         )}
 
         <button
