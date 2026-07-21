@@ -14,6 +14,17 @@ export async function POST(
   }
   const body = await req.json().catch(() => null);
   const action = body?.action;
+
+  // Push-refresh stands alone: bump the epoch, leave navigation untouched.
+  // Every participant client hard-reloads when it sees the epoch increase.
+  if (action === "refresh") {
+    await query(
+      `UPDATE sessions SET refresh_epoch = refresh_epoch + 1 WHERE id = $1`,
+      [id]
+    );
+    return NextResponse.json({ ok: true });
+  }
+
   const steps = await getSteps(id);
   const maxIdx = Math.max(0, steps.length - 1);
   const clamp = (n: number) => Math.min(maxIdx, Math.max(0, n));

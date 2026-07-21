@@ -2,6 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+export interface ActivityState {
+  id: string;
+  kind: "vote" | "columns";
+  prompt: string;
+  options?: string[];
+  columns?: string[];
+  votes?: { counts: number[]; total: number; myVote: number | null };
+  entries?: {
+    id: string;
+    column: number;
+    value: string;
+    name: string;
+    mine: boolean;
+  }[];
+}
+
 export interface StatePayload {
   session: {
     id: string;
@@ -9,7 +25,9 @@ export interface StatePayload {
     code: string;
     status: "lobby" | "live" | "ended";
     currentStep: number;
+    refreshEpoch: number;
   };
+  activity: ActivityState | null;
   steps: { id: string; title: string; kind: string; content: string }[];
   participants: { id: string; name: string; online: boolean }[];
 }

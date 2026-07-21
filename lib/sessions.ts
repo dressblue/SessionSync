@@ -10,6 +10,33 @@ export interface SessionRow {
   facilitator_key: string;
   status: SessionStatus;
   current_step: number;
+  refresh_epoch: number;
+  active_activity: string | null;
+}
+
+export interface ActivityRow {
+  id: string;
+  session_id: string;
+  kind: "vote" | "columns";
+  prompt: string;
+  config: string;
+  status: "open" | "closed";
+}
+
+export interface ActivityPayload {
+  id: string;
+  kind: "vote" | "columns";
+  prompt: string;
+  options?: string[];
+  columns?: string[];
+  votes?: { counts: number[]; total: number; myVote: number | null };
+  entries?: {
+    id: string;
+    column: number;
+    value: string;
+    name: string;
+    mine: boolean;
+  }[];
 }
 
 export interface StepRow {
@@ -90,6 +117,79 @@ export async function getSteps(sessionId: string): Promise<StepRow[]> {
     [sessionId]
   );
   return res.rows;
+}
+
+/** The currently open activity with live results, shaped for the state poll. */
+export async function getActiveActivity(
+  session: SessionRow,
+  viewerParticipantId: string | null
+): Promise<ActivityPayload | null> {
+  if (!session.active_activity) return null;
+  const res = await query<ActivityRow>(
+    `SELECT * FROM activities WHERE id = $1 AND status = 'open'`,
+    [session.active_activity]
+  );
+  const activity = res.rows[0];
+  if (!activity) return null;
+
+  let config: { options?: string[]; columns?: string[] } = {};
+  try {
+    config = JSON.parse(activity.config);
+  } catch {
+    /* malformed config renders as empty */
+  }
+
+  const responses = await query<{
+    id: string;
+    participant_id: string;
+    column_index: number | null;
+    value: string;
+    name: string | null;
+  }>(
+    `SELECT r.id, r.participant_id, r.column_index, r.value, p.name
+     FROM activity_responses r
+     LEFT JOIN participants p ON p.id = r.participant_id
+     WHERE r.activity_id = $1
+     ORDER BY r.created_at ASC`,
+    [activity.id]
+  );
+
+  const payload: ActivityPayload = {
+    id: activity.id,
+    kind: activity.kind,
+    prompt: activity.prompt,
+  };
+
+  if (activity.kind === "vote") {
+    const options = config.options ?? [];
+    const counts = options.map(() => 0);
+    let myVote: number | null = null;
+    for (const r of responses.rows) {
+      const idx = Number(r.value);
+      if (Number.isInteger(idx) && idx >= 0 && idx < counts.length) {
+        counts[idx]++;
+        if (viewerParticipantId && r.participant_id === viewerParticipantId) {
+          myVote = idx;
+        }
+      }
+    }
+    payload.options = options;
+    payload.votes = {
+      counts,
+      total: counts.reduce((a, b) => a + b, 0),
+      myVote,
+    };
+  } else {
+    payload.columns = config.columns ?? [];
+    payload.entries = responses.rows.map((r) => ({
+      id: r.id,
+      column: r.column_index ?? 0,
+      value: r.value,
+      name: r.name ?? "Unknown",
+      mine: !!viewerParticipantId && r.participant_id === viewerParticipantId,
+    }));
+  }
+  return payload;
 }
 
 export async function getParticipants(sessionId: string): Promise<ParticipantRow[]> {

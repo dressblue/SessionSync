@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useSessionState } from "@/components/useSessionState";
 import { Markdown } from "@/components/Markdown";
+import { ActivityConsole } from "@/components/ActivityConsole";
 
 function Console() {
   const { id } = useParams<{ id: string }>();
@@ -149,7 +150,7 @@ function Console() {
     );
   }
 
-  const { session, steps, participants } = state;
+  const { session, steps, participants, activity } = state;
   const joinUrl = origin ? `${origin}/join?code=${session.code}` : "";
   const current = steps[session.currentStep];
   const online = participants.filter((p) => p.online);
@@ -212,6 +213,13 @@ function Console() {
                     Next step →
                   </button>
                   <button
+                    onClick={() => control("refresh")}
+                    title="Force every participant screen to reload"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition"
+                  >
+                    ↻ Push refresh
+                  </button>
+                  <button
                     onClick={() => control("end")}
                     className="ml-auto rounded-lg border border-rose-300 text-rose-700 px-4 py-2 text-sm font-medium hover:bg-rose-50 transition"
                   >
@@ -242,6 +250,15 @@ function Console() {
               </p>
             )}
           </section>
+
+          {session.status === "live" && (
+            <ActivityConsole
+              sessionId={id}
+              facilitatorKey={key}
+              activity={activity}
+              onChanged={refresh}
+            />
+          )}
 
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
             <h2 className="font-semibold mb-3">Agenda</h2>

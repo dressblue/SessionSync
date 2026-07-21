@@ -100,4 +100,44 @@ async function ensureSchema(
   await run(
     `CREATE INDEX IF NOT EXISTS idx_participants_session ON participants(session_id);`
   );
+  // Phase 2 additions
+  await run(
+    `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS refresh_epoch INTEGER NOT NULL DEFAULT 0;`
+  );
+  await run(
+    `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS active_activity UUID;`
+  );
+  await run(`
+    CREATE TABLE IF NOT EXISTS notes (
+      session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      participant_id UUID NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (session_id, participant_id)
+    );
+  `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS activities (
+      id UUID PRIMARY KEY,
+      session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      config TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS activity_responses (
+      id UUID PRIMARY KEY,
+      activity_id UUID NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+      participant_id UUID NOT NULL,
+      column_index INTEGER,
+      value TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await run(
+    `CREATE INDEX IF NOT EXISTS idx_responses_activity ON activity_responses(activity_id);`
+  );
 }

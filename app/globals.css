@@ -52,3 +52,15 @@ body {
 .md strong {
   @apply font-semibold text-slate-900;
 }
+
+/* Rich-text notes editor */
+.notes-editor:empty::before {
+  content: attr(data-placeholder);
+  @apply text-slate-400;
+}
+.notes-editor ul {
+  @apply list-disc pl-5 my-1;
+}
+.notes-editor ol {
+  @apply list-decimal pl-5 my-1;
+}

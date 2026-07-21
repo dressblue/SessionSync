@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getParticipants, getSession, getSteps } from "@/lib/sessions";
+import {
+  getActiveActivity,
+  getParticipants,
+  getSession,
+  getSteps,
+} from "@/lib/sessions";
 
 const ONLINE_WINDOW_MS = 12_000;
 
@@ -24,9 +29,10 @@ export async function GET(
     );
   }
 
-  const [steps, participants] = await Promise.all([
+  const [steps, participants, activity] = await Promise.all([
     getSteps(id),
     getParticipants(id),
+    getActiveActivity(session, participantId),
   ]);
   const now = Date.now();
 
@@ -37,7 +43,9 @@ export async function GET(
       code: session.code,
       status: session.status,
       currentStep: session.current_step,
+      refreshEpoch: session.refresh_epoch,
     },
+    activity,
     steps: steps.map((s) => ({
       id: s.id,
       title: s.title,
