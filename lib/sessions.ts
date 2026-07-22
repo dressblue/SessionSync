@@ -303,6 +303,48 @@ export async function getActiveActivity(
   return payload;
 }
 
+export interface MaterialItem {
+  id: string;
+  title: string;
+  note: string;
+  session_id: string | null;
+}
+
+export interface FileItem {
+  id: string;
+  title: string;
+  filename: string;
+  mime: string;
+  size: number;
+  session_id: string | null;
+}
+
+/** Needed items visible in this session: course-wide + session-scoped. */
+export async function getSessionMaterials(
+  session: SessionRow
+): Promise<MaterialItem[]> {
+  if (!session.course_id) return [];
+  const res = await query<MaterialItem>(
+    `SELECT id, title, note, session_id FROM course_materials
+     WHERE course_id = $1 AND (session_id IS NULL OR session_id = $2)
+     ORDER BY position ASC, created_at ASC`,
+    [session.course_id, session.id]
+  );
+  return res.rows;
+}
+
+/** Downloadable files visible in this session (metadata only). */
+export async function getSessionFiles(session: SessionRow): Promise<FileItem[]> {
+  if (!session.course_id) return [];
+  const res = await query<FileItem>(
+    `SELECT id, title, filename, mime, size, session_id FROM course_files
+     WHERE course_id = $1 AND (session_id IS NULL OR session_id = $2)
+     ORDER BY position ASC, created_at ASC`,
+    [session.course_id, session.id]
+  );
+  return res.rows;
+}
+
 export async function getStepTools(
   sessionId: string
 ): Promise<Record<string, StepToolRow[]>> {

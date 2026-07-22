@@ -202,4 +202,37 @@ async function ensureSchema(
   await run(
     `ALTER TABLE activity_responses ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT false;`
   );
+  // Phase 5: course materials (needed items) and downloadable files.
+  // session_id NULL = course-wide (visible in every session of the course).
+  await run(`
+    CREATE TABLE IF NOT EXISTS course_materials (
+      id UUID PRIMARY KEY,
+      course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS course_files (
+      id UUID PRIMARY KEY,
+      course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      mime TEXT NOT NULL DEFAULT 'application/octet-stream',
+      size INTEGER NOT NULL,
+      data BYTEA NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await run(
+    `CREATE INDEX IF NOT EXISTS idx_materials_course ON course_materials(course_id);`
+  );
+  await run(
+    `CREATE INDEX IF NOT EXISTS idx_files_course ON course_files(course_id);`
+  );
 }

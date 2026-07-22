@@ -19,7 +19,7 @@ export async function GET(
   if (!course) {
     return NextResponse.json({ error: "Course not found" }, { status: 404 });
   }
-  const [sessions, team] = await Promise.all([
+  const [sessions, team, materials, files] = await Promise.all([
     query<{
       id: string;
       title: string;
@@ -38,6 +38,22 @@ export async function GET(
        WHERE cf.course_id = $1 ORDER BY cf.added_at ASC`,
       [cid]
     ),
+    query<{ id: string; title: string; note: string; session_id: string | null }>(
+      `SELECT id, title, note, session_id FROM course_materials
+       WHERE course_id = $1 ORDER BY position ASC, created_at ASC`,
+      [cid]
+    ),
+    query<{
+      id: string;
+      title: string;
+      filename: string;
+      size: number;
+      session_id: string | null;
+    }>(
+      `SELECT id, title, filename, size, session_id FROM course_files
+       WHERE course_id = $1 ORDER BY position ASC, created_at ASC`,
+      [cid]
+    ),
   ]);
   const now = Date.now();
   return NextResponse.json({
@@ -48,6 +64,19 @@ export async function GET(
       code: course.code,
     },
     team: team.rows,
+    materials: materials.rows.map((m) => ({
+      id: m.id,
+      title: m.title,
+      note: m.note,
+      sessionId: m.session_id,
+    })),
+    files: files.rows.map((f) => ({
+      id: f.id,
+      title: f.title,
+      filename: f.filename,
+      size: f.size,
+      sessionId: f.session_id,
+    })),
     sessions: sessions.rows.map((s) => ({
       id: s.id,
       title: s.title,

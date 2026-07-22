@@ -5,6 +5,8 @@ import {
   getActiveActivity,
   getParticipants,
   getSession,
+  getSessionFiles,
+  getSessionMaterials,
   getSteps,
   getStepTools,
 } from "@/lib/sessions";
@@ -34,14 +36,17 @@ export async function GET(
   // Facilitator polls carry auth headers; their view includes hidden entries
   // (flagged) and each step's attached tools.
   const facilitatorView = !!(await authorizeSession(req, id));
-  const [steps, participants, activity, toolsByStep] = await Promise.all([
-    getSteps(id),
-    getParticipants(id),
-    getActiveActivity(session, participantId, facilitatorView),
-    facilitatorView
-      ? getStepTools(id)
-      : Promise.resolve({} as Awaited<ReturnType<typeof getStepTools>>),
-  ]);
+  const [steps, participants, activity, toolsByStep, materials, files] =
+    await Promise.all([
+      getSteps(id),
+      getParticipants(id),
+      getActiveActivity(session, participantId, facilitatorView),
+      facilitatorView
+        ? getStepTools(id)
+        : Promise.resolve({} as Awaited<ReturnType<typeof getStepTools>>),
+      getSessionMaterials(session),
+      getSessionFiles(session),
+    ]);
   const now = Date.now();
 
   return NextResponse.json({
@@ -57,6 +62,19 @@ export async function GET(
       joinKeyExpires: session.join_key_expires,
     },
     activity,
+    materials: materials.map((m) => ({
+      id: m.id,
+      title: m.title,
+      note: m.note,
+      courseWide: m.session_id === null,
+    })),
+    files: files.map((f) => ({
+      id: f.id,
+      title: f.title,
+      filename: f.filename,
+      size: f.size,
+      courseWide: f.session_id === null,
+    })),
     steps: steps.map((s) => ({
       id: s.id,
       title: s.title,

@@ -49,6 +49,14 @@ export interface StatePayload {
     joinKeyExpires: string | null;
   };
   activity: ActivityState | null;
+  materials: { id: string; title: string; note: string; courseWide: boolean }[];
+  files: {
+    id: string;
+    title: string;
+    filename: string;
+    size: number;
+    courseWide: boolean;
+  }[];
   steps: {
     id: string;
     title: string;

@@ -12,7 +12,13 @@ interface Identity {
   name: string;
 }
 
-type SideTab = "agenda" | "notes";
+type SideTab = "agenda" | "notes" | "materials" | "downloads";
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function ParticipantView() {
   const { id } = useParams<{ id: string }>();
@@ -93,7 +99,7 @@ function ParticipantView() {
     );
   }
 
-  const { session, steps, activity } = state;
+  const { session, steps, activity, materials, files } = state;
   const current = steps[session.currentStep];
   const resumeUrl = origin
     ? `${origin}/s/${id}?p=${identity.participantId}`
@@ -102,7 +108,7 @@ function ParticipantView() {
   const tabBtn = (tab: SideTab, label: string) => (
     <button
       onClick={() => setSideTab(tab)}
-      className={`flex-1 rounded-md px-2 py-1.5 text-xs font-semibold transition ${
+      className={`flex-1 rounded-md px-1 py-1.5 text-[11px] font-semibold transition ${
         sideTab === tab
           ? "bg-white text-indigo-700 shadow-sm"
           : "text-slate-500 hover:text-slate-700"
@@ -169,6 +175,8 @@ function ParticipantView() {
           <div className="flex gap-1 bg-slate-100 rounded-lg p-1 m-3 mb-2">
             {tabBtn("agenda", "Agenda")}
             {tabBtn("notes", "Notes")}
+            {tabBtn("materials", "Materials")}
+            {tabBtn("downloads", "Downloads")}
           </div>
 
           <div
@@ -234,6 +242,90 @@ function ParticipantView() {
               participantId={identity.participantId}
               sessionTitle={session.title}
             />
+          </div>
+
+          <div
+            className={`flex-1 min-h-0 overflow-y-auto px-3 pb-3 ${
+              sideTab === "materials" ? "block" : "hidden"
+            }`}
+          >
+            <p className="text-xs text-slate-400 mb-2">
+              What you&apos;ll need for this course and session.
+            </p>
+            <ul className="flex flex-col gap-2">
+              {materials.map((m) => (
+                <li
+                  key={m.id}
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                >
+                  <p className="text-sm font-medium flex items-start gap-1.5">
+                    <span className="text-indigo-500 mt-0.5">•</span>
+                    <span>
+                      {m.title}
+                      {!m.courseWide && (
+                        <span className="ml-1.5 text-[10px] uppercase font-semibold text-slate-400">
+                          this session
+                        </span>
+                      )}
+                    </span>
+                  </p>
+                  {m.note && (
+                    <p className="text-xs text-slate-500 mt-0.5 pl-4">{m.note}</p>
+                  )}
+                </li>
+              ))}
+              {materials.length === 0 && (
+                <li className="text-sm text-slate-400">
+                  Nothing listed yet — your facilitator will add needed items
+                  here.
+                </li>
+              )}
+            </ul>
+          </div>
+
+          <div
+            className={`flex-1 min-h-0 overflow-y-auto px-3 pb-3 ${
+              sideTab === "downloads" ? "block" : "hidden"
+            }`}
+          >
+            <p className="text-xs text-slate-400 mb-2">
+              Files provided by your facilitator.
+            </p>
+            <ul className="flex flex-col gap-2">
+              {files.map((f) => (
+                <li
+                  key={f.id}
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 flex items-center gap-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">
+                      {f.title}
+                      {!f.courseWide && (
+                        <span className="ml-1.5 text-[10px] uppercase font-semibold text-slate-400">
+                          this session
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-slate-400 truncate">
+                      {f.filename} · {formatSize(f.size)}
+                    </p>
+                  </div>
+                  <a
+                    href={`/api/files/${f.id}`}
+                    download={f.filename}
+                    className="shrink-0 rounded-lg bg-indigo-600 text-white px-2.5 py-1.5 text-xs font-medium hover:bg-indigo-700"
+                  >
+                    Download
+                  </a>
+                </li>
+              ))}
+              {files.length === 0 && (
+                <li className="text-sm text-slate-400">
+                  No downloads yet — PDFs and checklists your facilitator
+                  shares will appear here.
+                </li>
+              )}
+            </ul>
           </div>
         </aside>
         {sideOpen && (

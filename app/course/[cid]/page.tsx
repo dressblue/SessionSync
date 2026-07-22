@@ -11,6 +11,14 @@ import {
 interface CourseDetail {
   course: { id: string; title: string; description: string; code: string };
   team: { id: string; name: string; role: string }[];
+  materials: { id: string; title: string; note: string; sessionId: string | null }[];
+  files: {
+    id: string;
+    title: string;
+    filename: string;
+    size: number;
+    sessionId: string | null;
+  }[];
   sessions: {
     id: string;
     title: string;
@@ -20,6 +28,12 @@ interface CourseDetail {
     joinKeyExpires: string | null;
     joinKeyActive: boolean;
   }[];
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function expiryLabel(expires: string | null): string {
@@ -41,6 +55,15 @@ export default function CoursePage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+
+  // Materials & downloads management
+  const [matTitle, setMatTitle] = useState("");
+  const [matNote, setMatNote] = useState("");
+  const [matScope, setMatScope] = useState("");
+  const [fileTitle, setFileTitle] = useState("");
+  const [fileScope, setFileScope] = useState("");
+  const [fileToUpload, setFileToUpload] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     setIdentity(loadFacilitatorIdentity());
@@ -115,6 +138,80 @@ export default function CoursePage() {
     }
   }
 
+  async function addMaterial(e: React.FormEvent) {
+    e.preventDefault();
+    if (!identity || !matTitle.trim() || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/courses/${cid}/materials`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...facilitatorHeaders(identity),
+        },
+        body: JSON.stringify({
+          title: matTitle,
+          note: matNote,
+          sessionId: matScope || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? "Could not add item");
+      }
+      setMatTitle("");
+      setMatNote("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add item");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function uploadFile(e: React.FormEvent) {
+    e.preventDefault();
+    if (!identity || !fileToUpload || uploading) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", fileToUpload);
+      if (fileTitle.trim()) form.append("title", fileTitle.trim());
+      if (fileScope) form.append("sessionId", fileScope);
+      const res = await fetch(`/api/courses/${cid}/files`, {
+        method: "POST",
+        headers: facilitatorHeaders(identity),
+        body: form,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? "Upload failed");
+      }
+      setFileTitle("");
+      setFileToUpload(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function remove(path: string) {
+    if (!identity || busy) return;
+    setBusy(true);
+    try {
+      await fetch(path, {
+        method: "DELETE",
+        headers: facilitatorHeaders(identity),
+      });
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function copy(text: string, tag: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -154,7 +251,31 @@ export default function CoursePage() {
     );
   }
 
-  const { course, team, sessions } = detail;
+  const { course, team, sessions, materials, files } = detail;
+
+  const scopeLabel = (sessionId: string | null) => {
+    if (!sessionId) return "course-wide";
+    const idx = sessions.findIndex((s) => s.id === sessionId);
+    return idx >= 0 ? `session ${idx + 1}` : "session";
+  };
+
+  const scopeSelect = (
+    value: string,
+    onChange: (v: string) => void
+  ) => (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="rounded-lg border border-slate-300 px-2 py-2 text-xs bg-white"
+    >
+      <option value="">Whole course</option>
+      {sessions.map((s, i) => (
+        <option key={s.id} value={s.id}>
+          Session {i + 1}
+        </option>
+      ))}
+    </select>
+  );
 
   return (
     <div className="flex-1 min-h-screen">
@@ -269,6 +390,138 @@ export default function CoursePage() {
               >
                 Add session
               </button>
+            </form>
+          </section>
+
+          <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <h2 className="font-semibold mb-1">Materials & downloads</h2>
+            <p className="text-xs text-slate-500 mb-4">
+              Students see these in the Materials and Downloads tabs beside
+              their agenda — course-wide entries in every session,
+              session-scoped entries only in that session.
+            </p>
+
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+              Needed items
+            </h3>
+            <ul className="flex flex-col gap-1.5 mb-3">
+              {materials.map((m) => (
+                <li
+                  key={m.id}
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <span className="font-medium">{m.title}</span>
+                  {m.note && (
+                    <span className="text-xs text-slate-500 truncate">
+                      — {m.note}
+                    </span>
+                  )}
+                  <span className="ml-auto text-[10px] uppercase font-semibold text-slate-400 shrink-0">
+                    {scopeLabel(m.sessionId)}
+                  </span>
+                  <button
+                    onClick={() =>
+                      remove(`/api/courses/${cid}/materials/${m.id}`)
+                    }
+                    className="text-slate-300 hover:text-rose-500 shrink-0"
+                    aria-label="Remove item"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+              {materials.length === 0 && (
+                <li className="text-xs text-slate-400">No items yet</li>
+              )}
+            </ul>
+            <form onSubmit={addMaterial} className="flex flex-wrap gap-1.5 mb-5">
+              <input
+                value={matTitle}
+                onChange={(e) => setMatTitle(e.target.value)}
+                placeholder="Item, e.g. Fathering Handbook"
+                maxLength={200}
+                className="flex-1 min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <input
+                value={matNote}
+                onChange={(e) => setMatNote(e.target.value)}
+                placeholder="Note (optional)"
+                maxLength={500}
+                className="flex-1 min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              {scopeSelect(matScope, setMatScope)}
+              <button
+                type="submit"
+                disabled={busy || !matTitle.trim()}
+                className="rounded-lg bg-slate-800 text-white px-3 py-2 text-sm font-medium hover:bg-slate-900 disabled:opacity-40"
+              >
+                Add item
+              </button>
+            </form>
+
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+              Downloadable files
+            </h3>
+            <ul className="flex flex-col gap-1.5 mb-3">
+              {files.map((f) => (
+                <li
+                  key={f.id}
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <a
+                    href={`/api/files/${f.id}`}
+                    download={f.filename}
+                    className="font-medium text-indigo-700 hover:underline truncate"
+                  >
+                    {f.title}
+                  </a>
+                  <span className="text-xs text-slate-400 shrink-0">
+                    {formatSize(f.size)}
+                  </span>
+                  <span className="ml-auto text-[10px] uppercase font-semibold text-slate-400 shrink-0">
+                    {scopeLabel(f.sessionId)}
+                  </span>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Delete file "${f.title}"?`)) {
+                        remove(`/api/courses/${cid}/files/${f.id}`);
+                      }
+                    }}
+                    className="text-slate-300 hover:text-rose-500 shrink-0"
+                    aria-label="Delete file"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+              {files.length === 0 && (
+                <li className="text-xs text-slate-400">No files yet</li>
+              )}
+            </ul>
+            <form onSubmit={uploadFile} className="flex flex-wrap gap-1.5 items-center">
+              <input
+                type="file"
+                onChange={(e) => setFileToUpload(e.target.files?.[0] ?? null)}
+                className="text-xs text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-medium file:text-slate-600 hover:file:bg-slate-200"
+              />
+              <input
+                value={fileTitle}
+                onChange={(e) => setFileTitle(e.target.value)}
+                placeholder="Display title (optional)"
+                maxLength={200}
+                className="flex-1 min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              {scopeSelect(fileScope, setFileScope)}
+              <button
+                type="submit"
+                disabled={uploading || !fileToUpload}
+                className="rounded-lg bg-indigo-600 text-white px-3 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40"
+              >
+                {uploading ? "Uploading…" : "Upload"}
+              </button>
+              <p className="w-full text-[11px] text-slate-400">
+                PDFs, checklists, worksheets — up to 15 MB per file.
+              </p>
             </form>
           </section>
         </div>
