@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { query } from "@/lib/db";
-import { getSession, type ActivityRow } from "@/lib/sessions";
+import { authorizeSession, getSession, type ActivityRow } from "@/lib/sessions";
 
 async function getOpenActivity(session: {
   active_activity: string | null;
@@ -33,14 +33,25 @@ export async function POST(
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
   const body = await req.json().catch(() => null);
-  const participantId =
+  const rawParticipantId =
     typeof body?.participantId === "string" ? body.participantId : "";
-  if (!participantId || !(await verifyParticipant(id, participantId))) {
+  // Participants respond with their id; the facilitator (whiteboard drawing)
+  // responds via auth headers and is stored with a NULL participant.
+  let participantId: string | null = null;
+  if (rawParticipantId && (await verifyParticipant(id, rawParticipantId))) {
+    participantId = rawParticipantId;
+  } else if (!(await authorizeSession(req, id))) {
     return NextResponse.json({ error: "Unknown participant" }, { status: 403 });
   }
   const activity = await getOpenActivity(session);
   if (!activity) {
     return NextResponse.json({ error: "No open activity" }, { status: 409 });
+  }
+  if (participantId === null && activity.kind !== "whiteboard") {
+    return NextResponse.json(
+      { error: "Only participants can respond to this activity" },
+      { status: 403 }
+    );
   }
 
   let config: {
@@ -54,6 +65,45 @@ export async function POST(
     config = JSON.parse(activity.config);
   } catch {
     /* treated as empty below */
+  }
+
+  if (activity.kind === "whiteboard") {
+    const stroke = body?.stroke;
+    const points = Array.isArray(stroke?.p) ? stroke.p : [];
+    const valid =
+      typeof stroke?.c === "string" &&
+      stroke.c.length <= 20 &&
+      typeof stroke?.w === "number" &&
+      stroke.w >= 1 &&
+      stroke.w <= 16 &&
+      points.length >= 2 &&
+      points.length <= 800 &&
+      points.every(
+        (pt: unknown) =>
+          Array.isArray(pt) &&
+          pt.length === 2 &&
+          pt.every((n) => typeof n === "number" && n >= 0 && n <= 1)
+      );
+    if (!valid) {
+      return NextResponse.json({ error: "Invalid stroke" }, { status: 400 });
+    }
+    const value = JSON.stringify({
+      c: stroke.c,
+      w: stroke.w,
+      p: points.map((pt: [number, number]) => [
+        Math.round(pt[0] * 1000) / 1000,
+        Math.round(pt[1] * 1000) / 1000,
+      ]),
+    });
+    if (value.length > 30_000) {
+      return NextResponse.json({ error: "Stroke too large" }, { status: 400 });
+    }
+    await query(
+      `INSERT INTO activity_responses (id, activity_id, participant_id, value)
+       VALUES ($1, $2, $3, $4)`,
+      [randomUUID(), activity.id, participantId, value]
+    );
+    return NextResponse.json({ ok: true });
   }
 
   // Collect phase (participant-sourced vote/likert): suggestions land in the
@@ -135,7 +185,8 @@ export async function POST(
   return NextResponse.json({ ok: true });
 }
 
-// Participant removes one of their own column entries.
+// Remove one of your own entries/strokes. Participants pass their id; the
+// facilitator (auth headers) can remove their own NULL-participant strokes.
 export async function DELETE(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
@@ -149,12 +200,23 @@ export async function DELETE(
   const participantId =
     typeof body?.participantId === "string" ? body.participantId : "";
   const entryId = typeof body?.entryId === "string" ? body.entryId : "";
-  if (!participantId || !entryId) {
+  if (!entryId) {
     return NextResponse.json({ error: "entryId required" }, { status: 400 });
   }
-  await query(
-    `DELETE FROM activity_responses WHERE id = $1 AND participant_id = $2`,
-    [entryId, participantId]
-  );
+  if (participantId) {
+    await query(
+      `DELETE FROM activity_responses WHERE id = $1 AND participant_id = $2`,
+      [entryId, participantId]
+    );
+  } else if (await authorizeSession(req, id)) {
+    await query(
+      `DELETE FROM activity_responses
+       WHERE id = $1 AND participant_id IS NULL
+         AND activity_id IN (SELECT id FROM activities WHERE session_id = $2)`,
+      [entryId, id]
+    );
+  } else {
+    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  }
   return NextResponse.json({ ok: true });
 }

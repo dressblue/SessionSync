@@ -11,6 +11,15 @@ import {
   type FacilitatorIdentity,
 } from "@/components/identity";
 
+const TOOL_BADGES: Record<string, string> = {
+  vote: "Vote",
+  likert: "Score",
+  columns: "Board",
+  reveal: "Reveal",
+  wheel: "Wheel",
+  whiteboard: "Draw",
+};
+
 function Console() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
@@ -30,7 +39,9 @@ function Console() {
 
   // Step-tool editor state
   const [toolsOpenFor, setToolsOpenFor] = useState<string | null>(null);
-  const [toolKind, setToolKind] = useState<"vote" | "likert" | "columns">("vote");
+  const [toolKind, setToolKind] = useState<
+    "vote" | "likert" | "columns" | "reveal" | "wheel" | "whiteboard"
+  >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
   const [toolSourced, setToolSourced] = useState(false);
@@ -148,9 +159,10 @@ function Console() {
       prompt: toolPrompt,
     };
     if (toolKind === "columns") body.columns = list;
-    else if (toolSourced) body.sourcing = "participants";
+    else if ((toolKind === "vote" || toolKind === "likert") && toolSourced)
+      body.sourcing = "participants";
     else if (toolKind === "vote") body.options = list;
-    else body.items = list;
+    else if (toolKind !== "whiteboard") body.items = list;
     const ok = await api(
       `/api/sessions/${id}/steps/${stepId}/tools`,
       "POST",
@@ -332,11 +344,7 @@ function Console() {
                         className="flex items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-2"
                       >
                         <span className="text-[10px] font-bold uppercase text-indigo-500 shrink-0">
-                          {t.kind === "vote"
-                            ? "Vote"
-                            : t.kind === "likert"
-                              ? "Score"
-                              : "Board"}
+                          {TOOL_BADGES[t.kind] ?? t.kind}
                         </span>
                         <span className="text-sm min-w-0 truncate">{t.prompt}</span>
                         <button
@@ -501,11 +509,7 @@ function Console() {
                               className="flex items-center gap-2 text-xs bg-white rounded-md border border-slate-200 px-2.5 py-1.5"
                             >
                               <span className="font-bold uppercase text-[10px] text-indigo-500 shrink-0">
-                                {t.kind === "vote"
-                                  ? "Vote"
-                                  : t.kind === "likert"
-                                    ? "Score"
-                                    : "Board"}
+                                {TOOL_BADGES[t.kind] ?? t.kind}
                               </span>
                               <span className="min-w-0 truncate">{t.prompt}</span>
                               {t.sourcing === "participants" && (
@@ -535,7 +539,7 @@ function Console() {
                             value={toolKind}
                             onChange={(e) =>
                               setToolKind(
-                                e.target.value as "vote" | "likert" | "columns"
+                                e.target.value as typeof toolKind
                               )
                             }
                             className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white"
@@ -543,8 +547,11 @@ function Console() {
                             <option value="vote">Vote (pick one)</option>
                             <option value="likert">Scoring survey (1–5)</option>
                             <option value="columns">Comment board</option>
+                            <option value="reveal">Reveal list</option>
+                            <option value="wheel">Wheel</option>
+                            <option value="whiteboard">Whiteboard</option>
                           </select>
-                          {toolKind !== "columns" && (
+                          {(toolKind === "vote" || toolKind === "likert") && (
                             <label className="flex items-center gap-1 text-xs text-slate-500">
                               <input
                                 type="checkbox"
@@ -562,21 +569,27 @@ function Console() {
                           maxLength={300}
                           className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
-                        {!(toolKind !== "columns" && toolSourced) && (
-                          <textarea
-                            value={toolList}
-                            onChange={(e) => setToolList(e.target.value)}
-                            rows={3}
-                            placeholder={
-                              toolKind === "columns"
-                                ? "Column titles, one per line (1–4) — e.g. each question"
-                                : toolKind === "vote"
-                                  ? "Options, one per line (2–8)"
-                                  : "Items to score, one per line (1–12)"
-                            }
-                            className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        )}
+                        {toolKind !== "whiteboard" &&
+                          !(
+                            (toolKind === "vote" || toolKind === "likert") &&
+                            toolSourced
+                          ) && (
+                            <textarea
+                              value={toolList}
+                              onChange={(e) => setToolList(e.target.value)}
+                              rows={3}
+                              placeholder={
+                                toolKind === "columns"
+                                  ? "Column titles, one per line (1–4) — e.g. each question"
+                                  : toolKind === "vote"
+                                    ? "Options, one per line (2–8)"
+                                    : toolKind === "reveal" || toolKind === "wheel"
+                                      ? "One item per line — note after a |\nSelf-Awareness | How well do I know myself?"
+                                      : "Items to score, one per line (1–12)"
+                              }
+                              className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          )}
                         <button
                           onClick={() => addTool(s.id)}
                           disabled={!toolPrompt.trim()}

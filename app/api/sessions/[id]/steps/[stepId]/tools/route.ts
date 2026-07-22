@@ -17,7 +17,9 @@ export async function POST(
   const body = await req.json().catch(() => null);
   const kind = body?.kind;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
-  if (!["vote", "likert", "columns"].includes(kind)) {
+  if (
+    !["vote", "likert", "columns", "reveal", "wheel", "whiteboard"].includes(kind)
+  ) {
     return NextResponse.json({ error: "Unknown tool kind" }, { status: 400 });
   }
   if (!prompt) {

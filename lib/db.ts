@@ -235,4 +235,8 @@ async function ensureSchema(
   await run(
     `CREATE INDEX IF NOT EXISTS idx_files_course ON course_files(course_id);`
   );
+  // Phase 6: facilitator-authored whiteboard strokes have no participant.
+  await run(
+    `ALTER TABLE activity_responses ALTER COLUMN participant_id DROP NOT NULL;`
+  );
 }

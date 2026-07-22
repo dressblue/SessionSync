@@ -11,8 +11,10 @@ interface Props {
   onChanged: () => void;
 }
 
-type Kind = "vote" | "likert" | "columns";
+type Kind = "vote" | "likert" | "columns" | "reveal" | "wheel" | "whiteboard";
 type Sourcing = "facilitator" | "participants";
+
+const LIST_KINDS: Kind[] = ["vote", "likert", "reveal", "wheel"];
 
 // Facilitator's activity station: build & push a population vote, a scoring
 // survey (likert), or a moderated comment board; watch live results; for
@@ -63,11 +65,14 @@ export function ActivityConsole({
     const body: Record<string, unknown> = { kind, prompt };
     if (kind === "columns") {
       body.columns = columns.map((c) => c.trim()).filter(Boolean);
-    } else if (sourcing === "participants") {
+    } else if (
+      (kind === "vote" || kind === "likert") &&
+      sourcing === "participants"
+    ) {
       body.sourcing = "participants";
     } else if (kind === "vote") {
       body.options = list;
-    } else {
+    } else if (LIST_KINDS.includes(kind)) {
       body.items = list;
     }
     const ok = await call(`/api/sessions/${sessionId}/activities`, "POST", body);
@@ -144,12 +149,15 @@ export function ActivityConsole({
   return (
     <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
       <h2 className="font-semibold mb-3">Push an activity</h2>
-      <div className="flex gap-1 bg-slate-100 rounded-lg p-1 mb-3 w-fit">
+      <div className="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1 mb-3 w-fit">
         {(
           [
             ["vote", "Vote"],
             ["likert", "Scoring survey"],
             ["columns", "Comment board"],
+            ["reveal", "Reveal"],
+            ["wheel", "Wheel"],
+            ["whiteboard", "Whiteboard"],
           ] as const
         ).map(([k, label]) => (
           <button
@@ -163,7 +171,7 @@ export function ActivityConsole({
         ))}
       </div>
 
-      {kind !== "columns" && (
+      {(kind === "vote" || kind === "likert") && (
         <div className="flex gap-1 bg-slate-100 rounded-lg p-1 mb-3 w-fit">
           {(
             [
@@ -192,7 +200,13 @@ export function ActivityConsole({
               ? "Question, e.g. Which risk concerns you most?"
               : kind === "likert"
                 ? "Prompt, e.g. Rate how strongly each applies to you"
-                : "Prompt, e.g. Answer both questions below"
+                : kind === "reveal"
+                  ? "Heading, e.g. The 5 Traits of the 24:7 Dad"
+                  : kind === "wheel"
+                    ? "Heading, e.g. How the 5 Traits connect"
+                    : kind === "whiteboard"
+                      ? "Prompt, e.g. Sketch your support network"
+                      : "Prompt, e.g. Answer both questions below"
           }
           maxLength={300}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -241,6 +255,21 @@ export function ActivityConsole({
               grid. You can highlight (✓) or hide entries as they arrive.
             </p>
           </div>
+        ) : kind === "whiteboard" ? (
+          <p className="text-[11px] text-slate-400">
+            Opens a shared drawing canvas. Everyone gets a pen (colors, two
+            widths, undo); you also get Clear all.
+          </p>
+        ) : kind === "reveal" || kind === "wheel" ? (
+          <textarea
+            value={listText}
+            onChange={(e) => setListText(e.target.value)}
+            rows={5}
+            placeholder={
+              "One item per line — add a note after a | \nSelf-Awareness | How well do I know myself?\nCaring for Self | How well do I care for myself?"
+            }
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
         ) : sourcing === "facilitator" ? (
           <textarea
             value={listText}

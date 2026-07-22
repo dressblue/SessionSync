@@ -22,18 +22,39 @@ export interface SessionRow {
   join_key_expires: string | null;
 }
 
+export type ActivityKind =
+  | "vote"
+  | "columns"
+  | "likert"
+  | "reveal"
+  | "wheel"
+  | "whiteboard";
+
 export interface ActivityRow {
   id: string;
   session_id: string;
-  kind: "vote" | "columns" | "likert";
+  kind: ActivityKind;
   prompt: string;
   config: string;
   status: "open" | "closed";
 }
 
+export interface RichItem {
+  title: string;
+  note: string;
+}
+
+export interface Stroke {
+  id: string;
+  mine: boolean;
+  c: string;
+  w: number;
+  p: [number, number][];
+}
+
 export interface ActivityPayload {
   id: string;
-  kind: "vote" | "columns" | "likert";
+  kind: ActivityKind;
   prompt: string;
   options?: string[];
   columns?: string[];
@@ -52,6 +73,13 @@ export interface ActivityPayload {
   scale?: number;
   items?: string[];
   ratings?: { avg: number | null; count: number; mine: number | null }[];
+  // reveal / wheel
+  richItems?: RichItem[];
+  revealed?: number;
+  total?: number;
+  active?: number;
+  // whiteboard
+  strokes?: Stroke[];
 }
 
 export interface StepRow {
@@ -198,6 +226,9 @@ export async function getActiveActivity(
     items?: string[];
     phase?: "collect" | "rate";
     scale?: number;
+    richItems?: RichItem[];
+    revealed?: number;
+    active?: number;
   } = {};
   try {
     config = JSON.parse(activity.config);
@@ -249,6 +280,44 @@ export async function getActiveActivity(
       responses.rows.filter((r) => r.column_index === COLLECT_COLUMN)
     );
     if (activity.kind === "likert") payload.scale = config.scale ?? 5;
+    return payload;
+  }
+
+  // Presentation tools: reveal (progressive disclosure) and wheel (spotlight).
+  if (activity.kind === "reveal") {
+    const items = config.richItems ?? [];
+    const revealed = Math.min(config.revealed ?? 0, items.length);
+    payload.revealed = revealed;
+    payload.total = items.length;
+    // Participants only ever receive what's been revealed.
+    payload.richItems = facilitatorView ? items : items.slice(0, revealed);
+    return payload;
+  }
+  if (activity.kind === "wheel") {
+    payload.richItems = config.richItems ?? [];
+    payload.active = config.active ?? -1;
+    return payload;
+  }
+  if (activity.kind === "whiteboard") {
+    payload.strokes = responses.rows
+      .slice(-1000)
+      .map((r) => {
+        try {
+          const s = JSON.parse(r.value) as { c: string; w: number; p: [number, number][] };
+          return {
+            id: r.id,
+            mine:
+              (!!viewerParticipantId && r.participant_id === viewerParticipantId) ||
+              (facilitatorView && r.participant_id === null),
+            c: s.c,
+            w: s.w,
+            p: s.p,
+          };
+        } catch {
+          return null;
+        }
+      })
+      .filter((s): s is Stroke => s !== null);
     return payload;
   }
 

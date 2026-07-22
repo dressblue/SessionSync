@@ -18,6 +18,44 @@ export async function PATCH(req: Request, ctx: Ctx) {
   }
   const body = await req.json().catch(() => null);
 
+  // Presentation controls: reveal count, wheel spotlight, whiteboard clear.
+  if (
+    typeof body?.reveal === "number" ||
+    typeof body?.active === "number" ||
+    body?.clear === true
+  ) {
+    const res = await query<ActivityRow>(
+      `SELECT * FROM activities WHERE id = $1 AND session_id = $2 AND status = 'open'`,
+      [aid, id]
+    );
+    const activity = res.rows[0];
+    if (!activity) {
+      return NextResponse.json({ error: "Activity not open" }, { status: 404 });
+    }
+    if (body.clear === true) {
+      await query(`DELETE FROM activity_responses WHERE activity_id = $1`, [aid]);
+      return NextResponse.json({ ok: true });
+    }
+    let config: { richItems?: unknown[]; revealed?: number; active?: number } = {};
+    try {
+      config = JSON.parse(activity.config);
+    } catch {
+      /* rebuilt below */
+    }
+    const len = config.richItems?.length ?? 0;
+    if (typeof body.reveal === "number") {
+      config.revealed = Math.min(len, Math.max(0, Math.round(body.reveal)));
+    }
+    if (typeof body.active === "number") {
+      config.active = Math.min(len - 1, Math.max(-1, Math.round(body.active)));
+    }
+    await query(`UPDATE activities SET config = $1 WHERE id = $2`, [
+      JSON.stringify(config),
+      aid,
+    ]);
+    return NextResponse.json({ ok: true });
+  }
+
   if (body?.advance === true) {
     const res = await query<ActivityRow>(
       `SELECT * FROM activities WHERE id = $1 AND session_id = $2 AND status = 'open'`,

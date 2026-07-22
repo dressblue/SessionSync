@@ -12,9 +12,30 @@ export interface ActivityEntry {
   hidden: boolean;
 }
 
+export type ActivityKind =
+  | "vote"
+  | "columns"
+  | "likert"
+  | "reveal"
+  | "wheel"
+  | "whiteboard";
+
+export interface RichItem {
+  title: string;
+  note: string;
+}
+
+export interface Stroke {
+  id: string;
+  mine: boolean;
+  c: string;
+  w: number;
+  p: [number, number][];
+}
+
 export interface ActivityState {
   id: string;
-  kind: "vote" | "columns" | "likert";
+  kind: ActivityKind;
   prompt: string;
   phase?: "collect" | "rate";
   options?: string[];
@@ -24,11 +45,16 @@ export interface ActivityState {
   scale?: number;
   items?: string[];
   ratings?: { avg: number | null; count: number; mine: number | null }[];
+  richItems?: RichItem[];
+  revealed?: number;
+  total?: number;
+  active?: number;
+  strokes?: Stroke[];
 }
 
 export interface StepTool {
   id: string;
-  kind: "vote" | "columns" | "likert";
+  kind: ActivityKind;
   prompt: string;
   options?: string[];
   columns?: string[];

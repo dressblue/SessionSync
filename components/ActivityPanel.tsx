@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ActivityEntry, ActivityState } from "./useSessionState";
+import { Whiteboard } from "./Whiteboard";
 
 interface Props {
   activity: ActivityState;
@@ -30,14 +31,38 @@ export function ActivityPanel({
   const [busy, setBusy] = useState(false);
   const canModerate = !!moderationHeaders;
 
-  async function send(body: Record<string, unknown>, method = "POST") {
-    if (busy) return;
-    setBusy(true);
+  async function send(
+    body: Record<string, unknown>,
+    method = "POST",
+    gate = true
+  ) {
+    if (gate && busy) return;
+    if (gate) setBusy(true);
     try {
       await fetch(`/api/sessions/${sessionId}/respond`, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(moderationHeaders ?? {}),
+        },
         body: JSON.stringify({ participantId, ...body }),
+      });
+      onChanged();
+    } finally {
+      if (gate) setBusy(false);
+    }
+  }
+
+  // Facilitator-only presentation controls (reveal count, wheel spotlight,
+  // whiteboard clear) — PATCH on the activity itself.
+  async function manage(body: Record<string, unknown>) {
+    if (!moderationHeaders || busy) return;
+    setBusy(true);
+    try {
+      await fetch(`/api/sessions/${sessionId}/activities/${activity.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...moderationHeaders },
+        body: JSON.stringify(body),
       });
       onChanged();
     } finally {
@@ -173,6 +198,214 @@ export function ActivityPanel({
           )}
         </ul>
         {suggestionForm("Suggest an option")}
+      </div>
+    );
+  }
+
+  // ---- Progressive reveal ----
+  if (activity.kind === "reveal") {
+    const items = activity.richItems ?? [];
+    const revealed = activity.revealed ?? 0;
+    const total = activity.total ?? items.length;
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Reveal")}
+        <ol className="flex flex-col gap-2">
+          {items.map((item, i) => {
+            const isRevealed = i < revealed;
+            if (!canModerate && !isRevealed) return null;
+            return (
+              <li
+                key={i}
+                className={`rounded-lg border px-4 py-3 transition ${
+                  isRevealed
+                    ? "border-indigo-200 bg-indigo-50/60 reveal-in"
+                    : "border-dashed border-slate-200 opacity-40"
+                }`}
+              >
+                <p className="text-sm font-semibold flex items-center gap-2">
+                  <span
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                      isRevealed
+                        ? "bg-indigo-600 text-white"
+                        : "bg-slate-200 text-slate-500"
+                    }`}
+                  >
+                    {i + 1}
+                  </span>
+                  {item.title}
+                </p>
+                {item.note && (
+                  <p className="text-xs text-slate-500 mt-1 pl-8">{item.note}</p>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+        <div className="mt-3 flex items-center gap-2">
+          <p className="text-xs text-slate-400">
+            {revealed} of {total} revealed
+          </p>
+          {canModerate && (
+            <span className="ml-auto flex gap-1.5">
+              <button
+                onClick={() => manage({ reveal: revealed - 1 })}
+                disabled={busy || revealed === 0}
+                className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              >
+                Hide last
+              </button>
+              <button
+                onClick={() => manage({ reveal: revealed + 1 })}
+                disabled={busy || revealed >= total}
+                className="rounded-lg bg-indigo-600 text-white px-3 py-1 text-xs font-semibold hover:bg-indigo-700 disabled:opacity-40"
+              >
+                Reveal next →
+              </button>
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Wheel (interconnected items with spotlight) ----
+  if (activity.kind === "wheel") {
+    const items = activity.richItems ?? [];
+    const active = activity.active ?? -1;
+    const n = items.length;
+    const CX = 260;
+    const CY = 250;
+    const R = 168;
+    const pos = (i: number) => {
+      const angle = (i / n) * 2 * Math.PI - Math.PI / 2;
+      return [CX + R * Math.cos(angle), CY + R * Math.sin(angle)] as const;
+    };
+    const pairs: [number, number][] = [];
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) pairs.push([i, j]);
+    }
+    const activeItem = active >= 0 ? items[active] : null;
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Wheel")}
+        <div style={{ perspective: 1000 }}>
+          <svg
+            viewBox="0 0 520 500"
+            className="w-full max-w-xl mx-auto"
+            style={{ transform: "rotateX(14deg)" }}
+          >
+            <circle
+              cx={CX}
+              cy={CY}
+              r={R}
+              fill="none"
+              stroke="#e2e8f0"
+              strokeWidth={1.5}
+            />
+            {pairs.map(([i, j]) => {
+              const [x1, y1] = pos(i);
+              const [x2, y2] = pos(j);
+              const touchesActive = i === active || j === active;
+              return (
+                <line
+                  key={`${i}-${j}`}
+                  x1={x1}
+                  y1={y1}
+                  x2={x2}
+                  y2={y2}
+                  stroke={touchesActive ? "#818cf8" : "#e2e8f0"}
+                  strokeWidth={touchesActive ? 2.5 : 1}
+                  className="transition-all duration-300"
+                />
+              );
+            })}
+            {items.map((item, i) => {
+              const [x, y] = pos(i);
+              const isActive = i === active;
+              const words = item.title.split(" ");
+              const lines =
+                words.length > 1
+                  ? [
+                      words.slice(0, Math.ceil(words.length / 2)).join(" "),
+                      words.slice(Math.ceil(words.length / 2)).join(" "),
+                    ]
+                  : [item.title];
+              return (
+                <g
+                  key={i}
+                  onClick={() =>
+                    canModerate && manage({ active: isActive ? -1 : i })
+                  }
+                  className={canModerate ? "cursor-pointer" : ""}
+                >
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r={isActive ? 60 : 50}
+                    fill={isActive ? "#4f46e5" : "#f8fafc"}
+                    stroke={isActive ? "#4f46e5" : "#cbd5e1"}
+                    strokeWidth={2}
+                    className="transition-all duration-300"
+                    style={
+                      isActive
+                        ? { filter: "drop-shadow(0 6px 12px rgba(79,70,229,.35))" }
+                        : undefined
+                    }
+                  />
+                  {lines.map((line, li) => (
+                    <text
+                      key={li}
+                      x={x}
+                      y={y + (li - (lines.length - 1) / 2) * 14 + 4}
+                      textAnchor="middle"
+                      fontSize={12.5}
+                      fontWeight={600}
+                      fill={isActive ? "#ffffff" : "#334155"}
+                    >
+                      {line}
+                    </text>
+                  ))}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+        <div className="mt-3 min-h-12 text-center">
+          {activeItem ? (
+            <div className="reveal-in">
+              <p className="text-sm font-semibold text-indigo-700">
+                {activeItem.title}
+              </p>
+              {activeItem.note && (
+                <p className="text-sm text-slate-600 mt-0.5">{activeItem.note}</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400">
+              {canModerate
+                ? "Click a segment to spotlight it for everyone."
+                : "Your facilitator will spotlight each area as it's discussed."}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Shared whiteboard ----
+  if (activity.kind === "whiteboard") {
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Whiteboard")}
+        <Whiteboard
+          strokes={activity.strokes ?? []}
+          canDraw={!!participantId || canModerate}
+          canModerate={canModerate}
+          onStroke={(stroke) => send({ stroke }, "POST", false)}
+          onUndo={(entryId) => send({ entryId }, "DELETE")}
+          onClear={() => manage({ clear: true })}
+        />
       </div>
     );
   }

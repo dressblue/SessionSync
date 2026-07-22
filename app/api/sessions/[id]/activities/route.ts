@@ -75,6 +75,27 @@ export async function POST(
       );
     }
     config = { columns };
+  } else if (kind === "reveal" || kind === "wheel") {
+    // Items arrive as "Title | optional note" lines.
+    const richItems = cleanList(body?.items, 12).map((line) => {
+      const [title, ...rest] = line.split("|");
+      return { title: title.trim().slice(0, 120), note: rest.join("|").trim().slice(0, 300) };
+    });
+    if (richItems.length < (kind === "wheel" ? 3 : 1)) {
+      return NextResponse.json(
+        {
+          error:
+            kind === "wheel"
+              ? "A wheel needs at least three items"
+              : "A reveal needs at least one item",
+        },
+        { status: 400 }
+      );
+    }
+    config =
+      kind === "reveal" ? { richItems, revealed: 0 } : { richItems, active: -1 };
+  } else if (kind === "whiteboard") {
+    config = {};
   } else {
     return NextResponse.json({ error: "Unknown activity kind" }, { status: 400 });
   }
