@@ -134,8 +134,6 @@ export function useSessionState(
   const headersKey = JSON.stringify(headers ?? {});
   const [state, setState] = useState<StatePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const stoppedRef = useRef(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPayloadRef = useRef<string>("");
   const failStreakRef = useRef(0);
 
@@ -190,17 +188,23 @@ export function useSessionState(
   }, [sessionId, participantId, headersKey]);
 
   useEffect(() => {
-    stoppedRef.current = false;
+    // Cancellation must be scoped to THIS loop instance. A shared ref gets
+    // reset by the next effect run, which let a superseded loop (still
+    // awaiting its in-flight poll, with old headers/participant) resurrect
+    // itself and run forever alongside the new one — alternating payloads
+    // and flickering facilitator-only panels.
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const loop = async () => {
       await tick();
-      if (!stoppedRef.current) {
-        timerRef.current = setTimeout(loop, intervalMs);
+      if (!stopped) {
+        timer = setTimeout(loop, intervalMs);
       }
     };
     loop();
     return () => {
-      stoppedRef.current = true;
-      if (timerRef.current) clearTimeout(timerRef.current);
+      stopped = true;
+      if (timer) clearTimeout(timer);
     };
   }, [tick, intervalMs]);
 
