@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import {
   authorizeSession,
-  getActiveActivity,
+  getOpenActivities,
   getParticipants,
+  getPastActivities,
   getSession,
   getSessionFiles,
   getSessionMaterials,
@@ -36,16 +37,17 @@ export async function GET(
   // Facilitator polls carry auth headers; their view includes hidden entries
   // (flagged) and each step's attached tools.
   const facilitatorView = !!(await authorizeSession(req, id));
-  const [steps, participants, activity, toolsByStep, materials, files] =
+  const [steps, participants, activities, toolsByStep, materials, files, past] =
     await Promise.all([
       getSteps(id),
       getParticipants(id),
-      getActiveActivity(session, participantId, facilitatorView),
+      getOpenActivities(session, participantId, facilitatorView),
       facilitatorView
         ? getStepTools(id)
         : Promise.resolve({} as Awaited<ReturnType<typeof getStepTools>>),
       getSessionMaterials(session),
       getSessionFiles(session),
+      facilitatorView ? getPastActivities(id) : Promise.resolve([]),
     ]);
   const now = Date.now();
 
@@ -61,7 +63,8 @@ export async function GET(
       joinKey: session.join_key,
       joinKeyExpires: session.join_key_expires,
     },
-    activity,
+    activities,
+    pastActivities: past,
     materials: materials.map((m) => ({
       id: m.id,
       title: m.title,

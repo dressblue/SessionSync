@@ -27,6 +27,7 @@ function ParticipantView() {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [checked, setChecked] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
+  const [sideCollapsed, setSideCollapsed] = useState(false);
   const [sideTab, setSideTab] = useState<SideTab>("agenda");
   const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState("");
@@ -99,7 +100,7 @@ function ParticipantView() {
     );
   }
 
-  const { session, steps, activity, materials, files } = state;
+  const { session, steps, activities, materials, files } = state;
   const current = steps[session.currentStep];
   const resumeUrl = origin
     ? `${origin}/s/${id}?p=${identity.participantId}`
@@ -126,6 +127,13 @@ function ParticipantView() {
           className="lg:hidden rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600"
         >
           Panel
+        </button>
+        <button
+          onClick={() => setSideCollapsed((v) => !v)}
+          title={sideCollapsed ? "Show the side panel" : "Collapse the side panel"}
+          className="hidden lg:inline-flex rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+        >
+          {sideCollapsed ? "⟩ Panel" : "⟨ Hide"}
         </button>
         <div className="min-w-0">
           <h1 className="font-semibold truncate">{session.title}</h1>
@@ -170,7 +178,9 @@ function ParticipantView() {
         <aside
           className={`${
             sideOpen ? "absolute inset-y-0 left-0 z-20 shadow-xl" : "hidden"
-          } lg:static lg:flex flex-col w-80 shrink-0 bg-white border-r border-slate-200`}
+          } ${
+            sideCollapsed ? "" : "lg:static lg:flex"
+          } flex-col w-80 shrink-0 bg-white border-r border-slate-200`}
         >
           <div className="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1 m-3 mb-2">
             {tabBtn("agenda", "Agenda")}
@@ -381,24 +391,37 @@ function ParticipantView() {
             </div>
           )}
 
-          {session.status !== "lobby" && activity && (
-            <div className="max-w-3xl mx-auto px-6 py-10">
+          {session.status !== "lobby" && activities.length > 0 && (
+            <div
+              className={`mx-auto px-6 py-10 ${
+                activities.length > 1 ? "max-w-6xl" : "max-w-3xl"
+              }`}
+            >
               {current && (
                 <p className="text-xs text-slate-400 mb-3">
                   Step {session.currentStep + 1}: {current.title}
                 </p>
               )}
-              <ActivityPanel
-                activity={activity}
-                sessionId={id}
-                participantId={identity.participantId}
-                roster={state.participants}
-                onChanged={refresh}
-              />
+              <div
+                className={`grid gap-6 items-start ${
+                  activities.length > 1 ? "xl:grid-cols-2" : ""
+                }`}
+              >
+                {activities.map((a) => (
+                  <ActivityPanel
+                    key={a.id}
+                    activity={a}
+                    sessionId={id}
+                    participantId={identity.participantId}
+                    roster={state.participants}
+                    onChanged={refresh}
+                  />
+                ))}
+              </div>
             </div>
           )}
 
-          {session.status === "live" && !activity && current && (
+          {session.status === "live" && activities.length === 0 && current && (
             <div className="max-w-3xl mx-auto px-6 py-10">
               <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-1">
                 Step {session.currentStep + 1} of {steps.length}
@@ -408,13 +431,13 @@ function ParticipantView() {
             </div>
           )}
 
-          {session.status === "live" && !activity && !current && (
+          {session.status === "live" && activities.length === 0 && !current && (
             <div className="h-full flex items-center justify-center text-slate-500">
               The facilitator hasn&apos;t added any agenda steps yet.
             </div>
           )}
 
-          {session.status === "ended" && !activity && (
+          {session.status === "ended" && activities.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-center px-6 py-16">
               <h2 className="text-xl font-semibold">Session ended</h2>
               <p className="text-slate-500 mt-1">

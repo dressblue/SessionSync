@@ -18,6 +18,25 @@ export async function PATCH(req: Request, ctx: Ctx) {
   }
   const body = await req.json().catch(() => null);
 
+  // Reopen a saved (closed) activity, content intact.
+  if (body?.reopen === true) {
+    const open = await query<{ id: string }>(
+      `SELECT id FROM activities WHERE session_id = $1 AND status = 'open'`,
+      [id]
+    );
+    if (open.rows.length >= 2) {
+      return NextResponse.json(
+        { error: "Two activities are already live — save & close one first" },
+        { status: 409 }
+      );
+    }
+    await query(
+      `UPDATE activities SET status = 'open' WHERE id = $1 AND session_id = $2`,
+      [aid, id]
+    );
+    return NextResponse.json({ ok: true });
+  }
+
   // Presentation controls: reveal count, wheel spotlight, whiteboard clear.
   if (
     typeof body?.reveal === "number" ||

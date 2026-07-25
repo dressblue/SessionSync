@@ -3,15 +3,19 @@ import { randomUUID } from "crypto";
 import { query } from "@/lib/db";
 import { authorizeSession, getSession, type ActivityRow } from "@/lib/sessions";
 
-async function getOpenActivity(session: {
-  active_activity: string | null;
-}): Promise<ActivityRow | null> {
-  if (!session.active_activity) return null;
+// Up to two activities can be open; the client says which one it's
+// answering. A missing activityId is honored only when exactly one is open.
+async function getTargetActivity(
+  sessionId: string,
+  activityId: string | null
+): Promise<ActivityRow | null> {
   const res = await query<ActivityRow>(
-    `SELECT * FROM activities WHERE id = $1 AND status = 'open'`,
-    [session.active_activity]
+    `SELECT * FROM activities WHERE session_id = $1 AND status = 'open'
+     ORDER BY created_at ASC`,
+    [sessionId]
   );
-  return res.rows[0] ?? null;
+  if (activityId) return res.rows.find((a) => a.id === activityId) ?? null;
+  return res.rows.length === 1 ? res.rows[0] : null;
 }
 
 async function verifyParticipant(sessionId: string, participantId: string) {
@@ -43,7 +47,10 @@ export async function POST(
   } else if (!(await authorizeSession(req, id))) {
     return NextResponse.json({ error: "Unknown participant" }, { status: 403 });
   }
-  const activity = await getOpenActivity(session);
+  const activity = await getTargetActivity(
+    id,
+    typeof body?.activityId === "string" ? body.activityId : null
+  );
   if (!activity) {
     return NextResponse.json({ error: "No open activity" }, { status: 409 });
   }

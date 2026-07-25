@@ -25,6 +25,7 @@ const KIND_LABEL: Record<string, string> = {
   reveal: "Reveal",
   wheel: "Wheel",
   whiteboard: "Whiteboard",
+  exhibit: "Presented",
 };
 
 function strokesToDataUrl(strokes: Stroke[]): string {
@@ -71,6 +72,11 @@ function activityLines(a: ActivityState): string[] {
   }
   if (a.kind === "whiteboard") {
     return [`Shared drawing with ${a.strokes?.length ?? 0} strokes`];
+  }
+  if (a.kind === "exhibit") {
+    if (a.exhibit === "file") return [`File: ${a.filename ?? "(document)"}`];
+    if (a.exhibit === "url") return [`Link: ${a.url}`];
+    return [(a.text ?? "").slice(0, 300) + ((a.text?.length ?? 0) > 300 ? "…" : "")];
   }
   // columns / collect
   const entries = (a.entries ?? []).filter((e) => !e.hidden);

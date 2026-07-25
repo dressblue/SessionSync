@@ -28,7 +28,8 @@ export type ActivityKind =
   | "likert"
   | "reveal"
   | "wheel"
-  | "whiteboard";
+  | "whiteboard"
+  | "exhibit";
 
 export interface ActivityRow {
   id: string;
@@ -82,6 +83,13 @@ export interface ActivityPayload {
   strokes?: Stroke[];
   /** Who has responded (vote/likert/collect): participant id + response count. */
   responders?: { id: string; count: number }[];
+  // exhibit (presented content)
+  exhibit?: "file" | "url" | "text";
+  fileId?: string;
+  filename?: string;
+  mime?: string;
+  url?: string;
+  text?: string;
 }
 
 export interface StepRow {
@@ -359,6 +367,23 @@ export function buildActivityPayload(
     payload.active = config.active ?? -1;
     return payload;
   }
+  if (activity.kind === "exhibit") {
+    const c = config as ActivityConfig & {
+      exhibit?: "file" | "url" | "text";
+      fileId?: string;
+      filename?: string;
+      mime?: string;
+      url?: string;
+      text?: string;
+    };
+    payload.exhibit = c.exhibit;
+    payload.fileId = c.fileId;
+    payload.filename = c.filename;
+    payload.mime = c.mime;
+    payload.url = c.url;
+    payload.text = c.text;
+    return payload;
+  }
   if (activity.kind === "whiteboard") {
     payload.strokes = responseRows
       .slice(-1000)
@@ -452,21 +477,56 @@ export function buildActivityPayload(
   return payload;
 }
 
-/** The currently open activity with live results, shaped for the state poll. */
-export async function getActiveActivity(
+export const MAX_OPEN_ACTIVITIES = 2;
+
+/** All currently open activities (up to 2), shaped for the state poll. */
+export async function getOpenActivities(
   session: SessionRow,
   viewerParticipantId: string | null,
   facilitatorView = false
-): Promise<ActivityPayload | null> {
-  if (!session.active_activity) return null;
+): Promise<ActivityPayload[]> {
   const res = await query<ActivityRow>(
-    `SELECT * FROM activities WHERE id = $1 AND status = 'open'`,
-    [session.active_activity]
+    `SELECT * FROM activities WHERE session_id = $1 AND status = 'open'
+     ORDER BY created_at ASC LIMIT ${MAX_OPEN_ACTIVITIES}`,
+    [session.id]
   );
-  const activity = res.rows[0];
-  if (!activity) return null;
-  const rows = await fetchActivityResponses(activity.id);
-  return buildActivityPayload(activity, rows, viewerParticipantId, facilitatorView);
+  return Promise.all(
+    res.rows.map(async (a) => {
+      const rows = await fetchActivityResponses(a.id);
+      return buildActivityPayload(a, rows, viewerParticipantId, facilitatorView);
+    })
+  );
+}
+
+export interface PastActivity {
+  id: string;
+  kind: ActivityKind;
+  prompt: string;
+  createdAt: string;
+  responseCount: number;
+}
+
+/** Closed activities — the session's saved record, reopenable at will. */
+export async function getPastActivities(
+  sessionId: string
+): Promise<PastActivity[]> {
+  const res = await query<
+    ActivityRow & { created_at: string; response_count: number }
+  >(
+    `SELECT a.*, a.created_at,
+       (SELECT COUNT(*)::int FROM activity_responses r WHERE r.activity_id = a.id) AS response_count
+     FROM activities a
+     WHERE a.session_id = $1 AND a.status = 'closed'
+     ORDER BY a.created_at DESC`,
+    [sessionId]
+  );
+  return res.rows.map((a) => ({
+    id: a.id,
+    kind: a.kind,
+    prompt: a.prompt,
+    createdAt: a.created_at,
+    responseCount: a.response_count,
+  }));
 }
 
 export interface SessionReport {

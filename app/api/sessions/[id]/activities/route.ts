@@ -127,23 +127,72 @@ export async function POST(
       kind === "reveal" ? { richItems, revealed: 0 } : { richItems, active: -1 };
   } else if (kind === "whiteboard") {
     config = {};
+  } else if (kind === "exhibit") {
+    const exhibit = body?.exhibit;
+    if (exhibit === "file") {
+      const fileId = typeof body?.fileId === "string" ? body.fileId : "";
+      const file = await query<{ filename: string; mime: string }>(
+        `SELECT filename, mime FROM course_files
+         WHERE id = $1 AND course_id = $2`,
+        [fileId, session.course_id]
+      );
+      if (!file.rows[0]) {
+        return NextResponse.json(
+          { error: "Pick a file from the course library first" },
+          { status: 400 }
+        );
+      }
+      config = {
+        exhibit: "file",
+        fileId,
+        filename: file.rows[0].filename,
+        mime: file.rows[0].mime,
+      };
+    } else if (exhibit === "url") {
+      const url = typeof body?.url === "string" ? body.url.trim() : "";
+      if (!/^https?:\/\/.+/.test(url)) {
+        return NextResponse.json(
+          { error: "Enter a full http(s) link" },
+          { status: 400 }
+        );
+      }
+      config = { exhibit: "url", url: url.slice(0, 2000) };
+    } else if (exhibit === "text") {
+      const text = typeof body?.text === "string" ? body.text.trim() : "";
+      if (!text) {
+        return NextResponse.json(
+          { error: "Enter the excerpt to present" },
+          { status: 400 }
+        );
+      }
+      config = { exhibit: "text", text: text.slice(0, 20_000) };
+    } else {
+      return NextResponse.json(
+        { error: "Choose what to present: a file, a link, or text" },
+        { status: 400 }
+      );
+    }
   } else {
     return NextResponse.json({ error: "Unknown activity kind" }, { status: 400 });
   }
 
-  await query(
-    `UPDATE activities SET status = 'closed' WHERE session_id = $1 AND status = 'open'`,
+  // Up to two activities run at once (e.g. a reveal plus a comment board
+  // about it). Pushing beyond that saves & closes the oldest open one.
+  const open = await query<{ id: string }>(
+    `SELECT id FROM activities WHERE session_id = $1 AND status = 'open'
+     ORDER BY created_at ASC`,
     [id]
   );
+  if (open.rows.length >= 2) {
+    await query(`UPDATE activities SET status = 'closed' WHERE id = $1`, [
+      open.rows[0].id,
+    ]);
+  }
   const activityId = randomUUID();
   await query(
     `INSERT INTO activities (id, session_id, kind, prompt, config)
      VALUES ($1, $2, $3, $4, $5)`,
     [activityId, id, kind, prompt.slice(0, 300), JSON.stringify(config)]
   );
-  await query(`UPDATE sessions SET active_activity = $1 WHERE id = $2`, [
-    activityId,
-    id,
-  ]);
   return NextResponse.json({ id: activityId });
 }

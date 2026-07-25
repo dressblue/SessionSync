@@ -18,7 +18,7 @@ export async function POST(
   const kind = body?.kind;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   if (
-    !["vote", "likert", "columns", "reveal", "wheel", "whiteboard"].includes(kind)
+    !["vote", "likert", "columns", "reveal", "wheel", "whiteboard", "exhibit"].includes(kind)
   ) {
     return NextResponse.json({ error: "Unknown tool kind" }, { status: 400 });
   }
@@ -37,6 +37,10 @@ export async function POST(
   if (Array.isArray(body?.columns)) config.columns = body.columns;
   if (Array.isArray(body?.items)) config.items = body.items;
   if (body?.sourcing === "participants") config.sourcing = "participants";
+  if (typeof body?.exhibit === "string") config.exhibit = body.exhibit;
+  if (typeof body?.fileId === "string") config.fileId = body.fileId;
+  if (typeof body?.url === "string") config.url = body.url;
+  if (typeof body?.text === "string") config.text = body.text;
 
   const pos = await query<{ next: number }>(
     `SELECT COALESCE(MAX(position), -1) + 1 AS next FROM step_tools WHERE step_id = $1`,

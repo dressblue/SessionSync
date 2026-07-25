@@ -7,6 +7,7 @@ import type {
   RosterEntry,
 } from "./useSessionState";
 import { Whiteboard } from "./Whiteboard";
+import { Markdown } from "./Markdown";
 
 interface Props {
   activity: ActivityState;
@@ -52,7 +53,11 @@ export function ActivityPanel({
           "Content-Type": "application/json",
           ...(moderationHeaders ?? {}),
         },
-        body: JSON.stringify({ participantId, ...body }),
+        body: JSON.stringify({
+          participantId,
+          activityId: activity.id,
+          ...body,
+        }),
       });
       onChanged();
     } finally {
@@ -476,6 +481,73 @@ export function ActivityPanel({
             </p>
           )}
         </div>
+      </div>
+    );
+  }
+
+  // ---- Exhibit: presented file / link / rich-text excerpt ----
+  if (activity.kind === "exhibit") {
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Presented by your facilitator")}
+        {activity.exhibit === "file" && activity.fileId && (
+          <>
+            {activity.mime?.startsWith("image/") ? (
+              <img
+                src={`/api/files/${activity.fileId}?inline=1`}
+                alt={activity.filename ?? "Presented image"}
+                className="max-w-full rounded-lg border border-slate-200"
+              />
+            ) : activity.mime === "application/pdf" ? (
+              <iframe
+                src={`/api/files/${activity.fileId}?inline=1`}
+                title={activity.filename ?? "Presented document"}
+                className="w-full h-[70vh] rounded-lg border border-slate-200"
+              />
+            ) : (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-6 text-center">
+                <p className="text-sm font-medium mb-1">{activity.filename}</p>
+                <p className="text-xs text-slate-400 mb-3">
+                  This document opens in its own application.
+                </p>
+              </div>
+            )}
+            <a
+              href={`/api/files/${activity.fileId}`}
+              download={activity.filename}
+              className="mt-3 inline-block rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700"
+            >
+              Download {activity.filename}
+            </a>
+          </>
+        )}
+        {activity.exhibit === "url" && activity.url && (
+          <>
+            <iframe
+              src={activity.url}
+              title={activity.prompt}
+              sandbox="allow-scripts allow-same-origin allow-popups"
+              className="w-full h-[60vh] rounded-lg border border-slate-200 bg-white"
+            />
+            <p className="mt-2 text-xs text-slate-400">
+              Some sites don&apos;t allow embedding — if the frame is blank, use
+              the button.
+            </p>
+            <a
+              href={activity.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-block rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700"
+            >
+              Open link in a new tab
+            </a>
+          </>
+        )}
+        {activity.exhibit === "text" && activity.text && (
+          <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-5">
+            <Markdown>{activity.text}</Markdown>
+          </div>
+        )}
       </div>
     );
   }

@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { useSessionState } from "@/components/useSessionState";
+import { useSessionState, type StepTool } from "@/components/useSessionState";
 import { Markdown } from "@/components/Markdown";
 import { ActivityConsole } from "@/components/ActivityConsole";
 import {
@@ -18,6 +18,7 @@ const TOOL_BADGES: Record<string, string> = {
   reveal: "Reveal",
   wheel: "Wheel",
   whiteboard: "Draw",
+  exhibit: "Present",
 };
 
 function Console() {
@@ -40,12 +41,14 @@ function Console() {
   // Step-tool editor state
   const [toolsOpenFor, setToolsOpenFor] = useState<string | null>(null);
   const [toolKind, setToolKind] = useState<
-    "vote" | "likert" | "columns" | "reveal" | "wheel" | "whiteboard"
+    "vote" | "likert" | "columns" | "reveal" | "wheel" | "whiteboard" | "exhibit"
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
   const [toolSourced, setToolSourced] = useState(false);
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
+  const [toolExhibitType, setToolExhibitType] = useState<"file" | "url" | "text">("file");
+  const [toolExhibitRef, setToolExhibitRef] = useState("");
 
   useEffect(() => {
     const urlKey = searchParams.get("key");
@@ -180,6 +183,8 @@ function Console() {
     setToolList("");
     setToolSourced(false);
     setEditingToolId(null);
+    setToolExhibitType("file");
+    setToolExhibitRef("");
   }
 
   async function saveTool(stepId: string) {
@@ -192,7 +197,12 @@ function Console() {
       prompt: toolPrompt,
     };
     if (toolKind === "columns") body.columns = list;
-    else if ((toolKind === "vote" || toolKind === "likert") && toolSourced)
+    else if (toolKind === "exhibit") {
+      body.exhibit = toolExhibitType;
+      if (toolExhibitType === "file") body.fileId = toolExhibitRef;
+      else if (toolExhibitType === "url") body.url = toolExhibitRef;
+      else body.text = toolList;
+    } else if ((toolKind === "vote" || toolKind === "likert") && toolSourced)
       body.sourcing = "participants";
     else if (toolKind === "vote") body.options = list;
     else if (toolKind !== "whiteboard") body.items = list;
@@ -206,34 +216,22 @@ function Console() {
     if (ok) resetToolForm();
   }
 
-  function beginToolEdit(
-    stepId: string,
-    t: {
-      id: string;
-      kind: "vote" | "likert" | "columns" | "reveal" | "wheel" | "whiteboard";
-      prompt: string;
-      options?: string[];
-      columns?: string[];
-      items?: string[];
-      sourcing?: string;
-    }
-  ) {
+  function beginToolEdit(stepId: string, t: StepTool) {
     setToolsOpenFor(stepId);
     setEditingToolId(t.id);
     setToolKind(t.kind);
     setToolPrompt(t.prompt);
     setToolSourced(t.sourcing === "participants");
-    setToolList((t.options ?? t.items ?? t.columns ?? []).join("\n"));
+    setToolExhibitType(t.exhibit ?? "file");
+    setToolExhibitRef(t.exhibit === "url" ? (t.url ?? "") : (t.fileId ?? ""));
+    setToolList(
+      t.exhibit === "text"
+        ? (t.text ?? "")
+        : (t.options ?? t.items ?? t.columns ?? []).join("\n")
+    );
   }
 
-  function launchTool(tool: {
-    kind: string;
-    prompt: string;
-    options?: string[];
-    columns?: string[];
-    items?: string[];
-    sourcing?: string;
-  }) {
+  function launchTool(tool: StepTool) {
     api(`/api/sessions/${id}/activities`, "POST", {
       kind: tool.kind,
       prompt: tool.prompt,
@@ -241,6 +239,10 @@ function Console() {
       columns: tool.columns,
       items: tool.items,
       sourcing: tool.sourcing,
+      exhibit: tool.exhibit,
+      fileId: tool.fileId,
+      url: tool.url,
+      text: tool.text,
     });
   }
 
@@ -279,7 +281,7 @@ function Console() {
     );
   }
 
-  const { session, steps, participants, activity } = state;
+  const { session, steps, participants, activities, pastActivities } = state;
   const isCourseSession = !!session.courseId;
   const keyActive =
     !!session.joinKey &&
@@ -437,7 +439,9 @@ function Console() {
                 ...(key ? { "x-facilitator-key": key } : {}),
                 ...facilitatorHeaders(identity),
               }}
-              activity={activity}
+              activities={activities}
+              pastActivities={pastActivities}
+              files={state.files}
               myParticipantId={myPid}
               roster={participants}
               onChanged={refresh}
@@ -628,7 +632,25 @@ function Console() {
                             <option value="reveal">Reveal list</option>
                             <option value="wheel">Wheel</option>
                             <option value="whiteboard">Whiteboard</option>
+                            <option value="exhibit">
+                              Present (file / link / text)
+                            </option>
                           </select>
+                          {toolKind === "exhibit" && (
+                            <select
+                              value={toolExhibitType}
+                              onChange={(e) =>
+                                setToolExhibitType(
+                                  e.target.value as typeof toolExhibitType
+                                )
+                              }
+                              className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white"
+                            >
+                              <option value="file">Course file</option>
+                              <option value="url">Web link</option>
+                              <option value="text">Text excerpt</option>
+                            </select>
+                          )}
                           {(toolKind === "vote" || toolKind === "likert") && (
                             <label className="flex items-center gap-1 text-xs text-slate-500">
                               <input
@@ -647,7 +669,41 @@ function Console() {
                           maxLength={300}
                           className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
+                        {toolKind === "exhibit" && toolExhibitType === "file" && (
+                          <select
+                            value={toolExhibitRef}
+                            onChange={(e) => setToolExhibitRef(e.target.value)}
+                            className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
+                          >
+                            <option value="">
+                              Choose a file from the course library…
+                            </option>
+                            {state?.files.map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.title} ({f.filename})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {toolKind === "exhibit" && toolExhibitType === "url" && (
+                          <input
+                            value={toolExhibitRef}
+                            onChange={(e) => setToolExhibitRef(e.target.value)}
+                            placeholder="https://…"
+                            className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        )}
+                        {toolKind === "exhibit" && toolExhibitType === "text" && (
+                          <textarea
+                            value={toolList}
+                            onChange={(e) => setToolList(e.target.value)}
+                            rows={4}
+                            placeholder="The excerpt to present (Markdown supported)"
+                            className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        )}
                         {toolKind !== "whiteboard" &&
+                          toolKind !== "exhibit" &&
                           !(
                             (toolKind === "vote" || toolKind === "likert") &&
                             toolSourced

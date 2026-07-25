@@ -18,7 +18,8 @@ export type ActivityKind =
   | "likert"
   | "reveal"
   | "wheel"
-  | "whiteboard";
+  | "whiteboard"
+  | "exhibit";
 
 export interface RichItem {
   title: string;
@@ -51,6 +52,12 @@ export interface ActivityState {
   active?: number;
   strokes?: Stroke[];
   responders?: { id: string; count: number }[];
+  exhibit?: "file" | "url" | "text";
+  fileId?: string;
+  filename?: string;
+  mime?: string;
+  url?: string;
+  text?: string;
 }
 
 export interface RosterEntry {
@@ -68,6 +75,10 @@ export interface StepTool {
   columns?: string[];
   items?: string[];
   sourcing?: "participants";
+  exhibit?: "file" | "url" | "text";
+  fileId?: string;
+  url?: string;
+  text?: string;
 }
 
 export interface StatePayload {
@@ -82,7 +93,14 @@ export interface StatePayload {
     joinKey: string | null;
     joinKeyExpires: string | null;
   };
-  activity: ActivityState | null;
+  activities: ActivityState[];
+  pastActivities: {
+    id: string;
+    kind: ActivityKind;
+    prompt: string;
+    createdAt: string;
+    responseCount: number;
+  }[];
   materials: { id: string; title: string; note: string; courseWide: boolean }[];
   files: {
     id: string;
