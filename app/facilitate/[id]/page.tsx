@@ -310,7 +310,7 @@ function Console() {
       </header>
 
       {(actionError || error) && (
-        <div className="bg-amber-50 text-amber-800 text-sm px-6 py-2 border-b border-amber-200">
+        <div className="fixed top-3 right-3 z-50 rounded-lg bg-amber-100 text-amber-900 text-sm px-4 py-2 shadow-lg border border-amber-300">
           {actionError ?? `Reconnecting… (${error})`}
         </div>
       )}

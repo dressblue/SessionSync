@@ -160,7 +160,7 @@ function ParticipantView() {
       </header>
 
       {error && (
-        <div className="bg-amber-50 text-amber-800 text-xs px-4 py-1.5 border-b border-amber-200">
+        <div className="fixed top-3 right-3 z-50 rounded-lg bg-amber-100 text-amber-900 text-xs px-3 py-1.5 shadow-lg border border-amber-300">
           Reconnecting… ({error})
         </div>
       )}

@@ -117,6 +117,8 @@ export function useSessionState(
   const [error, setError] = useState<string | null>(null);
   const stoppedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPayloadRef = useRef<string>("");
+  const failStreakRef = useRef(0);
 
   const tick = useCallback(async () => {
     try {
@@ -131,10 +133,23 @@ export function useSessionState(
         const body = await res.json().catch(() => null);
         throw new Error(body?.error ?? `Request failed (${res.status})`);
       }
-      setState(await res.json());
+      // Only touch React state when the payload actually changed — otherwise
+      // every poll re-renders the whole page (replaying animations and
+      // jiggling layout) even though nothing is different.
+      const text = await res.text();
+      failStreakRef.current = 0;
+      if (text !== lastPayloadRef.current) {
+        lastPayloadRef.current = text;
+        setState(JSON.parse(text));
+      }
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Connection lost");
+      // A single dropped poll is normal on real networks; only surface the
+      // reconnect notice after consecutive failures.
+      failStreakRef.current += 1;
+      if (failStreakRef.current >= 3) {
+        setError(e instanceof Error ? e.message : "Connection lost");
+      }
     }
   }, [sessionId, participantId, headersKey]);
 
