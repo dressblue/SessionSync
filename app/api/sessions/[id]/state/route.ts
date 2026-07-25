@@ -26,12 +26,25 @@ export async function GET(
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
-  const participantId = new URL(req.url).searchParams.get("participantId");
+  const url = new URL(req.url);
+  const participantId = url.searchParams.get("participantId");
+  const participantName = url.searchParams.get("name");
   if (participantId) {
-    await query(
-      `UPDATE participants SET last_seen = now() WHERE id = $1 AND session_id = $2`,
+    const upd = await query(
+      `UPDATE participants SET last_seen = now()
+       WHERE id = $1 AND session_id = $2 RETURNING id`,
       [participantId, id]
     );
+    // Self-heal: if this participant's row is gone (e.g. the roster was
+    // reset) but we know their name, re-create the seat with the same id so
+    // their notes and ability to respond survive without a rejoin.
+    if (upd.rows.length === 0 && participantName) {
+      await query(
+        `INSERT INTO participants (id, session_id, name)
+         VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`,
+        [participantId, id, participantName.slice(0, 80)]
+      );
+    }
   }
 
   // Facilitator polls carry auth headers; their view includes hidden entries

@@ -162,11 +162,12 @@ export function useSessionState(
   sessionId: string,
   opts: {
     participantId?: string;
+    participantName?: string;
     intervalMs?: number;
     headers?: Record<string, string>;
   } = {}
 ) {
-  const { participantId, intervalMs = 1500, headers } = opts;
+  const { participantId, participantName, intervalMs = 1500, headers } = opts;
   const headersKey = JSON.stringify(headers ?? {});
   const [state, setState] = useState<StatePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -176,7 +177,11 @@ export function useSessionState(
   const tick = useCallback(async () => {
     try {
       const qs = participantId
-        ? `?participantId=${encodeURIComponent(participantId)}`
+        ? `?participantId=${encodeURIComponent(participantId)}${
+            participantName
+              ? `&name=${encodeURIComponent(participantName)}`
+              : ""
+          }`
         : "";
       const res = await fetch(`/api/sessions/${sessionId}/state${qs}`, {
         cache: "no-store",
@@ -221,7 +226,7 @@ export function useSessionState(
         setError(e instanceof Error ? e.message : "Connection lost");
       }
     }
-  }, [sessionId, participantId, headersKey]);
+  }, [sessionId, participantId, participantName, headersKey]);
 
   useEffect(() => {
     // Cancellation must be scoped to THIS loop instance. A shared ref gets

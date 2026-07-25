@@ -60,6 +60,7 @@ function ParticipantView() {
 
   const { state, error, refresh } = useSessionState(id, {
     participantId: identity?.participantId,
+    participantName: identity?.name || undefined,
   });
 
   // Once state arrives, resolve the display name from the roster and persist
