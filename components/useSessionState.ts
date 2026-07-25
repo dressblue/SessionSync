@@ -19,7 +19,8 @@ export type ActivityKind =
   | "reveal"
   | "wheel"
   | "whiteboard"
-  | "exhibit";
+  | "exhibit"
+  | "video";
 
 export interface RichItem {
   title: string;
@@ -65,6 +66,14 @@ export interface ActivityState {
   mime?: string;
   url?: string;
   text?: string;
+  video?: {
+    provider: "youtube" | "video";
+    ref: string;
+    title: string;
+    playing: boolean;
+    t0: number;
+    at: string;
+  };
 }
 
 export interface RosterEntry {
@@ -87,6 +96,15 @@ export interface StepTool {
   fileId?: string;
   url?: string;
   text?: string;
+}
+
+export interface VideoState {
+  provider: "youtube" | "video";
+  ref: string;
+  title: string;
+  playing: boolean;
+  t0: number;
+  at: string;
 }
 
 export interface StatePayload {

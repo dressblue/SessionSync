@@ -25,7 +25,8 @@ type Kind =
   | "reveal"
   | "wheel"
   | "whiteboard"
-  | "exhibit";
+  | "exhibit"
+  | "video";
 type Sourcing = "facilitator" | "participants";
 
 const KIND_LABEL: Record<string, string> = {
@@ -36,6 +37,7 @@ const KIND_LABEL: Record<string, string> = {
   wheel: "Wheel",
   whiteboard: "Whiteboard",
   exhibit: "Presented",
+  video: "Video",
 };
 
 // Facilitator's activity station: up to two activities run side by side
@@ -63,6 +65,9 @@ export function ActivityConsole({
   const [exhibitType, setExhibitType] = useState<"file" | "url" | "text">("file");
   const [exhibitFileId, setExhibitFileId] = useState("");
   const [exhibitUrl, setExhibitUrl] = useState("");
+  const [videoSource, setVideoSource] = useState<"url" | "file">("url");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [videoFileId, setVideoFileId] = useState("");
   const [exhibitText, setExhibitText] = useState("");
 
   async function call(path: string, method: string, body?: unknown) {
@@ -102,6 +107,9 @@ export function ActivityConsole({
       if (exhibitType === "file") body.fileId = exhibitFileId;
       else if (exhibitType === "url") body.url = exhibitUrl;
       else body.text = exhibitText;
+    } else if (kind === "video") {
+      if (videoSource === "file") body.fileId = videoFileId;
+      else body.url = videoUrl;
     } else if (
       (kind === "vote" || kind === "likert") &&
       sourcing === "participants"
@@ -120,6 +128,7 @@ export function ActivityConsole({
       setColumns(["", ""]);
       setExhibitUrl("");
       setExhibitText("");
+      setVideoUrl("");
     }
   }
 
@@ -145,6 +154,7 @@ export function ActivityConsole({
         <div className="flex flex-wrap items-center gap-2">
           {activity.kind !== "whiteboard" &&
             activity.kind !== "exhibit" &&
+            activity.kind !== "video" &&
             !(activity.kind === "vote" && activity.phase !== "collect") && (
               <button
                 onClick={() =>
@@ -254,6 +264,7 @@ export function ActivityConsole({
                 ["wheel", "Wheel"],
                 ["whiteboard", "Whiteboard"],
                 ["exhibit", "Present"],
+                ["video", "Video"],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -321,7 +332,9 @@ export function ActivityConsole({
                           ? "Prompt, e.g. Sketch your support network"
                           : kind === "exhibit"
                             ? "Heading, e.g. This week's handout"
-                            : "Prompt, e.g. Answer both questions below"
+                            : kind === "video"
+                              ? "Video title (optional)"
+                              : "Prompt, e.g. Answer both questions below"
               }
               maxLength={300}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -428,6 +441,58 @@ export function ActivityConsole({
                   />
                 )}
               </div>
+            ) : kind === "video" ? (
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit">
+                  {(
+                    [
+                      ["url", "YouTube / web link"],
+                      ["file", "Course video file"],
+                    ] as const
+                  ).map(([t, label]) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setVideoSource(t)}
+                      className={segBtn(videoSource === t)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {videoSource === "url" ? (
+                  <input
+                    value={videoUrl}
+                    onChange={(e) => setVideoUrl(e.target.value)}
+                    placeholder="https://youtube.com/watch?v=…  or a direct .mp4 URL"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                ) : files.filter((f) => f.filename.match(/\.(mp4|webm|mov|m4v)$/i)).length > 0 ? (
+                  <select
+                    value={videoFileId}
+                    onChange={(e) => setVideoFileId(e.target.value)}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white"
+                  >
+                    <option value="">Choose a video from the course library…</option>
+                    {files
+                      .filter((f) => f.filename.match(/\.(mp4|webm|mov|m4v)$/i))
+                      .map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.title} ({f.filename})
+                        </option>
+                      ))}
+                  </select>
+                ) : (
+                  <p className="text-xs text-slate-400">
+                    No video files in the course library — upload one from the
+                    course page, or paste a YouTube/direct link instead.
+                  </p>
+                )}
+                <p className="text-[11px] text-slate-400">
+                  Everyone gets the player; your Play / Pause / Restart drives
+                  all screens in sync. Participants tap once to start watching.
+                </p>
+              </div>
             ) : kind === "whiteboard" ? null : (kind === "vote" ||
                 kind === "likert") &&
               sourcing === "participants" ? (
@@ -456,10 +521,17 @@ export function ActivityConsole({
 
             <button
               type="submit"
-              disabled={busy || !prompt.trim()}
+              disabled={
+                busy ||
+                (kind === "video"
+                  ? videoSource === "url"
+                    ? !videoUrl.trim()
+                    : !videoFileId
+                  : !prompt.trim())
+              }
               className="self-start rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40 transition"
             >
-              Push to participants
+              {kind === "video" ? "Start video for all" : "Push to participants"}
             </button>
             {error && <p className="text-sm text-red-600">{error}</p>}
           </form>

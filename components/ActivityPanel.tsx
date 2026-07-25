@@ -9,6 +9,7 @@ import type {
 import { Whiteboard } from "./Whiteboard";
 import { Markdown } from "./Markdown";
 import { LikertChart } from "./LikertChart";
+import { VideoPlayer } from "./VideoPlayer";
 import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
 
 interface Props {
@@ -543,6 +544,23 @@ export function ActivityPanel({
             </p>
           )}
         </div>
+      </div>
+    );
+  }
+
+  // ---- Video: synchronized playback the facilitator drives ----
+  if (activity.kind === "video" && activity.video) {
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Video")}
+        {activity.video.title && (
+          <p className="text-sm font-medium -mt-2 mb-3">{activity.video.title}</p>
+        )}
+        <VideoPlayer
+          video={activity.video}
+          canControl={canModerate}
+          onControl={(action, pos) => manage({ video: { action, pos } })}
+        />
       </div>
     );
   }

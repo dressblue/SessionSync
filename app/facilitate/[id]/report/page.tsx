@@ -28,6 +28,7 @@ const KIND_LABEL: Record<string, string> = {
   wheel: "Wheel",
   whiteboard: "Whiteboard",
   exhibit: "Presented",
+  video: "Video",
 };
 
 function strokesToDataUrl(strokes: Stroke[]): string {
@@ -90,6 +91,13 @@ function activityLines(a: ActivityState): string[] {
     if (a.exhibit === "file") return [`File: ${a.filename ?? "(document)"}`];
     if (a.exhibit === "url") return [`Link: ${a.url}`];
     return [(a.text ?? "").slice(0, 300) + ((a.text?.length ?? 0) > 300 ? "…" : "")];
+  }
+  if (a.kind === "video") {
+    const v = a.video;
+    if (!v) return ["Video"];
+    const src =
+      v.provider === "youtube" ? `https://youtu.be/${v.ref}` : v.ref;
+    return [`Video: ${v.title || src}`];
   }
   // columns / collect
   const entries = (a.entries ?? []).filter((e) => !e.hidden);

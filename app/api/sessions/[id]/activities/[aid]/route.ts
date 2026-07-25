@@ -37,6 +37,49 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ ok: true });
   }
 
+  // Video transport: set the play/pause anchor that participants sync to.
+  if (body?.video && typeof body.video === "object") {
+    const res = await query<ActivityRow>(
+      `SELECT * FROM activities WHERE id = $1 AND session_id = $2 AND status = 'open'`,
+      [aid, id]
+    );
+    const activity = res.rows[0];
+    if (!activity || activity.kind !== "video") {
+      return NextResponse.json({ error: "No video activity" }, { status: 404 });
+    }
+    let config: Record<string, unknown> = {};
+    try {
+      config = JSON.parse(activity.config);
+    } catch {
+      /* rebuilt below */
+    }
+    const v = body.video as { action?: string; pos?: number };
+    const pos = typeof v.pos === "number" && v.pos >= 0 ? v.pos : 0;
+    if (v.action === "play") {
+      config.playing = true;
+      config.t0 = pos;
+      config.at = new Date().toISOString();
+    } else if (v.action === "pause") {
+      config.playing = false;
+      config.t0 = pos;
+      config.at = new Date().toISOString();
+    } else if (v.action === "seek") {
+      config.t0 = pos;
+      config.at = new Date().toISOString();
+    } else if (v.action === "restart") {
+      config.playing = false;
+      config.t0 = 0;
+      config.at = new Date().toISOString();
+    } else {
+      return NextResponse.json({ error: "Unknown video action" }, { status: 400 });
+    }
+    await query(`UPDATE activities SET config = $1 WHERE id = $2`, [
+      JSON.stringify(config),
+      aid,
+    ]);
+    return NextResponse.json({ ok: true });
+  }
+
   // Presentation controls: reveal count, wheel spotlight, whiteboard clear.
   if (
     typeof body?.reveal === "number" ||

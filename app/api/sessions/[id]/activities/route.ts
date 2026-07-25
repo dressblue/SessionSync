@@ -174,6 +174,43 @@ export async function POST(
         { status: 400 }
       );
     }
+  } else if (kind === "video") {
+    const now = new Date().toISOString();
+    const fileId = typeof body?.fileId === "string" ? body.fileId : "";
+    if (fileId) {
+      const file = await query<{ filename: string; mime: string }>(
+        `SELECT filename, mime FROM course_files WHERE id = $1 AND course_id = $2`,
+        [fileId, session.course_id]
+      );
+      if (!file.rows[0] || !file.rows[0].mime.startsWith("video/")) {
+        return NextResponse.json(
+          { error: "Pick a video file from the course library" },
+          { status: 400 }
+        );
+      }
+      config = {
+        provider: "video",
+        fileId,
+        title: prompt || file.rows[0].filename,
+        playing: false,
+        t0: 0,
+        at: now,
+      };
+    } else {
+      const url = typeof body?.url === "string" ? body.url.trim() : "";
+      if (!/^https?:\/\/.+/.test(url)) {
+        return NextResponse.json(
+          { error: "Enter a YouTube link or a direct video URL" },
+          { status: 400 }
+        );
+      }
+      const yt = url.match(
+        /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/
+      );
+      config = yt
+        ? { provider: "youtube", ref: yt[1], title: prompt, playing: false, t0: 0, at: now }
+        : { provider: "video", ref: url.slice(0, 2000), title: prompt, playing: false, t0: 0, at: now };
+    }
   } else {
     return NextResponse.json({ error: "Unknown activity kind" }, { status: 400 });
   }

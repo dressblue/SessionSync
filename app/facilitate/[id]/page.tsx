@@ -20,6 +20,7 @@ const TOOL_BADGES: Record<string, string> = {
   wheel: "Wheel",
   whiteboard: "Draw",
   exhibit: "Present",
+  video: "Video",
 };
 
 function Console() {
@@ -42,7 +43,14 @@ function Console() {
   // Step-tool editor state
   const [toolsOpenFor, setToolsOpenFor] = useState<string | null>(null);
   const [toolKind, setToolKind] = useState<
-    "vote" | "likert" | "columns" | "reveal" | "wheel" | "whiteboard" | "exhibit"
+    | "vote"
+    | "likert"
+    | "columns"
+    | "reveal"
+    | "wheel"
+    | "whiteboard"
+    | "exhibit"
+    | "video"
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
@@ -205,6 +213,8 @@ function Console() {
       if (toolExhibitType === "file") body.fileId = toolExhibitRef;
       else if (toolExhibitType === "url") body.url = toolExhibitRef;
       else body.text = toolList;
+    } else if (toolKind === "video") {
+      body.url = toolExhibitRef;
     } else if ((toolKind === "vote" || toolKind === "likert") && toolSourced)
       body.sourcing = "participants";
     else if (toolKind === "vote") body.options = list;
@@ -228,7 +238,13 @@ function Console() {
     setToolSourced(t.sourcing === "participants");
     setToolAnchorSet(t.anchorSet ?? "agreement");
     setToolExhibitType(t.exhibit ?? "file");
-    setToolExhibitRef(t.exhibit === "url" ? (t.url ?? "") : (t.fileId ?? ""));
+    setToolExhibitRef(
+      t.kind === "video"
+        ? (t.url ?? "")
+        : t.exhibit === "url"
+          ? (t.url ?? "")
+          : (t.fileId ?? "")
+    );
     setToolList(
       t.exhibit === "text"
         ? (t.text ?? "")
@@ -548,6 +564,7 @@ function Console() {
                             <option value="exhibit">
                               Present (file / link / text)
                             </option>
+                            <option value="video">Video (synced)</option>
                           </select>
                           {toolKind === "exhibit" && (
                             <select
@@ -621,6 +638,14 @@ function Console() {
                             className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           />
                         )}
+                        {toolKind === "video" && (
+                          <input
+                            value={toolExhibitRef}
+                            onChange={(e) => setToolExhibitRef(e.target.value)}
+                            placeholder="YouTube link or direct .mp4 URL"
+                            className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        )}
                         {toolKind === "exhibit" && toolExhibitType === "text" && (
                           <textarea
                             value={toolList}
@@ -632,6 +657,7 @@ function Console() {
                         )}
                         {toolKind !== "whiteboard" &&
                           toolKind !== "exhibit" &&
+                          toolKind !== "video" &&
                           !(
                             (toolKind === "vote" || toolKind === "likert") &&
                             toolSourced
@@ -655,7 +681,11 @@ function Console() {
                         <div className="flex items-center gap-1.5">
                           <button
                             onClick={() => saveTool(s.id)}
-                            disabled={!toolPrompt.trim()}
+                            disabled={
+                              toolKind === "video"
+                                ? !toolExhibitRef.trim()
+                                : !toolPrompt.trim()
+                            }
                             className="rounded-md bg-slate-800 text-white px-3 py-1.5 text-xs font-medium hover:bg-slate-900 disabled:opacity-40"
                           >
                             {editingToolId

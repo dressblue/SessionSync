@@ -30,7 +30,8 @@ export type ActivityKind =
   | "reveal"
   | "wheel"
   | "whiteboard"
-  | "exhibit";
+  | "exhibit"
+  | "video";
 
 export interface ActivityRow {
   id: string;
@@ -98,6 +99,15 @@ export interface ActivityPayload {
   mime?: string;
   url?: string;
   text?: string;
+  // video (synchronized playback)
+  video?: {
+    provider: "youtube" | "video";
+    ref: string; // youtube id, or a playable src url
+    title: string;
+    playing: boolean;
+    t0: number; // anchor position in seconds
+    at: string; // ISO server time when the anchor was set
+  };
 }
 
 export interface StepRow {
@@ -385,6 +395,29 @@ export function buildActivityPayload(
   if (activity.kind === "wheel") {
     payload.richItems = config.richItems ?? [];
     payload.active = config.active ?? -1;
+    return payload;
+  }
+  if (activity.kind === "video") {
+    const c = config as ActivityConfig & {
+      provider?: "youtube" | "video";
+      ref?: string;
+      fileId?: string;
+      title?: string;
+      playing?: boolean;
+      t0?: number;
+      at?: string;
+    };
+    const ref = c.provider === "video" && c.fileId
+      ? `/api/files/${c.fileId}?inline=1`
+      : (c.ref ?? "");
+    payload.video = {
+      provider: c.provider ?? "video",
+      ref,
+      title: c.title ?? "",
+      playing: !!c.playing,
+      t0: c.t0 ?? 0,
+      at: c.at ?? new Date(0).toISOString(),
+    };
     return payload;
   }
   if (activity.kind === "exhibit") {
