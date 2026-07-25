@@ -40,11 +40,17 @@ export async function POST(
     case "end":
       status = "ended";
       break;
+    case "deselect":
+      // Close the current step without ending the session: participants drop
+      // to a holding view. current_step = -1 marks "live, nothing on screen".
+      current = -1;
+      break;
     case "next":
-      current = clamp(current + 1);
+      // From the holding state, next advances to the first step.
+      current = current < 0 ? 0 : clamp(current + 1);
       break;
     case "prev":
-      current = clamp(current - 1);
+      current = current < 0 ? 0 : clamp(current - 1);
       break;
     case "goto":
       if (typeof body?.step !== "number") {

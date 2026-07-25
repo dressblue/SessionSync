@@ -139,7 +139,9 @@ function ParticipantView() {
           <h1 className="font-semibold truncate">{session.title}</h1>
           <p className="text-xs text-slate-500">
             {session.status === "live" && steps.length > 0
-              ? `Step ${session.currentStep + 1} of ${steps.length}`
+              ? session.currentStep < 0
+                ? "In session"
+                : `Step ${session.currentStep + 1} of ${steps.length}`
               : session.status === "lobby"
                 ? "Waiting to start"
                 : session.status === "ended"
@@ -432,8 +434,14 @@ function ParticipantView() {
           )}
 
           {session.status === "live" && activities.length === 0 && !current && (
-            <div className="h-full flex items-center justify-center text-slate-500">
-              The facilitator hasn&apos;t added any agenda steps yet.
+            <div className="h-full flex flex-col items-center justify-center text-center px-6 py-16">
+              <div className="w-3 h-3 rounded-full bg-indigo-500 animate-pulse mb-4" />
+              <h2 className="text-xl font-semibold">Hang tight</h2>
+              <p className="text-slate-500 mt-1 max-w-sm">
+                {steps.length === 0
+                  ? "The facilitator hasn't added any agenda steps yet."
+                  : "The facilitator will bring up the next thing in a moment."}
+              </p>
             </div>
           )}
 

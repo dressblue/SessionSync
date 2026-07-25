@@ -400,14 +400,23 @@ function Console() {
                       </span>
                       <span className="text-sm font-medium truncate">{s.title}</span>
                       <div className="ml-auto flex items-center gap-1 shrink-0">
-                        {session.status === "live" && i !== session.currentStep && (
-                          <button
-                            onClick={() => control("goto", i)}
-                            className="rounded-md border border-indigo-200 text-indigo-700 px-2 py-1 text-xs hover:bg-indigo-50"
-                          >
-                            Show
-                          </button>
-                        )}
+                        {session.status === "live" &&
+                          (i === session.currentStep ? (
+                            <button
+                              onClick={() => control("deselect")}
+                              title="Close this step — session stays live; participants see a holding screen"
+                              className="rounded-md bg-emerald-100 text-emerald-700 border border-emerald-300 px-2 py-1 text-xs font-medium hover:bg-emerald-200"
+                            >
+                              ● Active — close
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => control("goto", i)}
+                              className="rounded-md border border-indigo-200 text-indigo-700 px-2 py-1 text-xs hover:bg-indigo-50"
+                            >
+                              Show
+                            </button>
+                          ))}
                         <button
                           onClick={() =>
                             api(`/api/sessions/${id}/steps/${s.id}`, "PATCH", {
@@ -818,7 +827,7 @@ function Console() {
                 <>
                   <button
                     onClick={() => control("prev")}
-                    disabled={session.currentStep === 0}
+                    disabled={session.currentStep <= 0}
                     className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100 disabled:opacity-40 transition"
                   >
                     ← Back
@@ -865,6 +874,18 @@ function Console() {
                     <Markdown>{current.content}</Markdown>
                   </div>
                 )}
+              </div>
+            )}
+            {session.status === "live" && !current && (
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600 mb-1">
+                  Session live — no step on screen
+                </p>
+                <p className="text-sm text-slate-500">
+                  {steps.length === 0
+                    ? "Add an agenda step in the left column to display it."
+                    : "Participants are in a holding view. Click Show on any agenda step to bring it up."}
+                </p>
               </div>
             )}
             {session.status === "lobby" && (
