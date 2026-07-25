@@ -82,6 +82,7 @@ export interface StepTool {
 }
 
 export interface StatePayload {
+  build?: string;
   session: {
     id: string;
     title: string;
@@ -158,7 +159,24 @@ export function useSessionState(
       failStreakRef.current = 0;
       if (text !== lastPayloadRef.current) {
         lastPayloadRef.current = text;
-        setState(JSON.parse(text));
+        const payload = JSON.parse(text) as StatePayload;
+        // Auto-heal stale clients: if the server was deployed after this
+        // bundle was built, reload once to pick up the new code. The
+        // sessionStorage guard prevents a reload loop if caching interferes.
+        const myBuild = process.env.NEXT_PUBLIC_BUILD;
+        if (
+          payload.build &&
+          myBuild &&
+          payload.build !== "dev" &&
+          myBuild !== "dev" &&
+          payload.build !== myBuild &&
+          sessionStorage.getItem("ss_build_reload") !== payload.build
+        ) {
+          sessionStorage.setItem("ss_build_reload", payload.build);
+          window.location.reload();
+          return;
+        }
+        setState(payload);
       }
       setError(null);
     } catch (e) {

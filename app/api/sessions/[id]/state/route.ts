@@ -52,6 +52,7 @@ export async function GET(
   const now = Date.now();
 
   return NextResponse.json({
+    build: process.env.NEXT_PUBLIC_BUILD ?? "dev",
     session: {
       id: session.id,
       title: session.title,
