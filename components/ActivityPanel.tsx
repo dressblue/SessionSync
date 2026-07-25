@@ -92,50 +92,55 @@ export function ActivityPanel({
     }
   }
 
+  // For facilitators, the chip itself is a binary toggle: click to feature
+  // the word large in the box header, click again to clear it.
   const entryChip = (e: ActivityEntry) => (
     <li
       key={e.id}
+      onClick={
+        canModerate && !e.hidden
+          ? () => moderate(e.id, { highlighted: !e.highlighted })
+          : undefined
+      }
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
         e.hidden
           ? "border-dashed border-slate-300 bg-slate-50 text-slate-400"
           : e.highlighted
-            ? "border-indigo-400 bg-indigo-50 text-indigo-900"
+            ? "border-amber-400 bg-amber-50 text-amber-900"
             : "border-slate-200 bg-white"
-      }`}
-      title={`from ${e.name}`}
+      } ${canModerate && !e.hidden ? "cursor-pointer select-none hover:border-amber-300" : ""}`}
+      title={
+        canModerate
+          ? e.highlighted
+            ? "Click to stop featuring"
+            : "Click to feature this for the group"
+          : `from ${e.name}`
+      }
     >
       {e.highlighted && !e.hidden && (
-        <span className="text-indigo-600 font-bold">✓</span>
+        <span className="text-amber-600 font-bold">★</span>
       )}
       <span className={e.hidden ? "line-through" : ""}>{e.value}</span>
       <span className="text-slate-400">· {e.name.split(" ")[0]}</span>
       {canModerate && (
-        <span className="flex items-center gap-0.5 ml-0.5">
-          <button
-            onClick={() => moderate(e.id, { highlighted: !e.highlighted })}
-            className={`px-0.5 ${
-              e.highlighted
-                ? "text-indigo-600"
-                : "text-slate-300 hover:text-indigo-500"
-            }`}
-            title={e.highlighted ? "Remove highlight" : "Highlight"}
-            aria-label="Toggle highlight"
-          >
-            ✓
-          </button>
-          <button
-            onClick={() => moderate(e.id, { hidden: !e.hidden })}
-            className="px-0.5 text-slate-300 hover:text-rose-500"
-            title={e.hidden ? "Unhide" : "Hide from participants"}
-            aria-label="Toggle hidden"
-          >
-            {e.hidden ? "↺" : "−"}
-          </button>
-        </span>
+        <button
+          onClick={(ev) => {
+            ev.stopPropagation();
+            moderate(e.id, { hidden: !e.hidden });
+          }}
+          className="px-0.5 text-slate-300 hover:text-rose-500"
+          title={e.hidden ? "Unhide" : "Hide from participants"}
+          aria-label="Toggle hidden"
+        >
+          {e.hidden ? "↺" : "−"}
+        </button>
       )}
       {!canModerate && e.mine && (
         <button
-          onClick={() => send({ entryId: e.id }, "DELETE")}
+          onClick={(ev) => {
+            ev.stopPropagation();
+            send({ entryId: e.id }, "DELETE");
+          }}
           className="text-slate-300 hover:text-rose-500"
           aria-label="Remove entry"
         >
@@ -144,6 +149,36 @@ export function ActivityPanel({
       )}
     </li>
   );
+
+  // Featured words render large and contrasting in the box's title segment,
+  // right side — the facilitator's way of drawing the group's attention.
+  const featuredHeader = (label: string) => {
+    const featured = (activity.entries ?? []).filter(
+      (e) => e.highlighted && !e.hidden
+    );
+    return (
+      <div className="flex items-start justify-between gap-6 mb-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-1">
+            {label}
+          </p>
+          <h3 className="text-lg font-semibold">{activity.prompt}</h3>
+        </div>
+        {featured.length > 0 && (
+          <div className="shrink-0 max-w-[55%] text-right flex flex-col items-end gap-0.5">
+            {featured.map((e) => (
+              <span
+                key={e.id}
+                className="reveal-in text-3xl font-extrabold text-amber-600 leading-tight"
+              >
+                {e.value}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const suggestionForm = (placeholder: string) =>
     participantId ? (
@@ -232,7 +267,7 @@ export function ActivityPanel({
     const entries = activity.entries ?? [];
     return (
       <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
-        {header(
+        {featuredHeader(
           activity.kind === "vote" ? "Vote — gathering options" : "Survey — gathering items"
         )}
         <p className="text-sm text-slate-500 mb-2">
@@ -568,7 +603,7 @@ export function ActivityPanel({
   const { columns = [], entries = [] } = activity;
   return (
     <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
-      {header("Feedback")}
+      {featuredHeader("Feedback")}
       <div className={columnGridClass(columns.length)}>
         {columns.map((title, ci) => {
           const cellEntries = entries.filter((e) => e.column === ci);
