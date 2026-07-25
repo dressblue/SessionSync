@@ -42,6 +42,7 @@ export async function POST(
   if (typeof body?.fileId === "string") config.fileId = body.fileId;
   if (typeof body?.url === "string") config.url = body.url;
   if (typeof body?.text === "string") config.text = body.text;
+  if (typeof body?.minutes === "number") config.minutes = body.minutes;
 
   const pos = await query<{ next: number }>(
     `SELECT COALESCE(MAX(position), -1) + 1 AS next FROM step_tools WHERE step_id = $1`,

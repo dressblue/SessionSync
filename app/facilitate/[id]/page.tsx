@@ -21,6 +21,7 @@ const TOOL_BADGES: Record<string, string> = {
   whiteboard: "Draw",
   exhibit: "Present",
   video: "Video",
+  timer: "Timer",
 };
 
 function Console() {
@@ -51,6 +52,7 @@ function Console() {
     | "whiteboard"
     | "exhibit"
     | "video"
+    | "timer"
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
@@ -59,6 +61,7 @@ function Console() {
   const [toolExhibitType, setToolExhibitType] = useState<"file" | "url" | "text">("file");
   const [toolExhibitRef, setToolExhibitRef] = useState("");
   const [toolAnchorSet, setToolAnchorSet] = useState("agreement");
+  const [toolTimerMin, setToolTimerMin] = useState(5);
 
   useEffect(() => {
     const urlKey = searchParams.get("key");
@@ -196,6 +199,7 @@ function Console() {
     setToolExhibitType("file");
     setToolExhibitRef("");
     setToolAnchorSet("agreement");
+    setToolTimerMin(5);
   }
 
   async function saveTool(stepId: string) {
@@ -215,6 +219,8 @@ function Console() {
       else body.text = toolList;
     } else if (toolKind === "video") {
       body.url = toolExhibitRef;
+    } else if (toolKind === "timer") {
+      body.minutes = toolTimerMin;
     } else if ((toolKind === "vote" || toolKind === "likert") && toolSourced)
       body.sourcing = "participants";
     else if (toolKind === "vote") body.options = list;
@@ -237,6 +243,7 @@ function Console() {
     setToolPrompt(t.prompt);
     setToolSourced(t.sourcing === "participants");
     setToolAnchorSet(t.anchorSet ?? "agreement");
+    setToolTimerMin(t.minutes ?? 5);
     setToolExhibitType(t.exhibit ?? "file");
     setToolExhibitRef(
       t.kind === "video"
@@ -265,6 +272,7 @@ function Console() {
       fileId: tool.fileId,
       url: tool.url,
       text: tool.text,
+      minutes: tool.minutes,
     });
   }
 
@@ -565,6 +573,7 @@ function Console() {
                               Present (file / link / text)
                             </option>
                             <option value="video">Video (synced)</option>
+                            <option value="timer">Countdown timer</option>
                           </select>
                           {toolKind === "exhibit" && (
                             <select
@@ -646,6 +655,24 @@ function Console() {
                             className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           />
                         )}
+                        {toolKind === "timer" && (
+                          <label className="flex items-center gap-2 text-xs text-slate-600">
+                            Countdown:
+                            <input
+                              type="number"
+                              min={1}
+                              max={180}
+                              value={toolTimerMin}
+                              onChange={(e) =>
+                                setToolTimerMin(
+                                  Math.max(1, Number(e.target.value) || 1)
+                                )
+                              }
+                              className="w-16 rounded-md border border-slate-300 px-2 py-1 text-xs bg-white"
+                            />
+                            minutes
+                          </label>
+                        )}
                         {toolKind === "exhibit" && toolExhibitType === "text" && (
                           <textarea
                             value={toolList}
@@ -658,6 +685,7 @@ function Console() {
                         {toolKind !== "whiteboard" &&
                           toolKind !== "exhibit" &&
                           toolKind !== "video" &&
+                          toolKind !== "timer" &&
                           !(
                             (toolKind === "vote" || toolKind === "likert") &&
                             toolSourced
@@ -684,7 +712,9 @@ function Console() {
                             disabled={
                               toolKind === "video"
                                 ? !toolExhibitRef.trim()
-                                : !toolPrompt.trim()
+                                : toolKind === "timer"
+                                  ? false
+                                  : !toolPrompt.trim()
                             }
                             className="rounded-md bg-slate-800 text-white px-3 py-1.5 text-xs font-medium hover:bg-slate-900 disabled:opacity-40"
                           >

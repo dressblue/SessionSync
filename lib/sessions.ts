@@ -31,7 +31,8 @@ export type ActivityKind =
   | "wheel"
   | "whiteboard"
   | "exhibit"
-  | "video";
+  | "video"
+  | "timer";
 
 export interface ActivityRow {
   id: string;
@@ -106,6 +107,14 @@ export interface ActivityPayload {
     title: string;
     playing: boolean;
     t0: number; // anchor position in seconds
+    at: string; // ISO server time when the anchor was set
+  };
+  // timer (synchronized countdown)
+  timer?: {
+    label: string;
+    durationSec: number; // the reset duration
+    remainingSec: number; // remaining at the anchor moment
+    running: boolean;
     at: string; // ISO server time when the anchor was set
   };
 }
@@ -395,6 +404,23 @@ export function buildActivityPayload(
   if (activity.kind === "wheel") {
     payload.richItems = config.richItems ?? [];
     payload.active = config.active ?? -1;
+    return payload;
+  }
+  if (activity.kind === "timer") {
+    const c = config as ActivityConfig & {
+      label?: string;
+      durationSec?: number;
+      remainingSec?: number;
+      running?: boolean;
+      at?: string;
+    };
+    payload.timer = {
+      label: c.label ?? "",
+      durationSec: c.durationSec ?? 300,
+      remainingSec: c.remainingSec ?? c.durationSec ?? 300,
+      running: !!c.running,
+      at: c.at ?? new Date(0).toISOString(),
+    };
     return payload;
   }
   if (activity.kind === "video") {

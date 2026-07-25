@@ -20,7 +20,8 @@ export type ActivityKind =
   | "wheel"
   | "whiteboard"
   | "exhibit"
-  | "video";
+  | "video"
+  | "timer";
 
 export interface RichItem {
   title: string;
@@ -74,6 +75,13 @@ export interface ActivityState {
     t0: number;
     at: string;
   };
+  timer?: {
+    label: string;
+    durationSec: number;
+    remainingSec: number;
+    running: boolean;
+    at: string;
+  };
 }
 
 export interface RosterEntry {
@@ -96,6 +104,7 @@ export interface StepTool {
   fileId?: string;
   url?: string;
   text?: string;
+  minutes?: number;
 }
 
 export interface VideoState {

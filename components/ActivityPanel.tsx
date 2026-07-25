@@ -10,6 +10,7 @@ import { Whiteboard } from "./Whiteboard";
 import { Markdown } from "./Markdown";
 import { LikertChart } from "./LikertChart";
 import { VideoPlayer } from "./VideoPlayer";
+import { TimerDisplay } from "./TimerDisplay";
 import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
 
 interface Props {
@@ -544,6 +545,22 @@ export function ActivityPanel({
             </p>
           )}
         </div>
+      </div>
+    );
+  }
+
+  // ---- Countdown timer ----
+  if (activity.kind === "timer" && activity.timer) {
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Timer")}
+        <TimerDisplay
+          timer={activity.timer}
+          canControl={canModerate}
+          onControl={(action, seconds) =>
+            manage({ timer: { action, seconds } })
+          }
+        />
       </div>
     );
   }

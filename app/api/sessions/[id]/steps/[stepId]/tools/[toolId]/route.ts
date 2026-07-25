@@ -33,6 +33,7 @@ export async function PATCH(
   if (typeof body?.fileId === "string") config.fileId = body.fileId;
   if (typeof body?.url === "string") config.url = body.url;
   if (typeof body?.text === "string") config.text = body.text;
+  if (typeof body?.minutes === "number") config.minutes = body.minutes;
   await query(
     `UPDATE step_tools SET kind = $1, prompt = $2, config = $3
      WHERE id = $4

@@ -37,6 +37,67 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ ok: true });
   }
 
+  // Timer transport: start/pause/reset/add against the countdown anchor.
+  if (body?.timer && typeof body.timer === "object") {
+    const res = await query<ActivityRow>(
+      `SELECT * FROM activities WHERE id = $1 AND session_id = $2 AND status = 'open'`,
+      [aid, id]
+    );
+    const activity = res.rows[0];
+    if (!activity || activity.kind !== "timer") {
+      return NextResponse.json({ error: "No timer activity" }, { status: 404 });
+    }
+    const config = (() => {
+      try {
+        return JSON.parse(activity.config);
+      } catch {
+        return {};
+      }
+    })() as {
+      label?: string;
+      durationSec?: number;
+      remainingSec?: number;
+      running?: boolean;
+      at?: string;
+    };
+    const dur = config.durationSec ?? 300;
+    // Current remaining given the existing anchor.
+    const curRemaining = config.running
+      ? Math.max(
+          0,
+          (config.remainingSec ?? dur) -
+            (Date.now() - Date.parse(config.at ?? new Date().toISOString())) / 1000
+        )
+      : config.remainingSec ?? dur;
+    const now = new Date().toISOString();
+    const t = body.timer as { action?: string; seconds?: number };
+    if (t.action === "start") {
+      config.running = true;
+      config.remainingSec = curRemaining <= 0 ? dur : curRemaining;
+      config.at = now;
+    } else if (t.action === "pause") {
+      config.running = false;
+      config.remainingSec = curRemaining;
+      config.at = now;
+    } else if (t.action === "reset") {
+      config.running = false;
+      config.remainingSec = dur;
+      config.at = now;
+    } else if (t.action === "add") {
+      const add = typeof t.seconds === "number" ? t.seconds : 60;
+      config.durationSec = Math.min(24 * 3600, dur + add);
+      config.remainingSec = Math.max(0, curRemaining + add);
+      config.at = now;
+    } else {
+      return NextResponse.json({ error: "Unknown timer action" }, { status: 400 });
+    }
+    await query(`UPDATE activities SET config = $1 WHERE id = $2`, [
+      JSON.stringify(config),
+      aid,
+    ]);
+    return NextResponse.json({ ok: true });
+  }
+
   // Video transport: set the play/pause anchor that participants sync to.
   if (body?.video && typeof body.video === "object") {
     const res = await query<ActivityRow>(

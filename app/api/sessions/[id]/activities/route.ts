@@ -39,7 +39,13 @@ export async function POST(
   const kind = body?.kind;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   const sourced = body?.sourcing === "participants";
-  if (!prompt) {
+  // Video, timer, and file/exhibit carry their own content; their heading is
+  // optional. Everything else needs a prompt.
+  const promptOptional =
+    kind === "video" ||
+    kind === "timer" ||
+    (kind === "exhibit" && body?.exhibit === "file");
+  if (!prompt && !promptOptional) {
     return NextResponse.json({ error: "A prompt is required" }, { status: 400 });
   }
 
@@ -211,6 +217,19 @@ export async function POST(
         ? { provider: "youtube", ref: yt[1], title: prompt, playing: false, t0: 0, at: now }
         : { provider: "video", ref: url.slice(0, 2000), title: prompt, playing: false, t0: 0, at: now };
     }
+  } else if (kind === "timer") {
+    const mins =
+      typeof body?.minutes === "number" && body.minutes > 0 ? body.minutes : 5;
+    const secs =
+      typeof body?.seconds === "number" && body.seconds >= 0 ? body.seconds : 0;
+    const durationSec = Math.min(24 * 3600, Math.round(mins * 60 + secs));
+    config = {
+      label: prompt,
+      durationSec,
+      remainingSec: durationSec,
+      running: false,
+      at: new Date().toISOString(),
+    };
   } else {
     return NextResponse.json({ error: "Unknown activity kind" }, { status: 400 });
   }

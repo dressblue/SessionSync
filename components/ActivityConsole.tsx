@@ -26,7 +26,8 @@ type Kind =
   | "wheel"
   | "whiteboard"
   | "exhibit"
-  | "video";
+  | "video"
+  | "timer";
 type Sourcing = "facilitator" | "participants";
 
 const KIND_LABEL: Record<string, string> = {
@@ -38,6 +39,7 @@ const KIND_LABEL: Record<string, string> = {
   whiteboard: "Whiteboard",
   exhibit: "Presented",
   video: "Video",
+  timer: "Timer",
 };
 
 // Facilitator's activity station: up to two activities run side by side
@@ -68,6 +70,7 @@ export function ActivityConsole({
   const [videoSource, setVideoSource] = useState<"url" | "file">("url");
   const [videoUrl, setVideoUrl] = useState("");
   const [videoFileId, setVideoFileId] = useState("");
+  const [timerMin, setTimerMin] = useState(5);
   const [exhibitText, setExhibitText] = useState("");
 
   async function call(path: string, method: string, body?: unknown) {
@@ -110,6 +113,8 @@ export function ActivityConsole({
     } else if (kind === "video") {
       if (videoSource === "file") body.fileId = videoFileId;
       else body.url = videoUrl;
+    } else if (kind === "timer") {
+      body.minutes = timerMin;
     } else if (
       (kind === "vote" || kind === "likert") &&
       sourcing === "participants"
@@ -155,6 +160,7 @@ export function ActivityConsole({
           {activity.kind !== "whiteboard" &&
             activity.kind !== "exhibit" &&
             activity.kind !== "video" &&
+            activity.kind !== "timer" &&
             !(activity.kind === "vote" && activity.phase !== "collect") && (
               <button
                 onClick={() =>
@@ -265,6 +271,7 @@ export function ActivityConsole({
                 ["whiteboard", "Whiteboard"],
                 ["exhibit", "Present"],
                 ["video", "Video"],
+                ["timer", "Timer"],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -334,7 +341,9 @@ export function ActivityConsole({
                             ? "Heading, e.g. This week's handout"
                             : kind === "video"
                               ? "Video title (optional)"
-                              : "Prompt, e.g. Answer both questions below"
+                              : kind === "timer"
+                                ? "Label (optional), e.g. Small-group discussion"
+                                : "Prompt, e.g. Answer both questions below"
               }
               maxLength={300}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -441,6 +450,43 @@ export function ActivityConsole({
                   />
                 )}
               </div>
+            ) : kind === "timer" ? (
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-2 text-sm text-slate-600">
+                  Countdown length:
+                  <input
+                    type="number"
+                    min={1}
+                    max={180}
+                    value={timerMin}
+                    onChange={(e) =>
+                      setTimerMin(Math.max(1, Number(e.target.value) || 1))
+                    }
+                    className="w-20 rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  minutes
+                </label>
+                <div className="flex gap-1.5">
+                  {[1, 2, 5, 10, 15].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setTimerMin(m)}
+                      className={`rounded-md border px-2.5 py-1 text-xs font-medium ${
+                        timerMin === m
+                          ? "border-indigo-400 bg-indigo-50 text-indigo-700"
+                          : "border-slate-300 text-slate-500 hover:bg-slate-50"
+                      }`}
+                    >
+                      {m}m
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  A big countdown shows on every screen; your Start / Pause /
+                  Reset / +1 min drive it. You can start it now or later.
+                </p>
+              </div>
             ) : kind === "video" ? (
               <div className="flex flex-col gap-2">
                 <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit">
@@ -527,11 +573,17 @@ export function ActivityConsole({
                   ? videoSource === "url"
                     ? !videoUrl.trim()
                     : !videoFileId
-                  : !prompt.trim())
+                  : kind === "timer"
+                    ? false
+                    : !prompt.trim())
               }
               className="self-start rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40 transition"
             >
-              {kind === "video" ? "Start video for all" : "Push to participants"}
+              {kind === "video"
+                ? "Start video for all"
+                : kind === "timer"
+                  ? "Show timer"
+                  : "Push to participants"}
             </button>
             {error && <p className="text-sm text-red-600">{error}</p>}
           </form>

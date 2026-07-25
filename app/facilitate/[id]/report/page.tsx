@@ -29,6 +29,7 @@ const KIND_LABEL: Record<string, string> = {
   whiteboard: "Whiteboard",
   exhibit: "Presented",
   video: "Video",
+  timer: "Timer",
 };
 
 function strokesToDataUrl(strokes: Stroke[]): string {
@@ -98,6 +99,11 @@ function activityLines(a: ActivityState): string[] {
     const src =
       v.provider === "youtube" ? `https://youtu.be/${v.ref}` : v.ref;
     return [`Video: ${v.title || src}`];
+  }
+  if (a.kind === "timer") {
+    const t = a.timer;
+    const mins = Math.round((t?.durationSec ?? 0) / 60);
+    return [`Timer: ${t?.label ? t.label + " — " : ""}${mins} min`];
   }
   // columns / collect
   const entries = (a.entries ?? []).filter((e) => !e.hidden);

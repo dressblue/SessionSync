@@ -6,8 +6,13 @@ import type { VideoState } from "./useSessionState";
 interface Props {
   video: VideoState;
   canControl: boolean;
-  onControl: (action: "play" | "pause" | "restart", pos: number) => void;
+  onControl: (
+    action: "play" | "pause" | "restart" | "seek",
+    pos: number
+  ) => void;
 }
+
+const DRIFT_TOLERANCE = 1.5; // seconds before a participant re-seeks
 
 // Position the facilitator's anchor implies right now.
 function expectedPos(video: VideoState): number {
@@ -80,31 +85,47 @@ export function VideoPlayer({ video, canControl, onControl }: Props) {
   }, [isYouTube, armed, video.ref]);
 
   // ---- Sync participants to the facilitator's anchor ----
-  function applySync() {
+  // force=true seeks regardless of tolerance (manual catch-up / reconnect).
+  function applySync(force = false) {
     if (canControl || !armed) return;
     const want = expectedPos(video);
+    const tol = force ? 0.25 : DRIFT_TOLERANCE;
     if (isYouTube) {
       const p = ytRef.current;
       if (!p?.getCurrentTime) return;
-      if (Math.abs((p.getCurrentTime() ?? 0) - want) > 2.5) p.seekTo(want, true);
+      if (isFinite(want) && Math.abs((p.getCurrentTime() ?? 0) - want) > tol)
+        p.seekTo(want, true);
       const state = p.getPlayerState?.();
       if (video.playing && state !== 1) p.playVideo();
       if (!video.playing && state === 1) p.pauseVideo();
     } else {
       const el = videoRef.current;
       if (!el) return;
-      if (isFinite(want) && Math.abs(el.currentTime - want) > 2.5) el.currentTime = want;
+      if (isFinite(want) && Math.abs(el.currentTime - want) > tol)
+        el.currentTime = want;
       if (video.playing && el.paused) el.play().catch(() => {});
       if (!video.playing && !el.paused) el.pause();
     }
   }
 
-  // Re-sync whenever the anchor changes, and periodically to correct drift.
+  // Re-sync whenever the anchor changes, and frequently to correct drift
+  // (buffering/stalls make the local video lag the shared clock).
   useEffect(() => {
     applySync();
     if (canControl) return;
-    const iv = setInterval(applySync, 3000);
-    return () => clearInterval(iv);
+    const iv = setInterval(() => applySync(), 2000);
+    // Re-align hard when the tab regains focus or the device reconnects —
+    // covers the case where a temporary disconnect let the video drift.
+    const onFocus = () => applySync(true);
+    document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("online", onFocus);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(iv);
+      document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("online", onFocus);
+      window.removeEventListener("focus", onFocus);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [video.playing, video.t0, video.at, armed]);
 
@@ -129,6 +150,8 @@ export function VideoPlayer({ video, canControl, onControl }: Props) {
     }
     onControl("restart", 0);
   };
+  // Re-anchor at the facilitator's exact position so every client jumps here.
+  const syncAll = () => onControl("seek", getPos());
 
   return (
     <div className="flex flex-col gap-3">
@@ -174,6 +197,13 @@ export function VideoPlayer({ video, canControl, onControl }: Props) {
             ❚❚ Pause all
           </button>
           <button
+            onClick={syncAll}
+            title="Force every participant to jump to your current position"
+            className="rounded-lg border border-indigo-300 text-indigo-700 px-3 py-2 text-sm font-medium hover:bg-indigo-50"
+          >
+            ⟲ Sync all to here
+          </button>
+          <button
             onClick={restart}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
           >
@@ -183,6 +213,15 @@ export function VideoPlayer({ video, canControl, onControl }: Props) {
             {video.playing ? "Playing on every screen" : "Paused"}
           </span>
         </div>
+      )}
+
+      {!canControl && armed && (
+        <button
+          onClick={() => applySync(true)}
+          className="self-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+        >
+          ⟲ Catch up to the class
+        </button>
       )}
     </div>
   );
