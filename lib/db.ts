@@ -239,4 +239,9 @@ async function ensureSchema(
   await run(
     `ALTER TABLE activity_responses ALTER COLUMN participant_id DROP NOT NULL;`
   );
+  // Phase 7: facilitators participate in activities through a real roster
+  // seat linked to their identity.
+  await run(
+    `ALTER TABLE participants ADD COLUMN IF NOT EXISTS facilitator_id UUID;`
+  );
 }

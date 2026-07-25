@@ -8,6 +8,8 @@ interface Props {
   sessionId: string;
   authHeaders: Record<string, string>;
   activity: ActivityState | null;
+  /** The facilitator's own roster seat — enables participating like a student. */
+  myParticipantId?: string;
   onChanged: () => void;
 }
 
@@ -23,6 +25,7 @@ export function ActivityConsole({
   sessionId,
   authHeaders,
   activity,
+  myParticipantId,
   onChanged,
 }: Props) {
   const [kind, setKind] = useState<Kind>("vote");
@@ -94,6 +97,40 @@ export function ActivityConsole({
             </span>
           </h2>
           <div className="flex items-center gap-2">
+            {activity.kind !== "whiteboard" &&
+              !(activity.kind === "vote" && activity.phase !== "collect") && (
+                <button
+                  onClick={() =>
+                    call(`/api/sessions/${sessionId}/activities`, "POST", {
+                      kind: "vote",
+                      prompt: activity.prompt,
+                      fromActivityId: activity.id,
+                    })
+                  }
+                  disabled={busy}
+                  title="Turn this activity's content into vote options"
+                  className="rounded-lg border border-indigo-300 text-indigo-700 px-3 py-1.5 text-xs font-medium hover:bg-indigo-50 disabled:opacity-40"
+                >
+                  ↻ To vote
+                </button>
+              )}
+            {activity.kind !== "whiteboard" &&
+              !(activity.kind === "likert" && activity.phase !== "collect") && (
+                <button
+                  onClick={() =>
+                    call(`/api/sessions/${sessionId}/activities`, "POST", {
+                      kind: "likert",
+                      prompt: activity.prompt,
+                      fromActivityId: activity.id,
+                    })
+                  }
+                  disabled={busy}
+                  title="Turn this activity's content into items to score 1–5"
+                  className="rounded-lg border border-indigo-300 text-indigo-700 px-3 py-1.5 text-xs font-medium hover:bg-indigo-50 disabled:opacity-40"
+                >
+                  ↻ To scoring
+                </button>
+              )}
             {activity.phase === "collect" && (
               <button
                 onClick={() =>
@@ -127,12 +164,15 @@ export function ActivityConsole({
         <ActivityPanel
           activity={activity}
           sessionId={sessionId}
+          participantId={myParticipantId}
           moderationHeaders={authHeaders}
           onChanged={onChanged}
         />
         <p className="mt-2 text-xs text-slate-400">
+          You participate like a student — vote, comment, rate, draw.
           Moderation: ✓ highlights an entry for everyone; − hides it from
-          participants (you still see it struck through; ↺ restores it).
+          participants (struck through for you; ↺ restores it). ↻ converts
+          this activity&apos;s content into a new vote or scoring survey.
         </p>
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       </section>

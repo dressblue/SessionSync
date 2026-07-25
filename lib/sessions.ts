@@ -105,6 +105,7 @@ export interface ParticipantRow {
   name: string;
   joined_at: string;
   last_seen: string;
+  facilitator_id?: string | null;
 }
 
 // Unambiguous alphabet: no 0/O, 1/I/L.
@@ -206,52 +207,98 @@ export async function getSteps(sessionId: string): Promise<StepRow[]> {
 //  likert ratings   -> column_index >= 0 (item index), value = rating 1..scale
 const COLLECT_COLUMN = -1;
 
-/** The currently open activity with live results, shaped for the state poll. */
-export async function getActiveActivity(
-  session: SessionRow,
-  viewerParticipantId: string | null,
-  facilitatorView = false
-): Promise<ActivityPayload | null> {
-  if (!session.active_activity) return null;
-  const res = await query<ActivityRow>(
-    `SELECT * FROM activities WHERE id = $1 AND status = 'open'`,
-    [session.active_activity]
-  );
-  const activity = res.rows[0];
-  if (!activity) return null;
+export interface ResponseJoinRow {
+  id: string;
+  participant_id: string | null;
+  column_index: number | null;
+  value: string;
+  name: string | null;
+  highlighted: boolean;
+  hidden: boolean;
+}
 
-  let config: {
-    options?: string[];
-    columns?: string[];
-    items?: string[];
-    phase?: "collect" | "rate";
-    scale?: number;
-    richItems?: RichItem[];
-    revealed?: number;
-    active?: number;
-  } = {};
+export interface ActivityConfig {
+  options?: string[];
+  columns?: string[];
+  items?: string[];
+  phase?: "collect" | "rate";
+  scale?: number;
+  richItems?: RichItem[];
+  revealed?: number;
+  active?: number;
+}
+
+export function parseActivityConfig(activity: ActivityRow): ActivityConfig {
   try {
-    config = JSON.parse(activity.config);
+    return JSON.parse(activity.config);
   } catch {
-    /* malformed config renders as empty */
+    return {};
   }
+}
 
-  const responses = await query<{
-    id: string;
-    participant_id: string;
-    column_index: number | null;
-    value: string;
-    name: string | null;
-    highlighted: boolean;
-    hidden: boolean;
-  }>(
+export async function fetchActivityResponses(
+  activityId: string
+): Promise<ResponseJoinRow[]> {
+  const responses = await query<ResponseJoinRow>(
     `SELECT r.id, r.participant_id, r.column_index, r.value, r.highlighted, r.hidden, p.name
      FROM activity_responses r
      LEFT JOIN participants p ON p.id = r.participant_id
      WHERE r.activity_id = $1
      ORDER BY r.created_at ASC`,
-    [activity.id]
+    [activityId]
   );
+  return responses.rows;
+}
+
+/**
+ * The text content of an activity, used when converting one tool into
+ * another (e.g. comment-board entries become vote options). Hidden entries
+ * are excluded — moderation carries through the conversion.
+ */
+export function extractActivityTexts(
+  activity: ActivityRow,
+  rows: ResponseJoinRow[]
+): string[] {
+  const config = parseActivityConfig(activity);
+  let texts: string[];
+  if (config.phase === "collect") {
+    texts = rows
+      .filter((r) => r.column_index === COLLECT_COLUMN && !r.hidden)
+      .map((r) => r.value);
+  } else if (activity.kind === "columns") {
+    texts = rows
+      .filter((r) => (r.column_index ?? 0) >= 0 && !r.hidden)
+      .map((r) => r.value);
+  } else if (activity.kind === "vote") {
+    texts = config.options ?? [];
+  } else if (activity.kind === "likert") {
+    texts = config.items ?? [];
+  } else if (activity.kind === "reveal" || activity.kind === "wheel") {
+    texts = (config.richItems ?? []).map((i) => i.title);
+  } else {
+    texts = [];
+  }
+  // Dedupe case-insensitively, keep first spelling, cap the list.
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of texts) {
+    const norm = t.trim().toLowerCase();
+    if (!norm || seen.has(norm)) continue;
+    seen.add(norm);
+    out.push(t.trim());
+    if (out.length >= 12) break;
+  }
+  return out;
+}
+
+/** Shape an activity + its responses for a viewer (poll payload / report). */
+export function buildActivityPayload(
+  activity: ActivityRow,
+  responseRows: ResponseJoinRow[],
+  viewerParticipantId: string | null,
+  facilitatorView = false
+): ActivityPayload {
+  const config = parseActivityConfig(activity);
 
   const payload: ActivityPayload = {
     id: activity.id,
@@ -262,14 +309,14 @@ export async function getActiveActivity(
 
   // Hidden entries stay visible (flagged) to facilitators, disappear for
   // participants; highlights are visible to everyone.
-  const entriesFrom = (rows: typeof responses.rows) =>
+  const entriesFrom = (rows: ResponseJoinRow[]) =>
     rows
       .filter((r) => facilitatorView || !r.hidden)
       .map((r) => ({
         id: r.id,
         column: r.column_index ?? 0,
         value: r.value,
-        name: r.name ?? "Unknown",
+        name: r.name ?? "Facilitator",
         mine: !!viewerParticipantId && r.participant_id === viewerParticipantId,
         highlighted: r.highlighted,
         hidden: r.hidden,
@@ -277,7 +324,7 @@ export async function getActiveActivity(
 
   if (config.phase === "collect") {
     payload.entries = entriesFrom(
-      responses.rows.filter((r) => r.column_index === COLLECT_COLUMN)
+      responseRows.filter((r) => r.column_index === COLLECT_COLUMN)
     );
     if (activity.kind === "likert") payload.scale = config.scale ?? 5;
     return payload;
@@ -299,7 +346,7 @@ export async function getActiveActivity(
     return payload;
   }
   if (activity.kind === "whiteboard") {
-    payload.strokes = responses.rows
+    payload.strokes = responseRows
       .slice(-1000)
       .map((r) => {
         try {
@@ -321,6 +368,7 @@ export async function getActiveActivity(
     return payload;
   }
 
+  const responses = { rows: responseRows };
   if (activity.kind === "vote") {
     const options = config.options ?? [];
     const counts = options.map(() => 0);
@@ -370,6 +418,84 @@ export async function getActiveActivity(
     );
   }
   return payload;
+}
+
+/** The currently open activity with live results, shaped for the state poll. */
+export async function getActiveActivity(
+  session: SessionRow,
+  viewerParticipantId: string | null,
+  facilitatorView = false
+): Promise<ActivityPayload | null> {
+  if (!session.active_activity) return null;
+  const res = await query<ActivityRow>(
+    `SELECT * FROM activities WHERE id = $1 AND status = 'open'`,
+    [session.active_activity]
+  );
+  const activity = res.rows[0];
+  if (!activity) return null;
+  const rows = await fetchActivityResponses(activity.id);
+  return buildActivityPayload(activity, rows, viewerParticipantId, facilitatorView);
+}
+
+export interface SessionReport {
+  session: { id: string; title: string; status: string };
+  course: { title: string; description: string } | null;
+  generatedAt: string;
+  participants: {
+    name: string;
+    joinedAt: string;
+    isFacilitator: boolean;
+  }[];
+  steps: { title: string }[];
+  activities: (ActivityPayload & { status: string; createdAt: string })[];
+}
+
+/** Everything that happened in a session, for the close-out report. */
+export async function getSessionReport(
+  session: SessionRow
+): Promise<SessionReport> {
+  const [steps, participants, activitiesRes, course] = await Promise.all([
+    getSteps(session.id),
+    query<ParticipantRow & { facilitator_id: string | null }>(
+      `SELECT id, name, joined_at, last_seen, facilitator_id FROM participants
+       WHERE session_id = $1 ORDER BY joined_at ASC`,
+      [session.id]
+    ),
+    query<ActivityRow & { created_at: string }>(
+      `SELECT * FROM activities WHERE session_id = $1 ORDER BY created_at ASC`,
+      [session.id]
+    ),
+    session.course_id
+      ? query<{ title: string; description: string }>(
+          `SELECT title, description FROM courses WHERE id = $1`,
+          [session.course_id]
+        )
+      : Promise.resolve(null),
+  ]);
+
+  const activities = await Promise.all(
+    activitiesRes.rows.map(async (a) => {
+      const rows = await fetchActivityResponses(a.id);
+      return {
+        ...buildActivityPayload(a, rows, null, true),
+        status: a.status,
+        createdAt: a.created_at,
+      };
+    })
+  );
+
+  return {
+    session: { id: session.id, title: session.title, status: session.status },
+    course: course?.rows[0] ?? null,
+    generatedAt: new Date().toISOString(),
+    participants: participants.rows.map((p) => ({
+      name: p.name,
+      joinedAt: p.joined_at,
+      isFacilitator: !!p.facilitator_id,
+    })),
+    steps: steps.map((s) => ({ title: s.title })),
+    activities,
+  };
 }
 
 export interface MaterialItem {
@@ -433,7 +559,7 @@ export async function getStepTools(
 
 export async function getParticipants(sessionId: string): Promise<ParticipantRow[]> {
   const res = await query<ParticipantRow>(
-    `SELECT id, name, joined_at, last_seen FROM participants
+    `SELECT id, name, joined_at, last_seen, facilitator_id FROM participants
      WHERE session_id = $1 ORDER BY joined_at ASC`,
     [sessionId]
   );

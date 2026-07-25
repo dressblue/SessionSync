@@ -94,6 +94,7 @@ export async function GET(
       id: p.id,
       name: p.name,
       online: now - new Date(p.last_seen).getTime() < ONLINE_WINDOW_MS,
+      isFacilitator: !!(p as { facilitator_id?: string | null }).facilitator_id,
     })),
   });
 }

@@ -85,9 +85,34 @@ function Console() {
     ...(key ? { "x-facilitator-key": key } : {}),
     ...facilitatorHeaders(identity),
   };
+  // The facilitator's own roster seat, so they can participate in activities
+  // like a student while keeping full control.
+  const [myPid, setMyPid] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (!checked || !identity || myPid) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/sessions/${id}/participate`, {
+          method: "POST",
+          headers: {
+            ...(key ? { "x-facilitator-key": key } : {}),
+            ...facilitatorHeaders(identity),
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setMyPid(data.participantId);
+        }
+      } catch {
+        /* participation is optional; console still works without it */
+      }
+    })();
+  }, [checked, identity, key, id, myPid]);
+
   const { state, error, refresh } = useSessionState(id, {
     intervalMs: 2000,
     headers: authHeaders,
+    participantId: myPid,
   });
 
   const api = useCallback(
@@ -271,8 +296,14 @@ function Console() {
           )}
           <h1 className="text-xl font-bold truncate">{session.title}</h1>
         </div>
+        <a
+          href={`/facilitate/${id}/report`}
+          className="ml-auto rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+        >
+          Session report
+        </a>
         <span
-          className={`ml-auto rounded-full px-3 py-1 text-xs font-semibold uppercase ${statusBadge}`}
+          className={`rounded-full px-3 py-1 text-xs font-semibold uppercase ${statusBadge}`}
         >
           {session.status}
         </span>
@@ -381,6 +412,7 @@ function Console() {
                 ...facilitatorHeaders(identity),
               }}
               activity={activity}
+              myParticipantId={myPid}
               onChanged={refresh}
             />
           )}
@@ -726,6 +758,11 @@ function Console() {
                   <span className={p.online ? "" : "text-slate-400"}>
                     {p.name}
                   </span>
+                  {p.isFacilitator && (
+                    <span className="text-[10px] uppercase font-semibold text-indigo-400">
+                      facilitator
+                    </span>
+                  )}
                 </li>
               ))}
               {participants.length === 0 && (

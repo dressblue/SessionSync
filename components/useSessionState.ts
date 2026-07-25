@@ -90,7 +90,12 @@ export interface StatePayload {
     content: string;
     tools: StepTool[];
   }[];
-  participants: { id: string; name: string; online: boolean }[];
+  participants: {
+    id: string;
+    name: string;
+    online: boolean;
+    isFacilitator: boolean;
+  }[];
 }
 
 // Poll-based sync transport. Deliberately a thin seam: swapping in a push

@@ -65,6 +65,15 @@ body {
   @apply list-decimal pl-5 my-1;
 }
 
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+}
+
 /* Presentation-tool entrance animation */
 @keyframes reveal-in {
   from {

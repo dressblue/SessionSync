@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { query } from "@/lib/db";
-import { authorizeSession } from "@/lib/sessions";
+import {
+  authorizeSession,
+  extractActivityTexts,
+  fetchActivityResponses,
+  type ActivityRow,
+} from "@/lib/sessions";
 
 const cleanList = (v: unknown, max: number): string[] =>
   Array.isArray(v)
@@ -36,6 +41,32 @@ export async function POST(
   const sourced = body?.sourcing === "participants";
   if (!prompt) {
     return NextResponse.json({ error: "A prompt is required" }, { status: 400 });
+  }
+
+  // Transform: seed this activity's choices from another activity's content
+  // (e.g. comment-board entries become vote options). Hidden entries are
+  // excluded, so moderation carries through.
+  if (typeof body?.fromActivityId === "string" && body.fromActivityId) {
+    const src = await query<ActivityRow>(
+      `SELECT * FROM activities WHERE id = $1 AND session_id = $2`,
+      [body.fromActivityId, id]
+    );
+    if (!src.rows[0]) {
+      return NextResponse.json(
+        { error: "Source activity not found" },
+        { status: 404 }
+      );
+    }
+    const rows = await fetchActivityResponses(src.rows[0].id);
+    const texts = extractActivityTexts(src.rows[0], rows);
+    if (kind === "vote") body.options = texts;
+    else if (kind === "likert") body.items = texts;
+    else {
+      return NextResponse.json(
+        { error: "Can only convert into a vote or scoring survey" },
+        { status: 400 }
+      );
+    }
   }
 
   let config: Record<string, unknown>;
