@@ -10,6 +10,7 @@ import {
   loadFacilitatorIdentity,
   type FacilitatorIdentity,
 } from "@/components/identity";
+import { LIKERT_ANCHOR_LABELS } from "@/lib/likert";
 
 const TOOL_BADGES: Record<string, string> = {
   vote: "Vote",
@@ -49,6 +50,7 @@ function Console() {
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
   const [toolExhibitType, setToolExhibitType] = useState<"file" | "url" | "text">("file");
   const [toolExhibitRef, setToolExhibitRef] = useState("");
+  const [toolAnchorSet, setToolAnchorSet] = useState("agreement");
 
   useEffect(() => {
     const urlKey = searchParams.get("key");
@@ -185,6 +187,7 @@ function Console() {
     setEditingToolId(null);
     setToolExhibitType("file");
     setToolExhibitRef("");
+    setToolAnchorSet("agreement");
   }
 
   async function saveTool(stepId: string) {
@@ -206,6 +209,7 @@ function Console() {
       body.sourcing = "participants";
     else if (toolKind === "vote") body.options = list;
     else if (toolKind !== "whiteboard") body.items = list;
+    if (toolKind === "likert") body.anchorSet = toolAnchorSet;
     const ok = await api(
       editingToolId
         ? `/api/sessions/${id}/steps/${stepId}/tools/${editingToolId}`
@@ -222,6 +226,7 @@ function Console() {
     setToolKind(t.kind);
     setToolPrompt(t.prompt);
     setToolSourced(t.sourcing === "participants");
+    setToolAnchorSet(t.anchorSet ?? "agreement");
     setToolExhibitType(t.exhibit ?? "file");
     setToolExhibitRef(t.exhibit === "url" ? (t.url ?? "") : (t.fileId ?? ""));
     setToolList(
@@ -239,6 +244,7 @@ function Console() {
       columns: tool.columns,
       items: tool.items,
       sourcing: tool.sourcing,
+      anchorSet: tool.anchorSet,
       exhibit: tool.exhibit,
       fileId: tool.fileId,
       url: tool.url,
@@ -343,7 +349,7 @@ function Console() {
         </div>
       )}
 
-      <div className="max-w-[1600px] mx-auto px-6 py-6 grid gap-6 lg:grid-cols-2 items-start">
+      <div className="max-w-[1600px] mx-auto px-6 py-6 grid gap-6 lg:grid-cols-[3fr_7fr] items-start">
         {/* Left column: agenda, participants, invite */}
         <div className="flex flex-col gap-6">
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
@@ -558,6 +564,21 @@ function Console() {
                               />
                               participants suggest the choices
                             </label>
+                          )}
+                          {toolKind === "likert" && (
+                            <select
+                              value={toolAnchorSet}
+                              onChange={(e) => setToolAnchorSet(e.target.value)}
+                              className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white"
+                            >
+                              {Object.entries(LIKERT_ANCHOR_LABELS).map(
+                                ([k, label]) => (
+                                  <option key={k} value={k}>
+                                    {label}
+                                  </option>
+                                )
+                              )}
+                            </select>
                           )}
                         </div>
                         <input

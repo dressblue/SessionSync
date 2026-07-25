@@ -8,6 +8,8 @@ import type {
 } from "./useSessionState";
 import { Whiteboard } from "./Whiteboard";
 import { Markdown } from "./Markdown";
+import { LikertChart } from "./LikertChart";
+import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
 
 interface Props {
   activity: ActivityState;
@@ -623,20 +625,41 @@ export function ActivityPanel({
     );
   }
 
-  // ---- Scoring survey (likert) ----
+  // ---- Scoring survey (likert), diverging distribution chart ----
   if (activity.kind === "likert") {
     const items = activity.items ?? [];
     const scale = activity.scale ?? 5;
     const ratings = activity.ratings ?? [];
+    const anchors = activity.anchors ?? anchorLabels(activity.anchorSet);
+    const fivePoint = scale === 5 && anchors.length === 5;
     return (
       <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
         {header("Scoring survey")}
-        <p className="text-xs text-slate-400 mb-3">
-          1 = lowest, {scale} = highest
-        </p>
-        <ul className="flex flex-col gap-3">
+
+        {/* Live distribution — the enhanced results view */}
+        {fivePoint && (
+          <div className="mb-5">
+            <LikertChart
+              items={items}
+              ratings={ratings.map((r) => ({
+                avg: r.avg,
+                count: r.count,
+                dist: r.dist ?? [],
+              }))}
+              anchors={anchors}
+            />
+          </div>
+        )}
+
+        {/* Rating input */}
+        {participantId && (
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+            Your response
+          </p>
+        )}
+        <ul className="flex flex-col gap-2.5">
           {items.map((item, i) => {
-            const r = ratings[i] ?? { avg: null, count: 0, mine: null };
+            const r = ratings[i] ?? { avg: null, count: 0, mine: null, dist: [] };
             return (
               <li
                 key={i}
@@ -649,23 +672,36 @@ export function ActivityPanel({
                       key={v}
                       disabled={!participantId || busy}
                       onClick={() => send({ itemIndex: i, rating: v })}
+                      title={anchors[v - 1] ?? String(v)}
                       className={`w-7 h-7 rounded-md border text-xs font-semibold transition ${
                         r.mine === v
-                          ? "bg-indigo-600 border-indigo-600 text-white"
+                          ? "border-transparent text-white"
                           : "border-slate-300 text-slate-500 hover:border-indigo-400"
                       } ${participantId ? "" : "cursor-default"}`}
+                      style={
+                        r.mine === v
+                          ? { backgroundColor: LIKERT_COLORS[v - 1] ?? "#4f46e5" }
+                          : undefined
+                      }
                     >
                       {v}
                     </button>
                   ))}
                 </span>
-                <span className="text-xs text-slate-500 tabular-nums w-20 text-right">
-                  {r.avg !== null ? `avg ${r.avg}` : "—"} ({r.count})
-                </span>
+                {!fivePoint && (
+                  <span className="text-xs text-slate-500 tabular-nums w-20 text-right">
+                    {r.avg !== null ? `avg ${r.avg}` : "—"} ({r.count})
+                  </span>
+                )}
               </li>
             );
           })}
         </ul>
+        {fivePoint && (
+          <p className="mt-2 text-[11px] text-slate-400">
+            1 = {anchors[0]} · {scale} = {anchors[scale - 1]}
+          </p>
+        )}
         {responderStrip("Scores in", items.length)}
       </div>
     );

@@ -45,7 +45,14 @@ export interface ActivityState {
   entries?: ActivityEntry[];
   scale?: number;
   items?: string[];
-  ratings?: { avg: number | null; count: number; mine: number | null }[];
+  ratings?: {
+    avg: number | null;
+    count: number;
+    mine: number | null;
+    dist: number[];
+  }[];
+  anchorSet?: string;
+  anchors?: string[];
   richItems?: RichItem[];
   revealed?: number;
   total?: number;
@@ -75,6 +82,7 @@ export interface StepTool {
   columns?: string[];
   items?: string[];
   sourcing?: "participants";
+  anchorSet?: string;
   exhibit?: "file" | "url" | "text";
   fileId?: string;
   url?: string;

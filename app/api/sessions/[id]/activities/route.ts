@@ -85,8 +85,10 @@ export async function POST(
     }
   } else if (kind === "likert") {
     const scale = 5;
+    const anchorSet =
+      typeof body?.anchorSet === "string" ? body.anchorSet : "agreement";
     if (sourced) {
-      config = { phase: "collect", scale };
+      config = { phase: "collect", scale, anchorSet };
     } else {
       const items = cleanList(body?.items, 12);
       if (items.length < 1) {
@@ -95,7 +97,7 @@ export async function POST(
           { status: 400 }
         );
       }
-      config = { items, scale };
+      config = { items, scale, anchorSet };
     }
   } else if (kind === "columns") {
     const columns = cleanList(body?.columns, 4);

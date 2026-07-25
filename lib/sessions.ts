@@ -4,6 +4,7 @@ import {
   getFacilitatorFromRequest,
   isCourseFacilitator,
 } from "./facilitators";
+import { anchorLabels } from "./likert";
 
 export type SessionStatus = "lobby" | "live" | "ended";
 
@@ -73,7 +74,14 @@ export interface ActivityPayload {
   phase?: "collect" | "rate";
   scale?: number;
   items?: string[];
-  ratings?: { avg: number | null; count: number; mine: number | null }[];
+  ratings?: {
+    avg: number | null;
+    count: number;
+    mine: number | null;
+    dist: number[];
+  }[];
+  anchorSet?: string;
+  anchors?: string[];
   // reveal / wheel
   richItems?: RichItem[];
   revealed?: number;
@@ -236,6 +244,7 @@ export interface ActivityConfig {
   richItems?: RichItem[];
   revealed?: number;
   active?: number;
+  anchorSet?: string;
 }
 
 export function parseActivityConfig(activity: ActivityRow): ActivityConfig {
@@ -442,6 +451,8 @@ export function buildActivityPayload(
     const scale = config.scale ?? 5;
     payload.items = items;
     payload.scale = scale;
+    payload.anchorSet = config.anchorSet ?? "agreement";
+    payload.anchors = anchorLabels(config.anchorSet);
     payload.ratings = items.map((_, i) => {
       const rows = responses.rows.filter(
         (r) =>
@@ -450,6 +461,8 @@ export function buildActivityPayload(
           Number(r.value) <= scale
       );
       const sum = rows.reduce((a, r) => a + Number(r.value), 0);
+      const dist = Array.from({ length: scale }, () => 0);
+      for (const r of rows) dist[Number(r.value) - 1]++;
       const mineRow = viewerParticipantId
         ? rows.find((r) => r.participant_id === viewerParticipantId)
         : undefined;
@@ -457,6 +470,7 @@ export function buildActivityPayload(
         avg: rows.length ? Math.round((sum / rows.length) * 10) / 10 : null,
         count: rows.length,
         mine: mineRow ? Number(mineRow.value) : null,
+        dist,
       };
     });
     payload.responders = respondersFrom(

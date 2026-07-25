@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ActivityState, RosterEntry, StatePayload } from "./useSessionState";
 import { ActivityPanel } from "./ActivityPanel";
+import { LIKERT_ANCHOR_LABELS } from "@/lib/likert";
 
 interface Props {
   sessionId: string;
@@ -58,6 +59,7 @@ export function ActivityConsole({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [anchorSet, setAnchorSet] = useState("agreement");
   const [exhibitType, setExhibitType] = useState<"file" | "url" | "text">("file");
   const [exhibitFileId, setExhibitFileId] = useState("");
   const [exhibitUrl, setExhibitUrl] = useState("");
@@ -110,6 +112,7 @@ export function ActivityConsole({
     } else if (kind !== "whiteboard") {
       body.items = list;
     }
+    if (kind === "likert") body.anchorSet = anchorSet;
     const ok = await call(`/api/sessions/${sessionId}/activities`, "POST", body);
     if (ok) {
       setPrompt("");
@@ -282,6 +285,23 @@ export function ActivityConsole({
                 </button>
               ))}
             </div>
+          )}
+
+          {kind === "likert" && (
+            <label className="flex items-center gap-2 text-xs text-slate-500 mb-3">
+              Response scale:
+              <select
+                value={anchorSet}
+                onChange={(e) => setAnchorSet(e.target.value)}
+                className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white"
+              >
+                {Object.entries(LIKERT_ANCHOR_LABELS).map(([k, label]) => (
+                  <option key={k} value={k}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
 
           <form onSubmit={push} className="flex flex-col gap-2">

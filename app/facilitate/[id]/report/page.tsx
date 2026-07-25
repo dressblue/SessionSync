@@ -8,6 +8,8 @@ import {
   type FacilitatorIdentity,
 } from "@/components/identity";
 import type { ActivityState, Stroke } from "@/components/useSessionState";
+import { LikertChart } from "@/components/LikertChart";
+import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
 
 interface ReportData {
   session: { id: string; title: string; status: string };
@@ -91,6 +93,104 @@ function activityLines(a: ActivityState): string[] {
   return entries.map(
     (e) => `${e.highlighted ? "✓ " : ""}${e.value} (${e.name})`
   );
+}
+
+// Draw a Likert diverging bar chart onto a PowerPoint slide using filled text
+// boxes (no external chart lib). Mirrors the on-screen LikertChart math.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function drawLikertSlide(slide: any, a: ActivityState) {
+  const items = a.items ?? [];
+  const ratings = a.ratings ?? [];
+  const anchors = a.anchors ?? anchorLabels(a.anchorSet);
+  const cols = LIKERT_COLORS.map((c) => c.replace("#", ""));
+  const n = anchors.length;
+  const mid = (n - 1) / 2;
+
+  const rows = items.map((item, i) => {
+    const dist = ratings[i]?.dist ?? [];
+    const total = dist.reduce((x, y) => x + y, 0);
+    const pct = dist.map((d) => (total ? (d / total) * 100 : 0));
+    let neg = 0;
+    let pos = 0;
+    for (let k = 0; k < n; k++) {
+      if (k < mid) neg += pct[k];
+      else if (k > mid) pos += pct[k];
+      else {
+        neg += pct[k] / 2;
+        pos += pct[k] / 2;
+      }
+    }
+    return { item, total, pct };
+  });
+  const negMax = Math.max(1, ...rows.map((r) => {
+    let s = 0;
+    for (let k = 0; k < mid; k++) s += r.pct[k];
+    return s + r.pct[mid] / 2;
+  }));
+  const posMax = Math.max(1, ...rows.map((r) => {
+    let s = 0;
+    for (let k = mid + 1; k < n; k++) s += r.pct[k];
+    return s + r.pct[mid] / 2;
+  }));
+  const domain = negMax + posMax;
+
+  const barX = 3.0;
+  const barW = 9.8;
+  const perPct = barW / domain;
+  const centerX = barX + (negMax / domain) * barW;
+  const topY = 1.5;
+  const rowH = 0.4;
+  const gap = 0.16;
+
+  // center line
+  const chartH = rows.length * (rowH + gap);
+  slide.addText("", {
+    x: centerX - 0.006, y: topY, w: 0.012, h: chartH,
+    fill: { color: "CBD5E1" },
+  });
+
+  rows.forEach((r, i) => {
+    const y = topY + i * (rowH + gap);
+    slide.addText(r.item, {
+      x: 0.3, y, w: 2.5, h: rowH, align: "right", valign: "middle",
+      fontSize: 10, color: "334155",
+    });
+    if (r.total === 0) return;
+    const seg = (color: string, x: number, w: number, pct: number) => {
+      if (w <= 0.02) return;
+      slide.addText(w > 0.5 ? `${Math.round(pct)}%` : "", {
+        x, y, w, h: rowH, fill: { color }, color: "FFFFFF",
+        fontSize: 9, align: "center", valign: "middle", margin: 0,
+      });
+    };
+    const half = (r.pct[mid] / 2) * perPct;
+    seg(cols[mid], centerX - half, r.pct[mid] * perPct, r.pct[mid]);
+    let edge = centerX - half;
+    for (let k = mid - 1; k >= 0; k--) {
+      const w = r.pct[k] * perPct;
+      edge -= w;
+      seg(cols[k], edge, w, r.pct[k]);
+    }
+    edge = centerX + half;
+    for (let k = mid + 1; k < n; k++) {
+      const w = r.pct[k] * perPct;
+      seg(cols[k], edge, w, r.pct[k]);
+      edge += w;
+    }
+  });
+
+  // legend
+  const legendY = topY + chartH + 0.25;
+  anchors.forEach((label, k) => {
+    const x = 3.0 + k * 2.0;
+    slide.addText("", {
+      x, y: legendY, w: 0.18, h: 0.18, fill: { color: cols[k] },
+    });
+    slide.addText(label, {
+      x: x + 0.22, y: legendY - 0.05, w: 1.75, h: 0.3,
+      fontSize: 9, color: "334155", valign: "middle",
+    });
+  });
 }
 
 export default function ReportPage() {
@@ -197,6 +297,12 @@ export default function ReportPage() {
             data: strokesToDataUrl(a.strokes),
             x: 2.9, y: 1.4, w: 7.5, h: 5.6,
           });
+        } else if (
+          a.kind === "likert" &&
+          (a.scale ?? 5) === 5 &&
+          (a.ratings?.length ?? 0) > 0
+        ) {
+          drawLikertSlide(slide, a);
         } else {
           slide.addText(
             activityLines(a).map((line) => ({
@@ -365,6 +471,21 @@ export default function ReportPage() {
                     />
                   ))}
                 </svg>
+              ) : a.kind === "likert" &&
+                (a.scale ?? 5) === 5 &&
+                (a.ratings?.length ?? 0) > 0 ? (
+                <div className="mt-2">
+                  <LikertChart
+                    items={a.items ?? []}
+                    ratings={(a.ratings ?? []).map((r) => ({
+                      avg: r.avg,
+                      count: r.count,
+                      dist: r.dist ?? [],
+                    }))}
+                    anchors={a.anchors ?? anchorLabels(a.anchorSet)}
+                    dense
+                  />
+                </div>
               ) : a.kind === "vote" && a.votes ? (
                 <ul className="mt-1.5 text-sm text-slate-700 space-y-1">
                   {(a.options ?? []).map((o, i) => {

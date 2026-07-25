@@ -37,6 +37,7 @@ export async function POST(
   if (Array.isArray(body?.columns)) config.columns = body.columns;
   if (Array.isArray(body?.items)) config.items = body.items;
   if (body?.sourcing === "participants") config.sourcing = "participants";
+  if (typeof body?.anchorSet === "string") config.anchorSet = body.anchorSet;
   if (typeof body?.exhibit === "string") config.exhibit = body.exhibit;
   if (typeof body?.fileId === "string") config.fileId = body.fileId;
   if (typeof body?.url === "string") config.url = body.url;
