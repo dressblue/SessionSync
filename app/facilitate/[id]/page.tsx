@@ -45,6 +45,7 @@ function Console() {
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
   const [toolSourced, setToolSourced] = useState(false);
+  const [editingToolId, setEditingToolId] = useState<string | null>(null);
 
   useEffect(() => {
     const urlKey = searchParams.get("key");
@@ -174,7 +175,14 @@ function Console() {
     if (ok) setEditingId(null);
   }
 
-  async function addTool(stepId: string) {
+  function resetToolForm() {
+    setToolPrompt("");
+    setToolList("");
+    setToolSourced(false);
+    setEditingToolId(null);
+  }
+
+  async function saveTool(stepId: string) {
     const list = toolList
       .split("\n")
       .map((s) => s.trim())
@@ -189,15 +197,33 @@ function Console() {
     else if (toolKind === "vote") body.options = list;
     else if (toolKind !== "whiteboard") body.items = list;
     const ok = await api(
-      `/api/sessions/${id}/steps/${stepId}/tools`,
-      "POST",
+      editingToolId
+        ? `/api/sessions/${id}/steps/${stepId}/tools/${editingToolId}`
+        : `/api/sessions/${id}/steps/${stepId}/tools`,
+      editingToolId ? "PATCH" : "POST",
       body
     );
-    if (ok) {
-      setToolPrompt("");
-      setToolList("");
-      setToolSourced(false);
+    if (ok) resetToolForm();
+  }
+
+  function beginToolEdit(
+    stepId: string,
+    t: {
+      id: string;
+      kind: "vote" | "likert" | "columns" | "reveal" | "wheel" | "whiteboard";
+      prompt: string;
+      options?: string[];
+      columns?: string[];
+      items?: string[];
+      sourcing?: string;
     }
+  ) {
+    setToolsOpenFor(stepId);
+    setEditingToolId(t.id);
+    setToolKind(t.kind);
+    setToolPrompt(t.prompt);
+    setToolSourced(t.sourcing === "participants");
+    setToolList((t.options ?? t.items ?? t.columns ?? []).join("\n"));
   }
 
   function launchTool(tool: {
@@ -501,9 +527,7 @@ function Console() {
                         <button
                           onClick={() => {
                             setToolsOpenFor(toolsOpenFor === s.id ? null : s.id);
-                            setToolPrompt("");
-                            setToolList("");
-                            setToolSourced(false);
+                            resetToolForm();
                           }}
                           className={`rounded-md px-2 py-1 text-xs hover:bg-slate-100 ${
                             s.tools.length > 0
@@ -563,17 +587,25 @@ function Console() {
                                 </span>
                               )}
                               <button
+                                onClick={() => beginToolEdit(s.id, t)}
+                                className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
+                              >
+                                Edit
+                              </button>
+                              <button
                                 onClick={(ev) => {
                                   ev.stopPropagation();
-                                  api(
-                                    `/api/sessions/${id}/steps/${s.id}/tools/${t.id}`,
-                                    "DELETE"
-                                  );
+                                  if (confirm(`Delete tool "${t.prompt}"?`)) {
+                                    if (editingToolId === t.id) resetToolForm();
+                                    api(
+                                      `/api/sessions/${id}/steps/${s.id}/tools/${t.id}`,
+                                      "DELETE"
+                                    );
+                                  }
                                 }}
-                                className="shrink-0 text-slate-300 hover:text-rose-500"
-                                aria-label="Remove tool"
+                                className="shrink-0 rounded-md px-2 py-1 text-[11px] font-medium text-rose-500 hover:bg-rose-50"
                               >
-                                ×
+                                Delete
                               </button>
                             </li>
                           ))}
@@ -636,13 +668,25 @@ function Console() {
                               className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             />
                           )}
-                        <button
-                          onClick={() => addTool(s.id)}
-                          disabled={!toolPrompt.trim()}
-                          className="self-start rounded-md bg-slate-800 text-white px-3 py-1.5 text-xs font-medium hover:bg-slate-900 disabled:opacity-40"
-                        >
-                          Add tool to this step
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => saveTool(s.id)}
+                            disabled={!toolPrompt.trim()}
+                            className="rounded-md bg-slate-800 text-white px-3 py-1.5 text-xs font-medium hover:bg-slate-900 disabled:opacity-40"
+                          >
+                            {editingToolId
+                              ? "Save tool changes"
+                              : "Add tool to this step"}
+                          </button>
+                          {editingToolId && (
+                            <button
+                              onClick={resetToolForm}
+                              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
