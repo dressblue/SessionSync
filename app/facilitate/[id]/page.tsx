@@ -343,97 +343,9 @@ function Console() {
         </div>
       )}
 
-      <div className="max-w-6xl mx-auto px-6 py-6 grid gap-6 lg:grid-cols-3 items-start">
-        {/* Left: controls + agenda */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-            <div className="flex flex-wrap items-center gap-2">
-              {session.status !== "live" ? (
-                <button
-                  onClick={() => control("start")}
-                  disabled={steps.length === 0}
-                  className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-semibold hover:bg-emerald-700 disabled:opacity-40 transition"
-                >
-                  {session.status === "ended" ? "Restart session" : "Start session"}
-                </button>
-              ) : (
-                <>
-                  <button
-                    onClick={() => control("prev")}
-                    disabled={session.currentStep === 0}
-                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100 disabled:opacity-40 transition"
-                  >
-                    ← Back
-                  </button>
-                  <button
-                    onClick={() => control("next")}
-                    disabled={session.currentStep >= steps.length - 1}
-                    className="rounded-lg bg-indigo-600 text-white px-5 py-2 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 transition"
-                  >
-                    Next step →
-                  </button>
-                  <button
-                    onClick={() => control("refresh")}
-                    title="Force every participant screen to reload"
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition"
-                  >
-                    ↻ Push refresh
-                  </button>
-                  <button
-                    onClick={() => control("end")}
-                    className="ml-auto rounded-lg border border-rose-300 text-rose-700 px-4 py-2 text-sm font-medium hover:bg-rose-50 transition"
-                  >
-                    End session
-                  </button>
-                </>
-              )}
-            </div>
-
-            {session.status === "live" && current && (
-              <div className="mt-4 border-t border-slate-100 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
-                  Now showing — step {session.currentStep + 1} of {steps.length}
-                </p>
-                <h3 className="font-semibold">{current.title}</h3>
-                {current.tools.length > 0 && (
-                  <p className="mt-1 text-xs text-slate-400">
-                    {current.tools.length} tool
-                    {current.tools.length === 1 ? "" : "s"} on this step — open
-                    Tools in the agenda below to launch, edit, or delete.
-                  </p>
-                )}
-                {current.content && (
-                  <div className="mt-2 max-h-48 overflow-y-auto text-sm border border-slate-100 rounded-lg p-3 bg-slate-50">
-                    <Markdown>{current.content}</Markdown>
-                  </div>
-                )}
-              </div>
-            )}
-            {session.status === "lobby" && (
-              <p className="mt-3 text-sm text-slate-500">
-                {steps.length === 0
-                  ? "Add at least one agenda step below, then start the session."
-                  : `${steps.length} step${steps.length === 1 ? "" : "s"} ready. Participants see a waiting screen until you start.`}
-              </p>
-            )}
-          </section>
-
-          {session.status === "live" && (
-            <ActivityConsole
-              sessionId={id}
-              authHeaders={{
-                ...(key ? { "x-facilitator-key": key } : {}),
-                ...facilitatorHeaders(identity),
-              }}
-              activities={activities}
-              pastActivities={pastActivities}
-              files={state.files}
-              myParticipantId={myPid}
-              roster={participants}
-              onChanged={refresh}
-            />
-          )}
-
+      <div className="max-w-[1600px] mx-auto px-6 py-6 grid gap-6 lg:grid-cols-2 items-start">
+        {/* Left column: agenda, participants, invite */}
+        <div className="flex flex-col gap-6">
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
             <h2 className="font-semibold mb-3">Agenda</h2>
             <ol className="flex flex-col gap-2">
@@ -766,10 +678,38 @@ function Console() {
               </button>
             </form>
           </section>
-        </div>
 
-        {/* Right: share + roster */}
-        <div className="flex flex-col gap-6">
+          <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <h2 className="font-semibold mb-3">
+              Participants{" "}
+              <span className="text-sm font-normal text-slate-400">
+                ({online.length} online / {participants.length} joined)
+              </span>
+            </h2>
+            <ul className="flex flex-col gap-1.5 max-h-72 overflow-y-auto">
+              {participants.map((p) => (
+                <li key={p.id} className="flex items-center gap-2 text-sm">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      p.online ? "bg-emerald-500" : "bg-slate-300"
+                    }`}
+                  />
+                  <span className={p.online ? "" : "text-slate-400"}>
+                    {p.name}
+                  </span>
+                  {p.isFacilitator && (
+                    <span className="text-[10px] uppercase font-semibold text-indigo-400">
+                      facilitator
+                    </span>
+                  )}
+                </li>
+              ))}
+              {participants.length === 0 && (
+                <li className="text-sm text-slate-400">No one has joined yet</li>
+              )}
+            </ul>
+          </section>
+
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
             <h2 className="font-semibold mb-1">Invite participants</h2>
             <p className="text-sm text-slate-500 mb-3">
@@ -839,37 +779,97 @@ function Console() {
               </div>
             )}
           </section>
+        </div>
 
+        {/* Right column: active session, tools, saved content */}
+        <div className="flex flex-col gap-6">
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-            <h2 className="font-semibold mb-3">
-              Participants{" "}
-              <span className="text-sm font-normal text-slate-400">
-                ({online.length} online / {participants.length} joined)
-              </span>
-            </h2>
-            <ul className="flex flex-col gap-1.5 max-h-72 overflow-y-auto">
-              {participants.map((p) => (
-                <li key={p.id} className="flex items-center gap-2 text-sm">
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      p.online ? "bg-emerald-500" : "bg-slate-300"
-                    }`}
-                  />
-                  <span className={p.online ? "" : "text-slate-400"}>
-                    {p.name}
-                  </span>
-                  {p.isFacilitator && (
-                    <span className="text-[10px] uppercase font-semibold text-indigo-400">
-                      facilitator
-                    </span>
-                  )}
-                </li>
-              ))}
-              {participants.length === 0 && (
-                <li className="text-sm text-slate-400">No one has joined yet</li>
+            <div className="flex flex-wrap items-center gap-2">
+              {session.status !== "live" ? (
+                <button
+                  onClick={() => control("start")}
+                  disabled={steps.length === 0}
+                  className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-semibold hover:bg-emerald-700 disabled:opacity-40 transition"
+                >
+                  {session.status === "ended" ? "Restart session" : "Start session"}
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => control("prev")}
+                    disabled={session.currentStep === 0}
+                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100 disabled:opacity-40 transition"
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    onClick={() => control("next")}
+                    disabled={session.currentStep >= steps.length - 1}
+                    className="rounded-lg bg-indigo-600 text-white px-5 py-2 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 transition"
+                  >
+                    Next step →
+                  </button>
+                  <button
+                    onClick={() => control("refresh")}
+                    title="Force every participant screen to reload"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition"
+                  >
+                    ↻ Push refresh
+                  </button>
+                  <button
+                    onClick={() => control("end")}
+                    className="ml-auto rounded-lg border border-rose-300 text-rose-700 px-4 py-2 text-sm font-medium hover:bg-rose-50 transition"
+                  >
+                    End session
+                  </button>
+                </>
               )}
-            </ul>
+            </div>
+
+            {session.status === "live" && current && (
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                  Now showing — step {session.currentStep + 1} of {steps.length}
+                </p>
+                <h3 className="font-semibold">{current.title}</h3>
+                {current.tools.length > 0 && (
+                  <p className="mt-1 text-xs text-slate-400">
+                    {current.tools.length} tool
+                    {current.tools.length === 1 ? "" : "s"} on this step — open
+                    Tools in the agenda to launch, edit, or delete.
+                  </p>
+                )}
+                {current.content && (
+                  <div className="mt-2 max-h-48 overflow-y-auto text-sm border border-slate-100 rounded-lg p-3 bg-slate-50">
+                    <Markdown>{current.content}</Markdown>
+                  </div>
+                )}
+              </div>
+            )}
+            {session.status === "lobby" && (
+              <p className="mt-3 text-sm text-slate-500">
+                {steps.length === 0
+                  ? "Add at least one agenda step in the left column, then start the session."
+                  : `${steps.length} step${steps.length === 1 ? "" : "s"} ready. Participants see a waiting screen until you start.`}
+              </p>
+            )}
           </section>
+
+          {session.status === "live" && (
+            <ActivityConsole
+              sessionId={id}
+              authHeaders={{
+                ...(key ? { "x-facilitator-key": key } : {}),
+                ...facilitatorHeaders(identity),
+              }}
+              activities={activities}
+              pastActivities={pastActivities}
+              files={state.files}
+              myParticipantId={myPid}
+              roster={participants}
+              onChanged={refresh}
+            />
+          )}
         </div>
       </div>
     </div>
