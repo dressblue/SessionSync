@@ -67,11 +67,40 @@ export async function POST(
     items?: string[];
     phase?: string;
     scale?: number;
+    richItems?: unknown[];
+    revealed?: number;
   } = {};
   try {
     config = JSON.parse(activity.config);
   } catch {
     /* treated as empty below */
+  }
+
+  // Reveal: contribute a word/phrase against a revealed item.
+  if (activity.kind === "reveal") {
+    const items = config.richItems ?? [];
+    const revealed = Math.min(config.revealed ?? 0, items.length);
+    const value = typeof body?.value === "string" ? body.value.trim() : "";
+    const itemIndex = body?.itemIndex;
+    if (!value) {
+      return NextResponse.json({ error: "Nothing to add" }, { status: 400 });
+    }
+    if (
+      !Number.isInteger(itemIndex) ||
+      itemIndex < 0 ||
+      itemIndex >= revealed
+    ) {
+      return NextResponse.json(
+        { error: "That item isn't open for input yet" },
+        { status: 400 }
+      );
+    }
+    await query(
+      `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [randomUUID(), activity.id, participantId, itemIndex, value.slice(0, 160)]
+    );
+    return NextResponse.json({ ok: true });
   }
 
   if (activity.kind === "whiteboard") {

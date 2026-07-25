@@ -296,11 +296,12 @@ export function ActivityPanel({
     );
   }
 
-  // ---- Progressive reveal ----
+  // ---- Progressive reveal with per-item word capture ----
   if (activity.kind === "reveal") {
     const items = activity.richItems ?? [];
     const revealed = activity.revealed ?? 0;
     const total = activity.total ?? items.length;
+    const entries = activity.entries ?? [];
     return (
       <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
         {header("Reveal")}
@@ -308,6 +309,7 @@ export function ActivityPanel({
           {items.map((item, i) => {
             const isRevealed = i < revealed;
             if (!canModerate && !isRevealed) return null;
+            const words = entries.filter((e) => e.column === i);
             return (
               <li
                 key={i}
@@ -331,6 +333,44 @@ export function ActivityPanel({
                 </p>
                 {item.note && (
                   <p className="text-xs text-slate-500 mt-1 pl-8">{item.note}</p>
+                )}
+                {isRevealed && (
+                  <div className="mt-2 pl-8">
+                    {(words.length > 0 || canModerate) && (
+                      <ul className="flex flex-wrap gap-1.5 mb-2">
+                        {words.map(entryChip)}
+                      </ul>
+                    )}
+                    {participantId && (
+                      <form
+                        className="flex gap-1.5"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const value = (drafts[i] ?? "").trim();
+                          if (!value) return;
+                          send({ itemIndex: i, value });
+                          setDrafts((d) => ({ ...d, [i]: "" }));
+                        }}
+                      >
+                        <input
+                          value={drafts[i] ?? ""}
+                          onChange={(e) =>
+                            setDrafts((d) => ({ ...d, [i]: e.target.value }))
+                          }
+                          placeholder="Add a word or thought…"
+                          maxLength={160}
+                          className="flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <button
+                          type="submit"
+                          disabled={busy || !(drafts[i] ?? "").trim()}
+                          className="rounded-lg bg-indigo-600 text-white px-3 py-1.5 text-xs font-medium hover:bg-indigo-700 disabled:opacity-40"
+                        >
+                          Add
+                        </button>
+                      </form>
+                    )}
+                  </div>
                 )}
               </li>
             );

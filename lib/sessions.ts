@@ -369,6 +369,17 @@ export function buildActivityPayload(
     payload.total = items.length;
     // Participants only ever receive what's been revealed.
     payload.richItems = facilitatorView ? items : items.slice(0, revealed);
+    // Words the room contributed against each item (column_index = item index).
+    // Participants only see words for items that have been revealed.
+    payload.entries = entriesFrom(
+      responseRows.filter((r) => {
+        const idx = r.column_index;
+        if (idx === null || idx === undefined || idx < 0 || idx >= items.length)
+          return false;
+        if (!facilitatorView && idx >= revealed) return false;
+        return true;
+      })
+    );
     return payload;
   }
   if (activity.kind === "wheel") {

@@ -67,10 +67,21 @@ function activityLines(a: ActivityState): string[] {
       return `${item} — ${r?.avg != null ? `avg ${r.avg}` : "no ratings"} (${r?.count ?? 0} rating${(r?.count ?? 0) === 1 ? "" : "s"})`;
     });
   }
-  if (a.kind === "reveal" || a.kind === "wheel") {
+  if (a.kind === "wheel") {
     return (a.richItems ?? []).map((i) =>
       i.note ? `${i.title} — ${i.note}` : i.title
     );
+  }
+  if (a.kind === "reveal") {
+    // Each revealed item, followed by the words the room captured for it.
+    const words = (a.entries ?? []).filter((e) => !e.hidden);
+    return (a.richItems ?? []).flatMap((it, idx) => {
+      const w = words.filter((e) => e.column === idx);
+      return [
+        it.note ? `${it.title} — ${it.note}` : it.title,
+        ...w.map((e) => `  ${e.highlighted ? "★ " : ""}${e.value} (${e.name})`),
+      ];
+    });
   }
   if (a.kind === "whiteboard") {
     return [`Shared drawing with ${a.strokes?.length ?? 0} strokes`];
