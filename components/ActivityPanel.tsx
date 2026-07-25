@@ -310,6 +310,7 @@ export function ActivityPanel({
             const isRevealed = i < revealed;
             if (!canModerate && !isRevealed) return null;
             const words = entries.filter((e) => e.column === i);
+            const featured = words.filter((e) => e.highlighted && !e.hidden);
             return (
               <li
                 key={i}
@@ -319,21 +320,40 @@ export function ActivityPanel({
                     : "border-dashed border-slate-200 opacity-40"
                 }`}
               >
-                <p className="text-sm font-semibold flex items-center gap-2">
-                  <span
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                      isRevealed
-                        ? "bg-indigo-600 text-white"
-                        : "bg-slate-200 text-slate-500"
-                    }`}
-                  >
-                    {i + 1}
-                  </span>
-                  {item.title}
-                </p>
-                {item.note && (
-                  <p className="text-xs text-slate-500 mt-1 pl-8">{item.note}</p>
-                )}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold flex items-center gap-2">
+                      <span
+                        className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                          isRevealed
+                            ? "bg-indigo-600 text-white"
+                            : "bg-slate-200 text-slate-500"
+                        }`}
+                      >
+                        {i + 1}
+                      </span>
+                      {item.title}
+                    </p>
+                    {item.note && (
+                      <p className="text-xs text-slate-500 mt-1 pl-8">
+                        {item.note}
+                      </p>
+                    )}
+                  </div>
+                  {/* Selected word(s), spotlighted large in the upper right */}
+                  {featured.length > 0 && (
+                    <div className="shrink-0 max-w-[45%] text-right flex flex-col items-end gap-0.5 leading-none">
+                      {featured.map((fw) => (
+                        <span
+                          key={fw.id}
+                          className="reveal-in text-2xl sm:text-3xl font-extrabold text-amber-500 leading-none"
+                        >
+                          {fw.value}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 {isRevealed && (
                   <div className="mt-2 pl-8">
                     {(words.length > 0 || canModerate) && (
