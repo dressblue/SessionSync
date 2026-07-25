@@ -726,27 +726,35 @@ export function ActivityPanel({
                 className="rounded-lg border border-slate-200 p-3 flex flex-wrap items-center gap-2"
               >
                 <span className="text-sm font-medium min-w-0 flex-1">{item}</span>
-                <span className="flex items-center gap-1">
-                  {Array.from({ length: scale }, (_, s) => s + 1).map((v) => (
-                    <button
-                      key={v}
-                      disabled={!participantId || busy}
-                      onClick={() => send({ itemIndex: i, rating: v })}
-                      title={anchors[v - 1] ?? String(v)}
-                      className={`w-7 h-7 rounded-md border text-xs font-semibold transition ${
-                        r.mine === v
-                          ? "border-transparent text-white"
-                          : "border-slate-300 text-slate-500 hover:border-indigo-400"
-                      } ${participantId ? "" : "cursor-default"}`}
-                      style={
-                        r.mine === v
-                          ? { backgroundColor: LIKERT_COLORS[v - 1] ?? "#4f46e5" }
-                          : undefined
-                      }
-                    >
-                      {v}
-                    </button>
-                  ))}
+                <span className="flex items-center gap-1.5">
+                  {Array.from({ length: scale }, (_, s) => s + 1).map((v) => {
+                    const color = fivePoint
+                      ? (LIKERT_COLORS[v - 1] ?? "#4f46e5")
+                      : "#4f46e5";
+                    const selected = r.mine === v;
+                    // Once a rating is chosen, the other buttons go light gray
+                    // so the selection stands out; before any choice, all show
+                    // their scale color.
+                    const muted = r.mine != null && !selected;
+                    return (
+                      <button
+                        key={v}
+                        disabled={!participantId || busy}
+                        onClick={() => send({ itemIndex: i, rating: v })}
+                        title={anchors[v - 1] ?? String(v)}
+                        className={`w-8 h-8 rounded-md text-xs font-bold transition ${
+                          selected
+                            ? "text-white ring-2 ring-offset-1 ring-slate-700 scale-110"
+                            : muted
+                              ? "bg-slate-100 text-slate-400 border border-slate-200 hover:bg-slate-200"
+                              : "text-white hover:opacity-90"
+                        } ${participantId ? "" : "cursor-default"}`}
+                        style={muted ? undefined : { backgroundColor: color }}
+                      >
+                        {v}
+                      </button>
+                    );
+                  })}
                 </span>
                 {!fivePoint && (
                   <span className="text-xs text-slate-500 tabular-nums w-20 text-right">
