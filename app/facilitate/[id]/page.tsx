@@ -972,6 +972,7 @@ function Console() {
               pastActivities={pastActivities}
               files={state.files}
               myParticipantId={myPid}
+              myParticipantName={identity?.name}
               roster={participants}
               onChanged={refresh}
             />

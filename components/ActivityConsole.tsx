@@ -14,6 +14,7 @@ interface Props {
   files: StatePayload["files"];
   /** The facilitator's own roster seat — enables participating like a student. */
   myParticipantId?: string;
+  myParticipantName?: string;
   roster?: RosterEntry[];
   onChanged: () => void;
 }
@@ -54,6 +55,7 @@ export function ActivityConsole({
   pastActivities,
   files,
   myParticipantId,
+  myParticipantName,
   roster,
   onChanged,
 }: Props) {
@@ -232,6 +234,7 @@ export function ActivityConsole({
         activity={activity}
         sessionId={sessionId}
         participantId={myParticipantId}
+        participantName={myParticipantName}
         moderationHeaders={authHeaders}
         roster={roster}
         onChanged={onChanged}

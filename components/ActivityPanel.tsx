@@ -19,6 +19,8 @@ interface Props {
   sessionId: string;
   /** Absent for the facilitator's view. */
   participantId?: string;
+  /** Sent with responses so a reset seat self-heals on the server. */
+  participantName?: string;
   /** Present for facilitators: enables highlight/hide moderation. */
   moderationHeaders?: Record<string, string>;
   /** Session roster — enables the who's-responded strip. */
@@ -36,6 +38,7 @@ export function ActivityPanel({
   activity,
   sessionId,
   participantId,
+  participantName,
   moderationHeaders,
   roster,
   onChanged,
@@ -60,6 +63,7 @@ export function ActivityPanel({
         },
         body: JSON.stringify({
           participantId,
+          name: participantName,
           activityId: activity.id,
           ...body,
         }),

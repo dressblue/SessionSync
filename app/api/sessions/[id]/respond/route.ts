@@ -44,6 +44,16 @@ export async function POST(
   let participantId: string | null = null;
   if (rawParticipantId && (await verifyParticipant(id, rawParticipantId))) {
     participantId = rawParticipantId;
+  } else if (rawParticipantId && typeof body?.name === "string" && body.name.trim()) {
+    // Self-heal: the client holds a valid id whose seat was removed (roster
+    // reset). Re-create it with the same id + supplied name so they can act
+    // immediately without waiting for the next heartbeat poll.
+    await query(
+      `INSERT INTO participants (id, session_id, name)
+       VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`,
+      [rawParticipantId, id, body.name.trim().slice(0, 80)]
+    );
+    participantId = rawParticipantId;
   } else if (!(await authorizeSession(req, id))) {
     return NextResponse.json({ error: "Unknown participant" }, { status: 403 });
   }

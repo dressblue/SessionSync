@@ -416,6 +416,7 @@ function ParticipantView() {
                     activity={a}
                     sessionId={id}
                     participantId={identity.participantId}
+                    participantName={identity.name}
                     roster={state.participants}
                     onChanged={refresh}
                   />
