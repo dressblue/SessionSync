@@ -550,14 +550,27 @@ function Console() {
                                   (participant-sourced)
                                 </span>
                               )}
+                              {session.status === "live" ? (
+                                <button
+                                  onClick={() => launchTool(t)}
+                                  className="ml-auto shrink-0 rounded-md bg-indigo-600 text-white px-2.5 py-1 text-[11px] font-semibold hover:bg-indigo-700"
+                                >
+                                  Launch
+                                </button>
+                              ) : (
+                                <span className="ml-auto shrink-0 text-[10px] text-slate-400">
+                                  start session to launch
+                                </span>
+                              )}
                               <button
-                                onClick={() =>
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
                                   api(
                                     `/api/sessions/${id}/steps/${s.id}/tools/${t.id}`,
                                     "DELETE"
-                                  )
-                                }
-                                className="ml-auto text-slate-300 hover:text-rose-500"
+                                  );
+                                }}
+                                className="shrink-0 text-slate-300 hover:text-rose-500"
                                 aria-label="Remove tool"
                               >
                                 ×
