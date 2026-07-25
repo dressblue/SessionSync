@@ -50,6 +50,14 @@ export interface ActivityState {
   total?: number;
   active?: number;
   strokes?: Stroke[];
+  responders?: { id: string; count: number }[];
+}
+
+export interface RosterEntry {
+  id: string;
+  name: string;
+  online: boolean;
+  isFacilitator: boolean;
 }
 
 export interface StepTool {
@@ -90,12 +98,7 @@ export interface StatePayload {
     content: string;
     tools: StepTool[];
   }[];
-  participants: {
-    id: string;
-    name: string;
-    online: boolean;
-    isFacilitator: boolean;
-  }[];
+  participants: RosterEntry[];
 }
 
 // Poll-based sync transport. Deliberately a thin seam: swapping in a push

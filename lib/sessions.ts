@@ -80,6 +80,8 @@ export interface ActivityPayload {
   active?: number;
   // whiteboard
   strokes?: Stroke[];
+  /** Who has responded (vote/likert/collect): participant id + response count. */
+  responders?: { id: string; count: number }[];
 }
 
 export interface StepRow {
@@ -322,10 +324,22 @@ export function buildActivityPayload(
         hidden: r.hidden,
       }));
 
+  // Who has responded, for the accountability strip on aggregating tools.
+  const respondersFrom = (rows: ResponseJoinRow[]) => {
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      if (!r.participant_id) continue;
+      counts.set(r.participant_id, (counts.get(r.participant_id) ?? 0) + 1);
+    }
+    return [...counts].map(([id, count]) => ({ id, count }));
+  };
+
   if (config.phase === "collect") {
-    payload.entries = entriesFrom(
-      responseRows.filter((r) => r.column_index === COLLECT_COLUMN)
+    const collectRows = responseRows.filter(
+      (r) => r.column_index === COLLECT_COLUMN
     );
+    payload.entries = entriesFrom(collectRows);
+    payload.responders = respondersFrom(collectRows);
     if (activity.kind === "likert") payload.scale = config.scale ?? 5;
     return payload;
   }
@@ -389,6 +403,15 @@ export function buildActivityPayload(
       total: counts.reduce((a, b) => a + b, 0),
       myVote,
     };
+    payload.responders = respondersFrom(
+      responseRows.filter(
+        (r) =>
+          (r.column_index === null || r.column_index === undefined) &&
+          Number.isInteger(Number(r.value)) &&
+          Number(r.value) >= 0 &&
+          Number(r.value) < options.length
+      )
+    );
   } else if (activity.kind === "likert") {
     const items = config.items ?? [];
     const scale = config.scale ?? 5;
@@ -411,6 +434,15 @@ export function buildActivityPayload(
         mine: mineRow ? Number(mineRow.value) : null,
       };
     });
+    payload.responders = respondersFrom(
+      responseRows.filter(
+        (r) =>
+          (r.column_index ?? -1) >= 0 &&
+          (r.column_index ?? 0) < items.length &&
+          Number(r.value) >= 1 &&
+          Number(r.value) <= scale
+      )
+    );
   } else {
     payload.columns = config.columns ?? [];
     payload.entries = entriesFrom(

@@ -12,7 +12,7 @@ interface Identity {
   name: string;
 }
 
-type SideTab = "agenda" | "notes" | "materials" | "downloads";
+type SideTab = "agenda" | "notes" | "materials" | "downloads" | "people";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -172,11 +172,12 @@ function ParticipantView() {
             sideOpen ? "absolute inset-y-0 left-0 z-20 shadow-xl" : "hidden"
           } lg:static lg:flex flex-col w-80 shrink-0 bg-white border-r border-slate-200`}
         >
-          <div className="flex gap-1 bg-slate-100 rounded-lg p-1 m-3 mb-2">
+          <div className="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1 m-3 mb-2">
             {tabBtn("agenda", "Agenda")}
             {tabBtn("notes", "Notes")}
             {tabBtn("materials", "Materials")}
             {tabBtn("downloads", "Downloads")}
+            {tabBtn("people", "People")}
           </div>
 
           <div
@@ -327,6 +328,38 @@ function ParticipantView() {
               )}
             </ul>
           </div>
+
+          <div
+            className={`flex-1 min-h-0 overflow-y-auto px-3 pb-3 ${
+              sideTab === "people" ? "block" : "hidden"
+            }`}
+          >
+            <p className="text-xs text-slate-400 mb-2">
+              {onlineCount} of {state.participants.length} online
+            </p>
+            <ul className="flex flex-col gap-1.5">
+              {state.participants.map((p) => (
+                <li key={p.id} className="flex items-center gap-2 text-sm">
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      p.online ? "bg-emerald-500" : "bg-slate-300"
+                    }`}
+                  />
+                  <span className={p.online ? "" : "text-slate-400"}>
+                    {p.name}
+                    {p.id === identity.participantId && (
+                      <span className="text-xs text-slate-400 ml-1">(you)</span>
+                    )}
+                  </span>
+                  {p.isFacilitator && (
+                    <span className="text-[10px] uppercase font-semibold text-indigo-400">
+                      facilitator
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
         </aside>
         {sideOpen && (
           <div
@@ -359,6 +392,7 @@ function ParticipantView() {
                 activity={activity}
                 sessionId={id}
                 participantId={identity.participantId}
+                roster={state.participants}
                 onChanged={refresh}
               />
             </div>

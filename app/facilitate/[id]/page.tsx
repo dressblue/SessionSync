@@ -413,6 +413,7 @@ function Console() {
               }}
               activity={activity}
               myParticipantId={myPid}
+              roster={participants}
               onChanged={refresh}
             />
           )}

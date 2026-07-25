@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ActivityState } from "./useSessionState";
+import type { ActivityState, RosterEntry } from "./useSessionState";
 import { ActivityPanel } from "./ActivityPanel";
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
   activity: ActivityState | null;
   /** The facilitator's own roster seat — enables participating like a student. */
   myParticipantId?: string;
+  roster?: RosterEntry[];
   onChanged: () => void;
 }
 
@@ -26,6 +27,7 @@ export function ActivityConsole({
   authHeaders,
   activity,
   myParticipantId,
+  roster,
   onChanged,
 }: Props) {
   const [kind, setKind] = useState<Kind>("vote");
@@ -166,6 +168,7 @@ export function ActivityConsole({
           sessionId={sessionId}
           participantId={myParticipantId}
           moderationHeaders={authHeaders}
+          roster={roster}
           onChanged={onChanged}
         />
         <p className="mt-2 text-xs text-slate-400">

@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { ActivityEntry, ActivityState } from "./useSessionState";
+import type {
+  ActivityEntry,
+  ActivityState,
+  RosterEntry,
+} from "./useSessionState";
 import { Whiteboard } from "./Whiteboard";
 
 interface Props {
@@ -11,6 +15,8 @@ interface Props {
   participantId?: string;
   /** Present for facilitators: enables highlight/hide moderation. */
   moderationHeaders?: Record<string, string>;
+  /** Session roster — enables the who's-responded strip. */
+  roster?: RosterEntry[];
   onChanged: () => void;
 }
 
@@ -25,6 +31,7 @@ export function ActivityPanel({
   sessionId,
   participantId,
   moderationHeaders,
+  roster,
   onChanged,
 }: Props) {
   const [drafts, setDrafts] = useState<Record<number, string>>({});
@@ -176,6 +183,50 @@ export function ActivityPanel({
     </>
   );
 
+  // Who's responded — the accountability strip for aggregating tools. Shows
+  // participation status only, never what anyone chose.
+  const responderStrip = (unitLabel: string, itemsTotal?: number) => {
+    if (!roster || roster.length === 0) return null;
+    const counts = new Map(
+      (activity.responders ?? []).map((r) => [r.id, r.count])
+    );
+    const doneCount = roster.filter((p) => counts.has(p.id)).length;
+    return (
+      <div className="mt-4 border-t border-slate-100 pt-3">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
+          {unitLabel} — {doneCount} of {roster.length}
+        </p>
+        <ul className="flex flex-wrap gap-1.5">
+          {roster.map((p) => {
+            const count = counts.get(p.id);
+            const done =
+              count !== undefined &&
+              (itemsTotal === undefined || count >= itemsTotal);
+            return (
+              <li
+                key={p.id}
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs border ${
+                  done
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                    : count !== undefined
+                      ? "border-amber-300 bg-amber-50 text-amber-800"
+                      : "border-slate-200 bg-slate-50 text-slate-400"
+                }`}
+              >
+                {done ? "✓" : count !== undefined ? "…" : "○"} {p.name}
+                {itemsTotal !== undefined && count !== undefined && !done && (
+                  <span className="text-[10px]">
+                    {count}/{itemsTotal}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  };
+
   // ---- Collect phase (participant-sourced vote/likert) ----
   if (activity.phase === "collect") {
     const entries = activity.entries ?? [];
@@ -198,6 +249,7 @@ export function ActivityPanel({
           )}
         </ul>
         {suggestionForm("Suggest an option")}
+        {responderStrip("Suggestions in")}
       </div>
     );
   }
@@ -459,6 +511,7 @@ export function ActivityPanel({
               : " — tap an option to vote"
             : ""}
         </p>
+        {responderStrip("Votes in")}
       </div>
     );
   }
@@ -506,6 +559,7 @@ export function ActivityPanel({
             );
           })}
         </ul>
+        {responderStrip("Scores in", items.length)}
       </div>
     );
   }
