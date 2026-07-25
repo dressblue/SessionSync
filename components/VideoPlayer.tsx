@@ -14,7 +14,6 @@ interface Props {
 
 const DRIFT_TOLERANCE = 1.5; // seconds before a participant re-seeks
 
-// Position the facilitator's anchor implies right now.
 function expectedPos(video: VideoState): number {
   if (!video.playing) return video.t0;
   const elapsed = (Date.now() - Date.parse(video.at)) / 1000;
@@ -42,8 +41,9 @@ function loadYT(): Promise<void> {
 }
 
 export function VideoPlayer({ video, canControl, onControl }: Props) {
-  // Participants tap once to satisfy autoplay/audio gesture policies.
-  const [armed, setArmed] = useState(canControl);
+  // When the video should be playing but this player is stalled/blocked
+  // (browser autoplay policy), show a clear tap-to-play prompt.
+  const [needsGesture, setNeedsGesture] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ytRef = useRef<any>(null);
@@ -55,23 +55,32 @@ export function VideoPlayer({ video, canControl, onControl }: Props) {
     return videoRef.current?.currentTime ?? 0;
   };
 
-  // ---- YouTube player lifecycle ----
+  // ---- YouTube player lifecycle (created for everyone) ----
   useEffect(() => {
-    if (!isYouTube || !armed) return;
+    if (!isYouTube) return;
     let cancelled = false;
     loadYT().then(() => {
       if (cancelled || !ytDivRef.current) return;
       const w = window as unknown as { YT: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
       ytRef.current = new w.YT.Player(ytDivRef.current, {
         videoId: video.ref,
-        playerVars: { controls: canControl ? 1 : 0, disablekb: canControl ? 0 : 1, rel: 0, modestbranding: 1 },
+        playerVars: {
+          controls: canControl ? 1 : 0,
+          disablekb: canControl ? 0 : 1,
+          rel: 0,
+          modestbranding: 1,
+          playsinline: 1,
+        },
         events: {
           onReady: () => applySync(),
           onStateChange: (e: { data: number }) => {
-            if (!canControl) return;
-            // 1 = playing, 2 = paused
-            if (e.data === 1) onControl("play", getPos());
-            else if (e.data === 2) onControl("pause", getPos());
+            if (canControl) {
+              if (e.data === 1) onControl("play", getPos());
+              else if (e.data === 2) onControl("pause", getPos());
+            } else if (e.data === 1) {
+              // participant is playing — clear any tap-to-play prompt
+              setNeedsGesture(false);
+            }
           },
         },
       });
@@ -82,12 +91,12 @@ export function VideoPlayer({ video, canControl, onControl }: Props) {
       ytRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isYouTube, armed, video.ref]);
+  }, [isYouTube, video.ref]);
 
   // ---- Sync participants to the facilitator's anchor ----
   // force=true seeks regardless of tolerance (manual catch-up / reconnect).
   function applySync(force = false) {
-    if (canControl || !armed) return;
+    if (canControl) return;
     const want = expectedPos(video);
     const tol = force ? 0.25 : DRIFT_TOLERANCE;
     if (isYouTube) {
@@ -96,26 +105,39 @@ export function VideoPlayer({ video, canControl, onControl }: Props) {
       if (isFinite(want) && Math.abs((p.getCurrentTime() ?? 0) - want) > tol)
         p.seekTo(want, true);
       const state = p.getPlayerState?.();
-      if (video.playing && state !== 1) p.playVideo();
-      if (!video.playing && state === 1) p.pauseVideo();
+      if (video.playing) {
+        if (state !== 1) p.playVideo();
+        // If it doesn't reach "playing" shortly, autoplay was blocked.
+        window.setTimeout(() => {
+          if (video.playing && ytRef.current?.getPlayerState?.() !== 1)
+            setNeedsGesture(true);
+        }, 900);
+      } else {
+        setNeedsGesture(false);
+        if (state === 1) p.pauseVideo();
+      }
     } else {
       const el = videoRef.current;
       if (!el) return;
       if (isFinite(want) && Math.abs(el.currentTime - want) > tol)
         el.currentTime = want;
-      if (video.playing && el.paused) el.play().catch(() => {});
-      if (!video.playing && !el.paused) el.pause();
+      if (video.playing) {
+        el.play()
+          .then(() => setNeedsGesture(false))
+          .catch(() => setNeedsGesture(true));
+      } else {
+        setNeedsGesture(false);
+        if (!el.paused) el.pause();
+      }
     }
   }
 
-  // Re-sync whenever the anchor changes, and frequently to correct drift
-  // (buffering/stalls make the local video lag the shared clock).
+  // Re-sync on anchor change, frequently to correct drift, and hard on focus
+  // / reconnect (covers drift after a temporary disconnect).
   useEffect(() => {
     applySync();
     if (canControl) return;
     const iv = setInterval(() => applySync(), 2000);
-    // Re-align hard when the tab regains focus or the device reconnects —
-    // covers the case where a temporary disconnect let the video drift.
     const onFocus = () => applySync(true);
     document.addEventListener("visibilitychange", onFocus);
     window.addEventListener("online", onFocus);
@@ -127,7 +149,15 @@ export function VideoPlayer({ video, canControl, onControl }: Props) {
       window.removeEventListener("focus", onFocus);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [video.playing, video.t0, video.at, armed]);
+  }, [video.playing, video.t0, video.at]);
+
+  // Participant taps the prompt: a real user gesture, so playback unlocks.
+  const tapToPlay = () => {
+    setNeedsGesture(false);
+    if (isYouTube) ytRef.current?.playVideo?.();
+    else videoRef.current?.play().catch(() => setNeedsGesture(true));
+    applySync(true);
+  };
 
   // ---- Facilitator transport ----
   const play = () => {
@@ -150,26 +180,12 @@ export function VideoPlayer({ video, canControl, onControl }: Props) {
     }
     onControl("restart", 0);
   };
-  // Re-anchor at the facilitator's exact position so every client jumps here.
   const syncAll = () => onControl("seek", getPos());
 
   return (
     <div className="flex flex-col gap-3">
       <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black">
-        {!armed ? (
-          <button
-            onClick={() => setArmed(true)}
-            className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white bg-slate-900/80 hover:bg-slate-900/70"
-          >
-            <span className="w-14 h-14 rounded-full bg-white/90 text-slate-900 flex items-center justify-center text-2xl">
-              ▶
-            </span>
-            <span className="text-sm font-medium">Tap to watch along</span>
-            <span className="text-xs text-white/70">
-              The facilitator controls playback
-            </span>
-          </button>
-        ) : isYouTube ? (
+        {isYouTube ? (
           <div ref={ytDivRef} className="w-full h-full" />
         ) : (
           <video
@@ -180,22 +196,41 @@ export function VideoPlayer({ video, canControl, onControl }: Props) {
             className="w-full h-full"
           />
         )}
+
+        {/* Participant tap-to-play prompt (autoplay blocked / behind) */}
+        {!canControl && needsGesture && (
+          <button
+            onClick={tapToPlay}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white bg-slate-900/75 hover:bg-slate-900/65"
+          >
+            <span className="w-16 h-16 rounded-full bg-white text-slate-900 flex items-center justify-center text-3xl shadow-lg">
+              ▶
+            </span>
+            <span className="text-base font-semibold">Tap to play</span>
+            <span className="text-xs text-white/80">
+              Join the class — your browser needs a tap to start the video
+            </span>
+          </button>
+        )}
       </div>
 
-      {canControl && armed && (
-        <div className="flex items-center gap-2">
-          <button
-            onClick={play}
-            className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-semibold hover:bg-indigo-700"
-          >
-            ▶ Play for all
-          </button>
-          <button
-            onClick={pause}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
-          >
-            ❚❚ Pause all
-          </button>
+      {canControl && (
+        <div className="flex flex-wrap items-center gap-2">
+          {video.playing ? (
+            <button
+              onClick={pause}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+            >
+              ❚❚ Pause all
+            </button>
+          ) : (
+            <button
+              onClick={play}
+              className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-semibold hover:bg-indigo-700"
+            >
+              ▶ Play for all
+            </button>
+          )}
           <button
             onClick={syncAll}
             title="Force every participant to jump to your current position"
@@ -215,7 +250,7 @@ export function VideoPlayer({ video, canControl, onControl }: Props) {
         </div>
       )}
 
-      {!canControl && armed && (
+      {!canControl && (
         <button
           onClick={() => applySync(true)}
           className="self-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"

@@ -22,6 +22,7 @@ const TOOL_BADGES: Record<string, string> = {
   exhibit: "Present",
   video: "Video",
   timer: "Timer",
+  wordcloud: "Cloud",
 };
 
 function Console() {
@@ -53,6 +54,7 @@ function Console() {
     | "exhibit"
     | "video"
     | "timer"
+    | "wordcloud"
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
@@ -574,6 +576,7 @@ function Console() {
                             </option>
                             <option value="video">Video (synced)</option>
                             <option value="timer">Countdown timer</option>
+                            <option value="wordcloud">Word cloud</option>
                           </select>
                           {toolKind === "exhibit" && (
                             <select
@@ -686,6 +689,7 @@ function Console() {
                           toolKind !== "exhibit" &&
                           toolKind !== "video" &&
                           toolKind !== "timer" &&
+                          toolKind !== "wordcloud" &&
                           !(
                             (toolKind === "vote" || toolKind === "likert") &&
                             toolSourced

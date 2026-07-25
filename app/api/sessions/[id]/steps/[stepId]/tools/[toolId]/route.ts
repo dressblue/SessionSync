@@ -16,7 +16,7 @@ export async function PATCH(
   const kind = body?.kind;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   if (
-    !["vote", "likert", "columns", "reveal", "wheel", "whiteboard", "exhibit", "video"].includes(kind)
+    !["vote", "likert", "columns", "reveal", "wheel", "whiteboard", "exhibit", "video", "timer", "wordcloud"].includes(kind)
   ) {
     return NextResponse.json({ error: "Unknown tool kind" }, { status: 400 });
   }

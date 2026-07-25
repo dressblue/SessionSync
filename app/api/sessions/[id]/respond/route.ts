@@ -76,6 +76,20 @@ export async function POST(
     /* treated as empty below */
   }
 
+  // Word cloud: submit a word into the single shared bucket (column 0).
+  if (activity.kind === "wordcloud") {
+    const value = typeof body?.value === "string" ? body.value.trim() : "";
+    if (!value) {
+      return NextResponse.json({ error: "Nothing to add" }, { status: 400 });
+    }
+    await query(
+      `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+       VALUES ($1, $2, $3, 0, $4)`,
+      [randomUUID(), activity.id, participantId, value.slice(0, 60)]
+    );
+    return NextResponse.json({ ok: true });
+  }
+
   // Reveal: contribute a word/phrase against a revealed item.
   if (activity.kind === "reveal") {
     const items = config.richItems ?? [];

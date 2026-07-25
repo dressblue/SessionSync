@@ -217,6 +217,8 @@ export async function POST(
         ? { provider: "youtube", ref: yt[1], title: prompt, playing: false, t0: 0, at: now }
         : { provider: "video", ref: url.slice(0, 2000), title: prompt, playing: false, t0: 0, at: now };
     }
+  } else if (kind === "wordcloud") {
+    config = {};
   } else if (kind === "timer") {
     const mins =
       typeof body?.minutes === "number" && body.minutes > 0 ? body.minutes : 5;

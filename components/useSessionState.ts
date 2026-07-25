@@ -21,7 +21,8 @@ export type ActivityKind =
   | "whiteboard"
   | "exhibit"
   | "video"
-  | "timer";
+  | "timer"
+  | "wordcloud";
 
 export interface RichItem {
   title: string;

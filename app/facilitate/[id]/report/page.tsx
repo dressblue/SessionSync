@@ -30,6 +30,7 @@ const KIND_LABEL: Record<string, string> = {
   exhibit: "Presented",
   video: "Video",
   timer: "Timer",
+  wordcloud: "Word cloud",
 };
 
 function strokesToDataUrl(strokes: Stroke[]): string {
@@ -104,6 +105,16 @@ function activityLines(a: ActivityState): string[] {
     const t = a.timer;
     const mins = Math.round((t?.durationSec ?? 0) / 60);
     return [`Timer: ${t?.label ? t.label + " — " : ""}${mins} min`];
+  }
+  if (a.kind === "wordcloud") {
+    const counts = new Map<string, number>();
+    for (const e of (a.entries ?? []).filter((x) => !x.hidden)) {
+      const k = e.value.trim();
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((x, y) => y[1] - x[1])
+      .map(([w, n]) => `${w}${n > 1 ? ` (×${n})` : ""}`);
   }
   // columns / collect
   const entries = (a.entries ?? []).filter((e) => !e.hidden);

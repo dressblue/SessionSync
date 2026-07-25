@@ -11,6 +11,7 @@ import { Markdown } from "./Markdown";
 import { LikertChart } from "./LikertChart";
 import { VideoPlayer } from "./VideoPlayer";
 import { TimerDisplay } from "./TimerDisplay";
+import { WordCloud } from "./WordCloud";
 import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
 
 interface Props {
@@ -545,6 +546,67 @@ export function ActivityPanel({
             </p>
           )}
         </div>
+      </div>
+    );
+  }
+
+  // ---- Word cloud ----
+  if (activity.kind === "wordcloud") {
+    const entries = activity.entries ?? [];
+    async function toggleWord(ids: string[], hide: boolean) {
+      if (!moderationHeaders || busy) return;
+      setBusy(true);
+      try {
+        await Promise.all(
+          ids.map((rid) =>
+            fetch(`/api/sessions/${sessionId}/responses/${rid}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", ...moderationHeaders },
+              body: JSON.stringify({ hidden: hide }),
+            })
+          )
+        );
+        onChanged();
+      } finally {
+        setBusy(false);
+      }
+    }
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Word cloud")}
+        <WordCloud
+          entries={entries}
+          canModerate={canModerate}
+          onToggleWord={toggleWord}
+        />
+        {participantId && (
+          <form
+            className="mt-4 flex gap-1.5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const value = (drafts[0] ?? "").trim();
+              if (!value) return;
+              send({ value });
+              setDrafts((d) => ({ ...d, 0: "" }));
+            }}
+          >
+            <input
+              value={drafts[0] ?? ""}
+              onChange={(e) => setDrafts((d) => ({ ...d, 0: e.target.value }))}
+              placeholder="Add a word — submit as many as you like"
+              maxLength={60}
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              type="submit"
+              disabled={busy || !(drafts[0] ?? "").trim()}
+              className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40"
+            >
+              Add
+            </button>
+          </form>
+        )}
+        {responderStrip("Contributed")}
       </div>
     );
   }

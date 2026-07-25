@@ -32,7 +32,8 @@ export type ActivityKind =
   | "whiteboard"
   | "exhibit"
   | "video"
-  | "timer";
+  | "timer"
+  | "wordcloud";
 
 export interface ActivityRow {
   id: string;
@@ -303,7 +304,7 @@ export function extractActivityTexts(
     texts = rows
       .filter((r) => r.column_index === COLLECT_COLUMN && !r.hidden)
       .map((r) => r.value);
-  } else if (activity.kind === "columns") {
+  } else if (activity.kind === "columns" || activity.kind === "wordcloud") {
     texts = rows
       .filter((r) => (r.column_index ?? 0) >= 0 && !r.hidden)
       .map((r) => r.value);
@@ -551,6 +552,14 @@ export function buildActivityPayload(
           Number(r.value) >= 1 &&
           Number(r.value) <= scale
       )
+    );
+  } else if (activity.kind === "wordcloud") {
+    // Single bucket of submitted words; the client sizes each by frequency.
+    payload.entries = entriesFrom(
+      responses.rows.filter((r) => (r.column_index ?? 0) >= 0)
+    );
+    payload.responders = respondersFrom(
+      responseRows.filter((r) => (r.column_index ?? 0) >= 0)
     );
   } else {
     payload.columns = config.columns ?? [];

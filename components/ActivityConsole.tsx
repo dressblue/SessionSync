@@ -27,7 +27,8 @@ type Kind =
   | "whiteboard"
   | "exhibit"
   | "video"
-  | "timer";
+  | "timer"
+  | "wordcloud";
 type Sourcing = "facilitator" | "participants";
 
 const KIND_LABEL: Record<string, string> = {
@@ -40,6 +41,7 @@ const KIND_LABEL: Record<string, string> = {
   exhibit: "Presented",
   video: "Video",
   timer: "Timer",
+  wordcloud: "Word cloud",
 };
 
 // Facilitator's activity station: up to two activities run side by side
@@ -272,6 +274,7 @@ export function ActivityConsole({
                 ["exhibit", "Present"],
                 ["video", "Video"],
                 ["timer", "Timer"],
+                ["wordcloud", "Word cloud"],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -343,7 +346,9 @@ export function ActivityConsole({
                               ? "Video title (optional)"
                               : kind === "timer"
                                 ? "Label (optional), e.g. Small-group discussion"
-                                : "Prompt, e.g. Answer both questions below"
+                                : kind === "wordcloud"
+                                  ? "Question, e.g. One word for a great dad"
+                                  : "Prompt, e.g. Answer both questions below"
               }
               maxLength={300}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -539,6 +544,11 @@ export function ActivityConsole({
                   all screens in sync. Participants tap once to start watching.
                 </p>
               </div>
+            ) : kind === "wordcloud" ? (
+              <p className="text-[11px] text-slate-400">
+                Participants submit words; each renders sized by how often
+                it&apos;s submitted. Click a word to hide it.
+              </p>
             ) : kind === "whiteboard" ? null : (kind === "vote" ||
                 kind === "likert") &&
               sourcing === "participants" ? (
