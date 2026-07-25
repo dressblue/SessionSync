@@ -396,25 +396,11 @@ function Console() {
                 </p>
                 <h3 className="font-semibold">{current.title}</h3>
                 {current.tools.length > 0 && (
-                  <ul className="mt-2 flex flex-col gap-1.5">
-                    {current.tools.map((t) => (
-                      <li
-                        key={t.id}
-                        className="flex items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-2"
-                      >
-                        <span className="text-[10px] font-bold uppercase text-indigo-500 shrink-0">
-                          {TOOL_BADGES[t.kind] ?? t.kind}
-                        </span>
-                        <span className="text-sm min-w-0 truncate">{t.prompt}</span>
-                        <button
-                          onClick={() => launchTool(t)}
-                          className="ml-auto shrink-0 rounded-md bg-indigo-600 text-white px-2.5 py-1 text-xs font-semibold hover:bg-indigo-700"
-                        >
-                          Launch
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {current.tools.length} tool
+                    {current.tools.length === 1 ? "" : "s"} on this step — open
+                    Tools in the agenda below to launch, edit, or delete.
+                  </p>
                 )}
                 {current.content && (
                   <div className="mt-2 max-h-48 overflow-y-auto text-sm border border-slate-100 rounded-lg p-3 bg-slate-50">
