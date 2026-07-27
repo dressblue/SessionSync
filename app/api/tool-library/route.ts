@@ -29,6 +29,10 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") ?? "").trim().toLowerCase();
   const category = (url.searchParams.get("category") ?? "").trim();
+  // Scope: with a courseId, return global (course_id NULL) + that course's items
+  // — this is what the facilitator picker sends. With no courseId, return
+  // everything (admin management view).
+  const courseId = (url.searchParams.get("courseId") ?? "").trim();
   const rows = await query<{
     id: string;
     name: string;
@@ -36,22 +40,38 @@ export async function GET(req: Request) {
     category: string;
     kind: string;
     prompt: string;
+    config: string;
+    course_id: string | null;
+    course_title: string | null;
   }>(
-    `SELECT id, name, description, category, kind, prompt
-       FROM tool_templates
-      WHERE ($1 = '' OR lower(name) LIKE '%' || $1 || '%'
-             OR lower(category) LIKE '%' || $1 || '%'
-             OR lower(kind) LIKE '%' || $1 || '%')
-        AND ($2 = '' OR category = $2)
-      ORDER BY category ASC, name ASC`,
-    [q, category]
+    `SELECT tt.id, tt.name, tt.description, tt.category, tt.kind, tt.prompt,
+            tt.config, tt.course_id, c.title AS course_title
+       FROM tool_templates tt
+       LEFT JOIN courses c ON c.id = tt.course_id
+      WHERE ($1 = '' OR lower(tt.name) LIKE '%' || $1 || '%'
+             OR lower(tt.category) LIKE '%' || $1 || '%'
+             OR lower(tt.kind) LIKE '%' || $1 || '%')
+        AND ($2 = '' OR tt.category = $2)
+        AND ($3 = '' OR tt.course_id IS NULL OR tt.course_id::text = $3)
+      ORDER BY tt.course_id IS NULL DESC, tt.category ASC, tt.name ASC`,
+    [q, category, courseId]
   );
   // Distinct categories for the filter chips.
   const cats = await query<{ category: string }>(
     `SELECT DISTINCT category FROM tool_templates WHERE category <> '' ORDER BY category`
   );
   return NextResponse.json({
-    tools: rows.rows,
+    tools: rows.rows.map((t) => ({
+      id: t.id,
+      name: t.name,
+      description: t.description,
+      category: t.category,
+      kind: t.kind,
+      prompt: t.prompt,
+      config: t.config,
+      courseId: t.course_id,
+      courseTitle: t.course_title,
+    })),
     categories: cats.rows.map((c) => c.category),
   });
 }
@@ -70,6 +90,19 @@ export async function POST(req: Request) {
   }
   const description = str(body?.description, 1000);
   const category = str(body?.category, 80).trim();
+
+  // Optional scope: a real course id, else NULL (global/shared).
+  let courseId: string | null = null;
+  if (typeof body?.courseId === "string" && body.courseId) {
+    const c = await query<{ id: string }>(
+      `SELECT id FROM courses WHERE id = $1`,
+      [body.courseId]
+    );
+    if (!c.rows[0]) {
+      return NextResponse.json({ error: "Scope course not found" }, { status: 400 });
+    }
+    courseId = c.rows[0].id;
+  }
 
   let kind = "";
   let prompt = "";
@@ -100,9 +133,9 @@ export async function POST(req: Request) {
   const id = randomUUID();
   await query(
     `INSERT INTO tool_templates
-       (id, name, description, category, kind, prompt, config, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [id, name, description, category, kind, prompt, config, admin.id]
+       (id, name, description, category, kind, prompt, config, created_by, course_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [id, name, description, category, kind, prompt, config, admin.id, courseId]
   );
   return NextResponse.json({ id });
 }

@@ -191,6 +191,7 @@ export interface ActivityPayload {
   mime?: string;
   url?: string;
   text?: string;
+  mediaType?: "image" | "pdf" | "link";
   // video (synchronized playback)
   video?: {
     provider: "youtube" | "video";
@@ -786,6 +787,7 @@ export function buildActivityPayload(
       mime?: string;
       url?: string;
       text?: string;
+      mediaType?: "image" | "pdf" | "link";
     };
     payload.exhibit = c.exhibit;
     payload.fileId = c.fileId;
@@ -793,6 +795,7 @@ export function buildActivityPayload(
     payload.mime = c.mime;
     payload.url = c.url;
     payload.text = c.text;
+    payload.mediaType = c.mediaType;
     return payload;
   }
   if (activity.kind === "whiteboard") {

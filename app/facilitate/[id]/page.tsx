@@ -30,6 +30,24 @@ const TOOL_BADGES: Record<string, string> = {
   wordcloud: "Cloud",
 };
 
+// Compact delete affordance (replaces the word "Delete" to save row space).
+function TrashIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className="w-4 h-4"
+      aria-hidden="true"
+    >
+      <path
+        fillRule="evenodd"
+        d="M8.75 1a1 1 0 0 0-.95.68L7.32 3H4a1 1 0 0 0 0 2h.11l.86 11.14A2 2 0 0 0 6.96 18h6.08a2 2 0 0 0 1.99-1.86L15.89 5H16a1 1 0 1 0 0-2h-3.32l-.48-1.32A1 1 0 0 0 11.25 1h-2.5ZM9 7.25a.75.75 0 0 0-1.5 0v6a.75.75 0 0 0 1.5 0v-6Zm3.5 0a.75.75 0 0 0-1.5 0v6a.75.75 0 0 0 1.5 0v-6Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
 function Console() {
   const { id } = useParams<{ id: string }>();
   const { user } = useUser();
@@ -166,16 +184,24 @@ function Console() {
       .catch(() => {});
   }, []);
 
+  // Scope the picker to this course's library (global items + course-scoped).
+  function libScopeParam() {
+    return state?.session.courseId
+      ? `courseId=${encodeURIComponent(state.session.courseId)}`
+      : "";
+  }
   async function openLibPicker(stepId: string) {
     setLibPickFor(stepId);
     setLibQ("");
-    const res = await fetch("/api/tool-library", { cache: "no-store" });
+    const res = await fetch(`/api/tool-library?${libScopeParam()}`, {
+      cache: "no-store",
+    });
     if (res.ok) setLibTools((await res.json()).tools);
   }
   async function searchLib(q: string) {
     setLibQ(q);
     const res = await fetch(
-      `/api/tool-library?q=${encodeURIComponent(q)}`,
+      `/api/tool-library?q=${encodeURIComponent(q)}&${libScopeParam()}`,
       { cache: "no-store" }
     );
     if (res.ok) setLibTools((await res.json()).tools);
@@ -339,6 +365,7 @@ function Console() {
       url: tool.url,
       text: tool.text,
       minutes: tool.minutes,
+      mediaType: tool.mediaType,
     });
   }
 
@@ -439,7 +466,7 @@ function Console() {
         </div>
       )}
 
-      <div className="max-w-[1600px] mx-auto px-6 py-6 grid gap-6 lg:grid-cols-[3fr_7fr] items-start">
+      <div className="max-w-[1600px] mx-auto px-6 py-6 grid gap-6 lg:grid-cols-[2fr_3fr] items-start">
         {/* Left column: agenda, participants, invite */}
         <div className="flex min-w-0 flex-col gap-6">
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
@@ -556,9 +583,11 @@ function Console() {
                               api(`/api/sessions/${id}/steps/${s.id}`, "DELETE");
                             }
                           }}
-                          className="rounded-md px-2 py-1 text-xs text-rose-500 hover:bg-rose-50"
+                          title="Delete step"
+                          aria-label="Delete step"
+                          className="rounded-md px-1.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
                         >
-                          Delete
+                          <TrashIcon />
                         </button>
                       </div>
                     </div>
@@ -567,7 +596,7 @@ function Console() {
                     <div className="border-t border-slate-100 bg-slate-50/60 rounded-b-lg p-3 flex flex-col gap-2">
                       {s.tools.length > 0 && (
                         <ul className="flex flex-col gap-1">
-                          {s.tools.map((t) => (
+                          {s.tools.map((t, ti) => (
                             <li
                               key={t.id}
                               className="flex items-center gap-2 text-xs bg-white rounded-md border border-slate-200 px-2.5 py-1.5"
@@ -594,6 +623,36 @@ function Console() {
                                 </span>
                               )}
                               <button
+                                onClick={() =>
+                                  api(
+                                    `/api/sessions/${id}/steps/${s.id}/tools/${t.id}`,
+                                    "PATCH",
+                                    { move: "up" }
+                                  )
+                                }
+                                disabled={ti === 0}
+                                title="Move up"
+                                aria-label="Move tool up"
+                                className="shrink-0 rounded-md px-1 py-1 text-slate-400 hover:bg-slate-100 disabled:opacity-30"
+                              >
+                                ↑
+                              </button>
+                              <button
+                                onClick={() =>
+                                  api(
+                                    `/api/sessions/${id}/steps/${s.id}/tools/${t.id}`,
+                                    "PATCH",
+                                    { move: "down" }
+                                  )
+                                }
+                                disabled={ti === s.tools.length - 1}
+                                title="Move down"
+                                aria-label="Move tool down"
+                                className="shrink-0 rounded-md px-1 py-1 text-slate-400 hover:bg-slate-100 disabled:opacity-30"
+                              >
+                                ↓
+                              </button>
+                              <button
                                 onClick={() => beginToolEdit(s.id, t)}
                                 className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
                               >
@@ -619,9 +678,11 @@ function Console() {
                                     );
                                   }
                                 }}
-                                className="shrink-0 rounded-md px-2 py-1 text-[11px] font-medium text-rose-500 hover:bg-rose-50"
+                                title="Delete tool"
+                                aria-label="Delete tool"
+                                className="shrink-0 rounded-md px-1.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
                               >
-                                Delete
+                                <TrashIcon />
                               </button>
                             </li>
                           ))}

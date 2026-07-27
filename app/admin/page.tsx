@@ -43,6 +43,9 @@ interface LibTool {
   category: string;
   kind: string;
   prompt: string;
+  config?: string;
+  courseId?: string | null;
+  courseTitle?: string | null;
 }
 
 function fmtDate(iso: string | null): string {
@@ -108,12 +111,15 @@ export default function AdminPage() {
   const [elName, setElName] = useState("");
   const [elCat, setElCat] = useState("");
   const [elDesc, setElDesc] = useState("");
-  // Add-video-to-library uploader
+  // Add-media-to-library uploader (image / PDF / video)
   const [vidFile, setVidFile] = useState<File | null>(null);
   const [vidName, setVidName] = useState("");
   const [vidCat, setVidCat] = useState("");
   const [vidUploading, setVidUploading] = useState(false);
   const [vidPct, setVidPct] = useState(0);
+  // Library scope: "" = global/shared; a course id scopes to that course.
+  const [libScopeId, setLibScopeId] = useState("");
+  const [libFilterCourse, setLibFilterCourse] = useState("");
   const [replacingId, setReplacingId] = useState<string | null>(null);
   const [replacePct, setReplacePct] = useState(0);
 
@@ -208,13 +214,15 @@ export default function AdminPage() {
     const params = new URLSearchParams();
     if (libQ.trim()) params.set("q", libQ.trim());
     if (libCat) params.set("category", libCat);
+    // Empty = show everything (admin view); a course filters to global + it.
+    if (libFilterCourse) params.set("courseId", libFilterCourse);
     const res = await fetch(`/api/tool-library?${params}`, { cache: "no-store" });
     if (res.ok) {
       const d = await res.json();
       setLibTools(d.tools);
       setLibCats(d.categories);
     }
-  }, [libQ, libCat]);
+  }, [libQ, libCat, libFilterCourse]);
 
   useEffect(() => {
     if (tab === "library") loadLibrary();
@@ -252,43 +260,67 @@ export default function AdminPage() {
     }
   }
 
-  async function uploadVideo(e: React.FormEvent) {
+  async function uploadMedia(e: React.FormEvent) {
     e.preventDefault();
     if (!vidFile || !vidName.trim()) return;
     setVidUploading(true);
     setVidPct(0);
     setError(null);
     setMsg(null);
+    const file = vidFile;
+    const isImage =
+      file.type.startsWith("image/") ||
+      /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(file.name);
+    const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
     try {
       // Browser-direct upload to Vercel Blob (bypasses the serverless size limit).
-      // multipart = resumable chunked upload, more reliable for larger files.
-      const blob = await upload(vidFile.name, vidFile, {
+      const blob = await upload(file.name, file, {
         access: "public",
         handleUploadUrl: "/api/blob/upload",
-        contentType: vidFile.type || "video/mp4",
+        contentType: file.type || "application/octet-stream",
         onUploadProgress: (p) => setVidPct(Math.round(p.percentage)),
       });
-      // Save it as a video tool in the library (config is the step-tool shape).
+      // Images/PDFs become "exhibit" tools (rendered inline); videos become
+      // synced "video" tools. Config is the step-tool shape.
+      const name = vidName.trim();
+      const body =
+        isImage || isPdf
+          ? {
+              name,
+              category: vidCat.trim() || (isPdf ? "Document" : "Image"),
+              kind: "exhibit",
+              prompt: name,
+              config: {
+                exhibit: "url",
+                url: blob.url,
+                mediaType: isImage ? "image" : "pdf",
+              },
+              courseId: libScopeId || undefined,
+            }
+          : {
+              name,
+              category: vidCat.trim() || "Video",
+              kind: "video",
+              prompt: name,
+              config: { url: blob.url },
+              courseId: libScopeId || undefined,
+            };
       const res = await fetch("/api/tool-library", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: vidName.trim(),
-          category: vidCat.trim() || "Video",
-          kind: "video",
-          prompt: vidName.trim(),
-          config: { url: blob.url },
-        }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
-        setMsg(`Video added to the library ✓`);
+        setMsg(
+          `${isImage ? "Image" : isPdf ? "PDF" : "Video"} added to the library ✓`
+        );
         setVidFile(null);
         setVidName("");
         setVidCat("");
         await loadLibrary();
       } else {
         const d = await res.json().catch(() => ({}));
-        setError(d.error ?? "Could not save the video to the library.");
+        setError(d.error ?? "Could not save the file to the library.");
       }
     } catch (err) {
       setError(
@@ -301,30 +333,43 @@ export default function AdminPage() {
     }
   }
 
-  async function replaceVideo(id: string, file: File | null) {
+  async function replaceMedia(t: LibTool, file: File | null) {
     if (!file) return;
-    setReplacingId(id);
+    setReplacingId(t.id);
     setReplacePct(0);
     setError(null);
     setMsg(null);
+    const isImage =
+      file.type.startsWith("image/") ||
+      /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(file.name);
+    const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
     try {
       const blob = await upload(file.name, file, {
         access: "public",
         handleUploadUrl: "/api/blob/upload",
-        contentType: file.type || "video/mp4",
+        contentType: file.type || "application/octet-stream",
         onUploadProgress: (p) => setReplacePct(Math.round(p.percentage)),
       });
-      // Swap the URL on the existing library tool (keeps its name/category).
-      const res = await fetch(`/api/tool-library/${id}`, {
+      // Swap the URL on the existing library tool (keeps its name/category),
+      // preserving the config shape for its kind.
+      const config =
+        t.kind === "exhibit"
+          ? {
+              exhibit: "url",
+              url: blob.url,
+              mediaType: isImage ? "image" : isPdf ? "pdf" : "link",
+            }
+          : { url: blob.url };
+      const res = await fetch(`/api/tool-library/${t.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config: { url: blob.url } }),
+        body: JSON.stringify({ config }),
       });
       if (res.ok) {
-        setMsg("Video replaced ✓");
+        setMsg("File replaced ✓");
         await loadLibrary();
       } else {
-        setError("Could not replace the video.");
+        setError("Could not replace the file.");
       }
     } catch (err) {
       setError(
@@ -1061,29 +1106,45 @@ export default function AdminPage() {
               button on any saved tool inside a course.
             </p>
 
-            {/* Upload a video straight into the library */}
+            {/* Upload an image, PDF, or video straight into the library */}
             <form
-              onSubmit={uploadVideo}
+              onSubmit={uploadMedia}
               className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col gap-2"
             >
-              <p className="text-sm font-semibold">Add a video</p>
+              <p className="text-sm font-semibold">Add media (image, PDF, or video)</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 <input
                   value={vidName}
                   onChange={(e) => setVidName(e.target.value)}
-                  placeholder="Video title (e.g. Trait 1 — Self-Awareness)"
+                  placeholder="Title (e.g. My Fatherhood Pledge)"
                   className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
                 />
                 <input
                   value={vidCat}
                   onChange={(e) => setVidCat(e.target.value)}
-                  placeholder="Category (defaults to “Video”)"
+                  placeholder="Category (defaults by type)"
                   className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
                 />
               </div>
+              <label className="text-xs font-semibold text-slate-500">
+                Scope
+                <select
+                  value={libScopeId}
+                  onChange={(e) => setLibScopeId(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm bg-white font-normal"
+                >
+                  <option value="">Global — every course sees it</option>
+                  {courses?.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title}
+                      {c.isTemplate ? " (template)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <input
                 type="file"
-                accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                accept="image/*,application/pdf,video/mp4,video/webm,video/ogg,video/quicktime"
                 onChange={(e) => {
                   const f = e.target.files?.[0] ?? null;
                   setVidFile(f);
@@ -1105,8 +1166,8 @@ export default function AdminPage() {
                   {vidUploading ? `Uploading… ${vidPct}%` : "Upload & add to library"}
                 </button>
                 <span className="text-[11px] text-slate-400">
-                  Uploads straight to storage (up to ~30 MB each). Plays with
-                  synced controls when launched.
+                  Uploads straight to storage. Images &amp; PDFs show inline;
+                  videos play with synced controls.
                 </span>
               </div>
               {vidUploading && (
@@ -1134,6 +1195,20 @@ export default function AdminPage() {
                 {libCats.map((c) => (
                   <option key={c} value={c}>
                     {c}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={libFilterCourse}
+                onChange={(e) => setLibFilterCourse(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white"
+                title="Filter by scope"
+              >
+                <option value="">All scopes</option>
+                {courses?.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                    {c.isTemplate ? " (template)" : ""}
                   </option>
                 ))}
               </select>
@@ -1200,6 +1275,16 @@ export default function AdminPage() {
                             {t.category}
                           </span>
                         )}
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                            t.courseId
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-emerald-100 text-emerald-700"
+                          }`}
+                          title={t.courseId ? "Scoped to a course" : "Shared with every course"}
+                        >
+                          {t.courseId ? t.courseTitle ?? "Course" : "Global"}
+                        </span>
                       </div>
                       {t.description && (
                         <p className="mt-0.5 text-xs text-slate-400 line-clamp-2">
@@ -1208,23 +1293,27 @@ export default function AdminPage() {
                       )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
-                      {t.kind === "video" && (
+                      {(t.kind === "video" || t.kind === "exhibit") && (
                         <label
                           className={`cursor-pointer rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 ${
                             replacingId === t.id ? "opacity-60" : ""
                           }`}
-                          title="Upload a new file for this video"
+                          title="Upload a new file for this tool"
                         >
                           {replacingId === t.id
                             ? `Replacing… ${replacePct}%`
-                            : "Replace video"}
+                            : "Replace file"}
                           <input
                             type="file"
-                            accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                            accept={
+                              t.kind === "video"
+                                ? "video/mp4,video/webm,video/ogg,video/quicktime"
+                                : "image/*,application/pdf"
+                            }
                             className="hidden"
                             disabled={replacingId !== null}
                             onChange={(e) =>
-                              replaceVideo(t.id, e.target.files?.[0] ?? null)
+                              replaceMedia(t, e.target.files?.[0] ?? null)
                             }
                           />
                         </label>

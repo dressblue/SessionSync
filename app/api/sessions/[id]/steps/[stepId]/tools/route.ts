@@ -78,6 +78,7 @@ export async function POST(
   if (typeof body?.url === "string") config.url = body.url;
   if (typeof body?.text === "string") config.text = body.text;
   if (typeof body?.minutes === "number") config.minutes = body.minutes;
+  if (typeof body?.mediaType === "string") config.mediaType = body.mediaType;
 
   const pos = await query<{ next: number }>(
     `SELECT COALESCE(MAX(position), -1) + 1 AS next FROM step_tools WHERE step_id = $1`,

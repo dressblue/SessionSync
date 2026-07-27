@@ -13,6 +13,39 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
   const body = await req.json().catch(() => null);
+
+  // Reorder within the step: swap this tool with its neighbour. Positions are
+  // normalized to array order (handles legacy rows that all share position 0).
+  if (body?.move === "up" || body?.move === "down") {
+    const step = await query<{ id: string }>(
+      `SELECT id FROM steps WHERE id = $1 AND session_id = $2`,
+      [stepId, id]
+    );
+    if (!step.rows[0]) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const list = (
+      await query<{ id: string }>(
+        `SELECT id FROM step_tools WHERE step_id = $1
+         ORDER BY position ASC, created_at ASC`,
+        [stepId]
+      )
+    ).rows;
+    const idx = list.findIndex((t) => t.id === toolId);
+    const swap = body.move === "up" ? idx - 1 : idx + 1;
+    if (idx !== -1 && swap >= 0 && swap < list.length) {
+      const order = list.map((t) => t.id);
+      [order[idx], order[swap]] = [order[swap], order[idx]];
+      for (let i = 0; i < order.length; i++) {
+        await query(`UPDATE step_tools SET position = $1 WHERE id = $2`, [
+          i,
+          order[i],
+        ]);
+      }
+    }
+    return NextResponse.json({ ok: true });
+  }
+
   const kind = body?.kind;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   if (

@@ -368,4 +368,12 @@ async function ensureSchema(
   await run(
     `CREATE INDEX IF NOT EXISTS idx_tool_templates_category ON tool_templates (category);`
   );
+  // Library scope: NULL = global/shared (every course sees it); otherwise the
+  // library item belongs to that course and only surfaces for it.
+  await run(
+    `ALTER TABLE tool_templates ADD COLUMN IF NOT EXISTS course_id UUID REFERENCES courses(id) ON DELETE SET NULL;`
+  );
+  await run(
+    `CREATE INDEX IF NOT EXISTS idx_tool_templates_course ON tool_templates (course_id);`
+  );
 }

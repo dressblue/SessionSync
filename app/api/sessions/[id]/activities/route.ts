@@ -236,6 +236,13 @@ export async function POST(
     const exhibit = body?.exhibit;
     if (exhibit === "file") {
       const fileId = typeof body?.fileId === "string" ? body.fileId : "";
+      // Guard: an empty or malformed id would crash the uuid lookup (500).
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fileId)) {
+        return NextResponse.json(
+          { error: "This file isn't available in this course — re-attach it from the library." },
+          { status: 400 }
+        );
+      }
       const file = await query<{ filename: string; mime: string }>(
         `SELECT filename, mime FROM course_files
          WHERE id = $1 AND course_id = $2`,
@@ -243,7 +250,7 @@ export async function POST(
       );
       if (!file.rows[0]) {
         return NextResponse.json(
-          { error: "Pick a file from the course library first" },
+          { error: "This file isn't available in this course — re-attach it from the library." },
           { status: 400 }
         );
       }
@@ -261,7 +268,15 @@ export async function POST(
           { status: 400 }
         );
       }
-      config = { exhibit: "url", url: url.slice(0, 2000) };
+      config = {
+        exhibit: "url",
+        url: url.slice(0, 2000),
+        ...(body?.mediaType === "image" ||
+        body?.mediaType === "pdf" ||
+        body?.mediaType === "link"
+          ? { mediaType: body.mediaType }
+          : {}),
+      };
     } else if (exhibit === "text") {
       const text = typeof body?.text === "string" ? body.text.trim() : "";
       if (!text) {

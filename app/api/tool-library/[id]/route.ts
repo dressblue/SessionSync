@@ -34,6 +34,21 @@ export async function PATCH(req: Request, ctx: Ctx) {
   if (typeof body?.category === "string")
     add("category", str(body.category, 80).trim());
   if (typeof body?.prompt === "string") add("prompt", str(body.prompt, 300));
+  // Re-scope: "" / null → global; otherwise a real course id.
+  if (body?.courseId !== undefined) {
+    let scope: string | null = null;
+    if (typeof body.courseId === "string" && body.courseId) {
+      const c = await query<{ id: string }>(
+        `SELECT id FROM courses WHERE id = $1`,
+        [body.courseId]
+      );
+      if (!c.rows[0]) {
+        return NextResponse.json({ error: "Scope course not found" }, { status: 400 });
+      }
+      scope = c.rows[0].id;
+    }
+    add("course_id", scope);
+  }
   if (body?.config !== undefined)
     add(
       "config",

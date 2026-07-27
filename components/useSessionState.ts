@@ -118,6 +118,7 @@ export interface ActivityState {
   mime?: string;
   url?: string;
   text?: string;
+  mediaType?: "image" | "pdf" | "link";
   video?: {
     provider: "youtube" | "video";
     ref: string;
@@ -157,6 +158,7 @@ export interface StepTool {
   url?: string;
   text?: string;
   minutes?: number;
+  mediaType?: "image" | "pdf" | "link";
 }
 
 export interface VideoState {

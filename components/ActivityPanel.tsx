@@ -913,28 +913,60 @@ export function ActivityPanel({
             </a>
           </>
         )}
-        {activity.exhibit === "url" && activity.url && (
-          <>
-            <iframe
-              src={activity.url}
-              title={activity.prompt}
-              sandbox="allow-scripts allow-same-origin allow-popups"
-              className="w-full h-[60vh] rounded-lg border border-slate-200 bg-white"
-            />
-            <p className="mt-2 text-xs text-slate-400">
-              Some sites don&apos;t allow embedding — if the frame is blank, use
-              the button.
-            </p>
-            <a
-              href={activity.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-block rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700"
-            >
-              Open link in a new tab
-            </a>
-          </>
-        )}
+        {activity.exhibit === "url" &&
+          activity.url &&
+          (() => {
+            const u = activity.url;
+            // Prefer the stored mediaType; fall back to the URL extension so
+            // uploaded images/PDFs render inline instead of as a "web link".
+            const kind =
+              activity.mediaType ??
+              (/\.(png|jpe?g|gif|webp|avif|svg)(\?|$)/i.test(u)
+                ? "image"
+                : /\.pdf(\?|$)/i.test(u)
+                  ? "pdf"
+                  : "link");
+            if (kind === "image") {
+              return (
+                <img
+                  src={u}
+                  alt={activity.prompt}
+                  className="max-w-full mx-auto rounded-lg border border-slate-200"
+                />
+              );
+            }
+            if (kind === "pdf") {
+              return (
+                <iframe
+                  src={u}
+                  title={activity.prompt}
+                  className="w-full h-[70vh] rounded-lg border border-slate-200"
+                />
+              );
+            }
+            return (
+              <>
+                <iframe
+                  src={u}
+                  title={activity.prompt}
+                  sandbox="allow-scripts allow-same-origin allow-popups"
+                  className="w-full h-[60vh] rounded-lg border border-slate-200 bg-white"
+                />
+                <p className="mt-2 text-xs text-slate-400">
+                  Some sites don&apos;t allow embedding — if the frame is blank,
+                  use the button.
+                </p>
+                <a
+                  href={u}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-block rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700"
+                >
+                  Open link in a new tab
+                </a>
+              </>
+            );
+          })()}
         {activity.exhibit === "text" && activity.text && (
           <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-5">
             <Markdown>{activity.text}</Markdown>
