@@ -827,7 +827,11 @@ export function buildActivityPayload(
   }
   if (activity.kind === "sort") {
     const c = config as { words?: string[]; columns?: string[] };
-    payload.words = c.words ?? [];
+    // Bank = authored words + any added live (column_index = -1), de-duped.
+    const added = responseRows
+      .filter((r) => r.column_index === -1 && typeof r.value === "string")
+      .map((r) => r.value);
+    payload.words = [...new Set([...(c.words ?? []), ...added])];
     payload.columns = c.columns ?? [];
     payload.placements = responseRows
       .filter(

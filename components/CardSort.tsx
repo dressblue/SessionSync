@@ -18,6 +18,7 @@ export function CardSort({
   placements,
   onPlace,
   onUnplace,
+  onAddWord,
   readOnly = false,
   presentation = false,
 }: {
@@ -26,13 +27,25 @@ export function CardSort({
   placements: Placement[];
   onPlace: (word: string, col: number) => void;
   onUnplace: (word: string, col: number) => void;
+  onAddWord?: (word: string) => void;
   readOnly?: boolean;
   presentation?: boolean;
 }) {
   // Optimistic mirror: apply moves instantly, re-sync when the server payload
-  // (a new placements reference — only changes on real updates) arrives.
+  // (a new reference — only changes on real updates) arrives.
   const [local, setLocal] = useState<Placement[]>(placements);
   useEffect(() => setLocal(placements), [placements]);
+  const [localWords, setLocalWords] = useState<string[]>(words);
+  useEffect(() => setLocalWords(words), [words]);
+  const [newWord, setNewWord] = useState("");
+
+  const addWord = () => {
+    const w = newWord.trim();
+    if (!w || !onAddWord) return;
+    if (!localWords.includes(w)) setLocalWords((prev) => [...prev, w]);
+    onAddWord(w);
+    setNewWord("");
+  };
 
   const colsOf = (word: string) =>
     new Set(local.filter((p) => p.word === word).map((p) => p.col));
@@ -98,7 +111,7 @@ export function CardSort({
   }, [dragging]);
 
   const chipText = presentation ? "text-lg" : "text-sm";
-  const unplacedCount = words.filter((w) => colsOf(w).size === 0).length;
+  const unplacedCount = localWords.filter((w) => colsOf(w).size === 0).length;
 
   return (
     <div className="select-none">
@@ -120,7 +133,7 @@ export function CardSort({
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          {words.map((w) => {
+          {localWords.map((w) => {
             const count = colsOf(w).size;
             const unplaced = count === 0;
             return (
@@ -149,6 +162,30 @@ export function CardSort({
             );
           })}
         </div>
+        {!readOnly && onAddWord && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              addWord();
+            }}
+            className="flex items-center gap-1.5 mt-2.5"
+          >
+            <input
+              value={newWord}
+              onChange={(e) => setNewWord(e.target.value)}
+              placeholder="Add a word or phrase…"
+              maxLength={80}
+              className="rounded-lg border border-slate-300 px-2.5 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              type="submit"
+              disabled={!newWord.trim()}
+              className="rounded-lg border border-indigo-300 text-indigo-600 px-2.5 py-1 text-sm font-medium hover:bg-indigo-50 disabled:opacity-40"
+            >
+              + Add
+            </button>
+          </form>
+        )}
       </div>
 
       {/* columns */}

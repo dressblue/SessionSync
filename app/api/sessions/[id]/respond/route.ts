@@ -246,17 +246,50 @@ export async function POST(
 
   // Word sort: place/unplace a word into a column. A word may live in several
   // columns (one response row per word+column). Shared board — anyone can move.
+  // Words can also be ADDED to the bank live (column_index = -1 rows).
   if (activity.kind === "sort") {
     const words = config.words ?? [];
     const columns = config.columns ?? [];
-    const word = typeof body?.word === "string" ? body.word : "";
+    const word = typeof body?.word === "string" ? body.word.trim() : "";
+
+    // Add a word to the shared list — facilitator or participant.
+    if (body?.action === "addword") {
+      if (!word) {
+        return NextResponse.json({ error: "Enter a word" }, { status: 400 });
+      }
+      const added = await query<{ value: string }>(
+        `SELECT DISTINCT value FROM activity_responses
+         WHERE activity_id = $1 AND column_index = -1`,
+        [activity.id]
+      );
+      const bank = new Set([...words, ...added.rows.map((r) => r.value)]);
+      if (bank.has(word)) return NextResponse.json({ ok: true }); // already there
+      if (bank.size >= 80) {
+        return NextResponse.json(
+          { error: "The word list is full (80 max)" },
+          { status: 400 }
+        );
+      }
+      await query(
+        `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+         VALUES ($1, $2, $3, -1, $4)`,
+        [randomUUID(), activity.id, participantId, word.slice(0, 160)]
+      );
+      return NextResponse.json({ ok: true });
+    }
+
     const col = Number(body?.col);
-    if (
-      !words.includes(word) ||
-      !Number.isInteger(col) ||
-      col < 0 ||
-      col >= columns.length
-    ) {
+    // The word must be in the live bank (authored list or a live addition).
+    const inBank =
+      words.includes(word) ||
+      !!(
+        await query<{ one: number }>(
+          `SELECT 1 AS one FROM activity_responses
+           WHERE activity_id = $1 AND column_index = -1 AND value = $2 LIMIT 1`,
+          [activity.id, word]
+        )
+      ).rows[0];
+    if (!inBank || !Number.isInteger(col) || col < 0 || col >= columns.length) {
       return NextResponse.json({ error: "Invalid placement" }, { status: 400 });
     }
     if (body?.action === "unplace") {

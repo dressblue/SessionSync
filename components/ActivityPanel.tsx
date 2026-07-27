@@ -1007,6 +1007,7 @@ export function ActivityPanel({
           onUnplace={(word, col) =>
             send({ action: "unplace", word, col }, "POST", false)
           }
+          onAddWord={(word) => send({ action: "addword", word }, "POST", false)}
           readOnly={!participantId && !canModerate}
           presentation={presentation}
         />
