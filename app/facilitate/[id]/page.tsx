@@ -84,6 +84,8 @@ function Console() {
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
+  // Word-sort columns (comma- or newline-separated); the word list uses toolList.
+  const [toolSortColumns, setToolSortColumns] = useState("");
   const [toolGraph, setToolGraph] = useState<WorkflowGraph | null>(null);
   const [toolSourced, setToolSourced] = useState(false);
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
@@ -283,6 +285,7 @@ function Console() {
     setToolExhibitRef("");
     setToolAnchorSet("agreement");
     setToolTimerMin(5);
+    setToolSortColumns("");
   }
 
   async function saveTool(stepId: string) {
@@ -316,7 +319,13 @@ function Console() {
     } else if ((toolKind === "vote" || toolKind === "likert") && toolSourced)
       body.sourcing = "participants";
     else if (toolKind === "vote") body.options = list;
-    else if (toolKind !== "whiteboard") body.items = list;
+    else if (toolKind === "sort") {
+      body.words = list;
+      body.columns = toolSortColumns
+        .split(/[,\n]/)
+        .map((c) => c.trim())
+        .filter(Boolean);
+    } else if (toolKind !== "whiteboard") body.items = list;
     if (toolKind === "likert") body.anchorSet = toolAnchorSet;
     const ok = await api(
       editingToolId
@@ -347,8 +356,9 @@ function Console() {
     setToolList(
       t.exhibit === "text"
         ? (t.text ?? "")
-        : (t.options ?? t.items ?? t.columns ?? []).join("\n")
+        : (t.words ?? t.options ?? t.items ?? t.columns ?? []).join("\n")
     );
+    setToolSortColumns((t.columns ?? []).join(", "));
     setToolGraph(t.graph ?? null);
   }
 
@@ -715,6 +725,7 @@ function Console() {
                             <option value="video">Video (synced)</option>
                             <option value="timer">Countdown timer</option>
                             <option value="wordcloud">Word cloud</option>
+                            <option value="sort">Word sort (drag to columns)</option>
                           </select>
                           <button
                             type="button"
@@ -840,6 +851,14 @@ function Console() {
                             <span className="font-semibold">Save to outline</span>.
                           </div>
                         )}
+                        {toolKind === "sort" && (
+                          <input
+                            value={toolSortColumns}
+                            onChange={(e) => setToolSortColumns(e.target.value)}
+                            placeholder="Column titles (2–4), comma-separated"
+                            className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        )}
                         {toolKind !== "whiteboard" &&
                           toolKind !== "exhibit" &&
                           toolKind !== "video" &&
@@ -855,7 +874,9 @@ function Console() {
                               onChange={(e) => setToolList(e.target.value)}
                               rows={3}
                               placeholder={
-                                toolKind === "columns"
+                                toolKind === "sort"
+                                  ? "Words to sort, one per line"
+                                  : toolKind === "columns"
                                   ? "Column titles, one per line (1–4) — e.g. each question"
                                   : toolKind === "vote"
                                     ? "Options, one per line (2–8)"
@@ -1243,6 +1264,8 @@ function Console() {
               myParticipantId={myPid}
               myParticipantName={user?.fullName ?? user?.username ?? undefined}
               roster={participants}
+              activeStepId={steps[session.currentStep]?.id ?? null}
+              activeStepTitle={steps[session.currentStep]?.title}
               onChanged={refresh}
             />
           )}

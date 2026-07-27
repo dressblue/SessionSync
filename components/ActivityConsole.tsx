@@ -22,6 +22,9 @@ interface Props {
   myParticipantId?: string;
   myParticipantName?: string;
   roster?: RosterEntry[];
+  /** The live/active agenda step — enables saving the activity as a step tool. */
+  activeStepId?: string | null;
+  activeStepTitle?: string;
   onChanged: () => void;
 }
 
@@ -69,6 +72,8 @@ export function ActivityConsole({
   myParticipantId,
   myParticipantName,
   roster,
+  activeStepId,
+  activeStepTitle,
   onChanged,
 }: Props) {
   const [kind, setKind] = useState<Kind>("vote");
@@ -120,8 +125,9 @@ export function ActivityConsole({
     }
   }
 
-  async function push(e: React.FormEvent) {
-    e.preventDefault();
+  // The activity config for the current form — used both to push it live and to
+  // save it as a reusable tool on the active agenda step.
+  function buildBody(): Record<string, unknown> {
     const list = listText
       .split("\n")
       .map((s) => s.trim())
@@ -163,17 +169,39 @@ export function ActivityConsole({
       body.items = list;
     }
     if (kind === "likert") body.anchorSet = anchorSet;
-    const ok = await call(`/api/sessions/${sessionId}/activities`, "POST", body);
-    if (ok) {
-      setPrompt("");
-      setListText("");
-      setGraph(null);
-      setColumns(["", ""]);
-      setExhibitUrl("");
-      setExhibitText("");
-      setVideoUrl("");
-      setCorrectIndex(0);
-    }
+    return body;
+  }
+
+  function resetForm() {
+    setPrompt("");
+    setListText("");
+    setGraph(null);
+    setColumns(["", ""]);
+    setExhibitUrl("");
+    setExhibitText("");
+    setVideoUrl("");
+    setCorrectIndex(0);
+  }
+
+  async function push(e: React.FormEvent) {
+    e.preventDefault();
+    const ok = await call(
+      `/api/sessions/${sessionId}/activities`,
+      "POST",
+      buildBody()
+    );
+    if (ok) resetForm();
+  }
+
+  // Save the configured activity as a reusable tool on the active agenda step.
+  async function saveToStep() {
+    if (!activeStepId) return;
+    const ok = await call(
+      `/api/sessions/${sessionId}/steps/${activeStepId}/tools`,
+      "POST",
+      buildBody()
+    );
+    if (ok) resetForm();
   }
 
   const segBtn = (active: boolean) =>
@@ -715,30 +743,52 @@ export function ActivityConsole({
               />
             )}
 
-            <button
-              type="submit"
-              disabled={
-                busy ||
-                (kind === "video"
-                  ? videoSource === "url"
-                    ? !videoUrl.trim()
-                    : !videoFileId
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="submit"
+                disabled={
+                  busy ||
+                  (kind === "video"
+                    ? videoSource === "url"
+                      ? !videoUrl.trim()
+                      : !videoFileId
+                    : kind === "timer"
+                      ? false
+                      : kind === "quiz"
+                        ? !prompt.trim() || quizOptions.length < 2
+                        : kind === "workflow"
+                          ? (graph?.nodes.length ?? 0) < 2
+                          : !prompt.trim())
+                }
+                className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40 transition"
+              >
+                {kind === "video"
+                  ? "Start video for all"
                   : kind === "timer"
-                    ? false
-                    : kind === "quiz"
-                      ? !prompt.trim() || quizOptions.length < 2
-                      : kind === "workflow"
-                        ? (graph?.nodes.length ?? 0) < 2
-                        : !prompt.trim())
-              }
-              className="self-start rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40 transition"
-            >
-              {kind === "video"
-                ? "Start video for all"
-                : kind === "timer"
-                  ? "Show timer"
-                  : "Push to participants"}
-            </button>
+                    ? "Show timer"
+                    : "Push to participants"}
+              </button>
+              {activeStepId && (
+                <button
+                  type="button"
+                  onClick={saveToStep}
+                  disabled={
+                    busy ||
+                    (kind === "workflow"
+                      ? (graph?.nodes.length ?? 0) < 2
+                      : kind !== "timer" && kind !== "video" && !prompt.trim())
+                  }
+                  title={
+                    activeStepTitle
+                      ? `Save this as a reusable tool on “${activeStepTitle}”`
+                      : "Save this as a reusable tool on the active step"
+                  }
+                  className="rounded-lg border border-slate-300 text-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-40 transition"
+                >
+                  ★ Save to step
+                </button>
+              )}
+            </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
           </form>
         </section>
