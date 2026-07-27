@@ -24,7 +24,8 @@ export type ActivityKind =
   | "exhibit"
   | "video"
   | "timer"
-  | "wordcloud";
+  | "wordcloud"
+  | "sort";
 
 export interface RichItem {
   title: string;
@@ -119,6 +120,8 @@ export interface ActivityState {
   url?: string;
   text?: string;
   mediaType?: "image" | "pdf" | "link";
+  words?: string[];
+  placements?: { id: string; word: string; col: number; mine: boolean }[];
   video?: {
     provider: "youtube" | "video";
     ref: string;
@@ -149,6 +152,7 @@ export interface StepTool {
   prompt: string;
   options?: string[];
   columns?: string[];
+  words?: string[];
   items?: string[];
   graph?: WorkflowGraph;
   sourcing?: "participants";

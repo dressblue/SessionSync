@@ -15,6 +15,7 @@ const VALID_KINDS = [
   "video",
   "timer",
   "wordcloud",
+  "sort",
 ];
 
 const str = (v: unknown, max = 2000) =>

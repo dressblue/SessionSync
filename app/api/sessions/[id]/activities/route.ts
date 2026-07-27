@@ -344,6 +344,22 @@ export async function POST(
       running: false,
       at: new Date().toISOString(),
     };
+  } else if (kind === "sort") {
+    const words = cleanList(body?.words, 60);
+    const columns = cleanList(body?.columns, 4);
+    if (words.length < 1) {
+      return NextResponse.json(
+        { error: "Add at least one word to sort" },
+        { status: 400 }
+      );
+    }
+    if (columns.length < 2) {
+      return NextResponse.json(
+        { error: "A word sort needs at least two columns" },
+        { status: 400 }
+      );
+    }
+    config = { words, columns };
   } else {
     return NextResponse.json({ error: "Unknown activity kind" }, { status: 400 });
   }

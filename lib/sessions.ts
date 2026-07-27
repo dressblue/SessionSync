@@ -36,7 +36,8 @@ export type ActivityKind =
   | "exhibit"
   | "video"
   | "timer"
-  | "wordcloud";
+  | "wordcloud"
+  | "sort";
 
 export interface ActivityRow {
   id: string;
@@ -192,6 +193,10 @@ export interface ActivityPayload {
   url?: string;
   text?: string;
   mediaType?: "image" | "pdf" | "link";
+  // sort (drag words into facilitator-defined columns; a word may go in many).
+  // `columns` reuses the existing comment-board field above.
+  words?: string[];
+  placements?: { id: string; word: string; col: number; mine: boolean }[];
   // video (synchronized playback)
   video?: {
     provider: "youtube" | "video";
@@ -818,6 +823,27 @@ export function buildActivityPayload(
         }
       })
       .filter((s): s is Stroke => s !== null);
+    return payload;
+  }
+  if (activity.kind === "sort") {
+    const c = config as { words?: string[]; columns?: string[] };
+    payload.words = c.words ?? [];
+    payload.columns = c.columns ?? [];
+    payload.placements = responseRows
+      .filter(
+        (r) =>
+          typeof r.column_index === "number" &&
+          r.column_index >= 0 &&
+          typeof r.value === "string"
+      )
+      .map((r) => ({
+        id: r.id,
+        word: r.value,
+        col: r.column_index as number,
+        mine:
+          (!!viewerParticipantId && r.participant_id === viewerParticipantId) ||
+          (facilitatorView && r.participant_id === null),
+      }));
     return payload;
   }
 

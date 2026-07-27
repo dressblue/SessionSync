@@ -28,6 +28,7 @@ const TOOL_BADGES: Record<string, string> = {
   video: "Video",
   timer: "Timer",
   wordcloud: "Cloud",
+  sort: "Sort",
 };
 
 // Compact delete affordance (replaces the word "Delete" to save row space).
@@ -79,6 +80,7 @@ function Console() {
     | "video"
     | "timer"
     | "wordcloud"
+    | "sort"
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
@@ -356,6 +358,7 @@ function Console() {
       prompt: tool.prompt,
       options: tool.options,
       columns: tool.columns,
+      words: tool.words,
       items: tool.items,
       graph: tool.graph,
       sourcing: tool.sourcing,

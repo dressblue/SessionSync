@@ -37,7 +37,8 @@ type Kind =
   | "exhibit"
   | "video"
   | "timer"
-  | "wordcloud";
+  | "wordcloud"
+  | "sort";
 type Sourcing = "facilitator" | "participants";
 
 const KIND_LABEL: Record<string, string> = {
@@ -53,6 +54,7 @@ const KIND_LABEL: Record<string, string> = {
   video: "Video",
   timer: "Timer",
   wordcloud: "Word cloud",
+  sort: "Word sort",
 };
 
 // Facilitator's activity station: up to two activities run side by side
@@ -154,6 +156,9 @@ export function ActivityConsole({
       body.sourcing = "participants";
     } else if (kind === "vote") {
       body.options = list;
+    } else if (kind === "sort") {
+      body.words = list;
+      body.columns = columns.map((c) => c.trim()).filter(Boolean);
     } else if (kind !== "whiteboard") {
       body.items = list;
     }
@@ -310,6 +315,7 @@ export function ActivityConsole({
                 ["video", "Video"],
                 ["timer", "Timer"],
                 ["wordcloud", "Word cloud"],
+                ["sort", "Word sort"],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -393,7 +399,63 @@ export function ActivityConsole({
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
 
-            {kind === "columns" ? (
+            {kind === "sort" ? (
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-semibold text-slate-500">
+                  Words to sort (one per line)
+                </label>
+                <textarea
+                  value={listText}
+                  onChange={(e) => setListText(e.target.value)}
+                  rows={5}
+                  placeholder={"One word or phrase per line"}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <label className="text-xs font-semibold text-slate-500 mt-1">
+                  Columns (2–4)
+                </label>
+                {columns.map((c, i) => (
+                  <div key={i} className="flex gap-1.5">
+                    <input
+                      value={c}
+                      onChange={(e) =>
+                        setColumns((cols) =>
+                          cols.map((v, j) => (j === i ? e.target.value : v))
+                        )
+                      }
+                      placeholder={`Column ${i + 1} title`}
+                      maxLength={120}
+                      className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    {columns.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setColumns((cols) => cols.filter((_, j) => j !== i))
+                        }
+                        className="rounded-lg border border-slate-200 px-2.5 text-xs text-slate-400 hover:text-rose-500 hover:border-rose-200"
+                        aria-label={`Remove column ${i + 1}`}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {columns.length < 4 && (
+                  <button
+                    type="button"
+                    onClick={() => setColumns((cols) => [...cols, ""])}
+                    className="self-start rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-50"
+                  >
+                    + Add column ({columns.length}/4)
+                  </button>
+                )}
+                <p className="text-[11px] text-slate-400">
+                  Participants drag each word into a column — a word can go in
+                  more than one.
+                </p>
+              </div>
+            ) : kind === "columns" ? (
               <div className="flex flex-col gap-1.5">
                 {columns.map((c, i) => (
                   <div key={i} className="flex gap-1.5">

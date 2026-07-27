@@ -12,6 +12,7 @@ import { LikertChart } from "./LikertChart";
 import { VideoPlayer } from "./VideoPlayer";
 import { TimerDisplay } from "./TimerDisplay";
 import { WordCloud } from "./WordCloud";
+import { CardSort } from "./CardSort";
 import { WorkflowBuilder } from "./WorkflowBuilder";
 import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
 
@@ -988,6 +989,26 @@ export function ActivityPanel({
           onStroke={(stroke) => send({ stroke }, "POST", false)}
           onUndo={(entryId) => send({ entryId }, "DELETE")}
           onClear={() => manage({ clear: true })}
+        />
+      </div>
+    );
+  }
+
+  // ---- Word sort: drag words into facilitator-defined columns ----
+  if (activity.kind === "sort") {
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Word sort")}
+        <CardSort
+          words={activity.words ?? []}
+          columns={activity.columns ?? []}
+          placements={activity.placements ?? []}
+          onPlace={(word, col) => send({ action: "place", word, col }, "POST", false)}
+          onUnplace={(word, col) =>
+            send({ action: "unplace", word, col }, "POST", false)
+          }
+          readOnly={!participantId && !canModerate}
+          presentation={presentation}
         />
       </div>
     );

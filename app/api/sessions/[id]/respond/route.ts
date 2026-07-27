@@ -85,6 +85,7 @@ export async function POST(
   let config: {
     options?: string[];
     columns?: string[];
+    words?: string[];
     items?: string[];
     phase?: string;
     scale?: number;
@@ -240,6 +241,45 @@ export async function POST(
        VALUES ($1, $2, $3, $4)`,
       [randomUUID(), activity.id, participantId, value]
     );
+    return NextResponse.json({ ok: true });
+  }
+
+  // Word sort: place/unplace a word into a column. A word may live in several
+  // columns (one response row per word+column). Shared board — anyone can move.
+  if (activity.kind === "sort") {
+    const words = config.words ?? [];
+    const columns = config.columns ?? [];
+    const word = typeof body?.word === "string" ? body.word : "";
+    const col = Number(body?.col);
+    if (
+      !words.includes(word) ||
+      !Number.isInteger(col) ||
+      col < 0 ||
+      col >= columns.length
+    ) {
+      return NextResponse.json({ error: "Invalid placement" }, { status: 400 });
+    }
+    if (body?.action === "unplace") {
+      await query(
+        `DELETE FROM activity_responses
+         WHERE activity_id = $1 AND column_index = $2 AND value = $3`,
+        [activity.id, col, word]
+      );
+      return NextResponse.json({ ok: true });
+    }
+    // place (default) — dedupe: at most one row per (word, column).
+    const existing = await query<{ id: string }>(
+      `SELECT id FROM activity_responses
+       WHERE activity_id = $1 AND column_index = $2 AND value = $3 LIMIT 1`,
+      [activity.id, col, word]
+    );
+    if (!existing.rows[0]) {
+      await query(
+        `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [randomUUID(), activity.id, participantId, col, word.slice(0, 160)]
+      );
+    }
     return NextResponse.json({ ok: true });
   }
 

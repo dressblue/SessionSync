@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import type { ActivityState, Stroke } from "@/components/useSessionState";
 import { LikertChart } from "@/components/LikertChart";
 import { WordCloud } from "@/components/WordCloud";
+import { CardSort } from "@/components/CardSort";
 import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
 
 interface ReportData {
@@ -29,6 +30,7 @@ const KIND_LABEL: Record<string, string> = {
   video: "Video",
   timer: "Timer",
   wordcloud: "Word cloud",
+  sort: "Word sort",
 };
 
 function strokesToDataUrl(strokes: Stroke[]): string {
@@ -110,6 +112,14 @@ function activityLines(a: ActivityState): string[] {
         ...w.map((e) => `  ${e.highlighted ? "★ " : ""}${e.value} (${e.name})`),
       ];
     });
+  }
+  if (a.kind === "sort") {
+    const cols = a.columns ?? [];
+    const placements = a.placements ?? [];
+    return cols.flatMap((title, ci) => [
+      `${title}:`,
+      ...placements.filter((p) => p.col === ci).map((p) => `  ${p.word}`),
+    ]);
   }
   if (a.kind === "whiteboard") {
     return [`Shared drawing with ${a.strokes?.length ?? 0} strokes`];
@@ -550,6 +560,17 @@ export default function ReportPage() {
                     onDownvote={() => {}}
                     onHide={() => {}}
                     onClearDownvotes={() => {}}
+                  />
+                </div>
+              ) : a.kind === "sort" ? (
+                <div className="mt-2">
+                  <CardSort
+                    words={a.words ?? []}
+                    columns={a.columns ?? []}
+                    placements={a.placements ?? []}
+                    onPlace={() => {}}
+                    onUnplace={() => {}}
+                    readOnly
                   />
                 </div>
               ) : (
