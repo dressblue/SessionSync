@@ -20,7 +20,8 @@ async function getTargetActivity(
 
 async function verifyParticipant(sessionId: string, participantId: string) {
   const res = await query<{ id: string }>(
-    `SELECT id FROM participants WHERE id = $1 AND session_id = $2`,
+    `SELECT id FROM participants
+       WHERE id = $1 AND session_id = $2 AND removed_at IS NULL`,
     [participantId, sessionId]
   );
   return !!res.rows[0];
@@ -45,9 +46,19 @@ export async function POST(
   if (rawParticipantId && (await verifyParticipant(id, rawParticipantId))) {
     participantId = rawParticipantId;
   } else if (rawParticipantId && typeof body?.name === "string" && body.name.trim()) {
-    // Self-heal: the client holds a valid id whose seat was removed (roster
-    // reset). Re-create it with the same id + supplied name so they can act
-    // immediately without waiting for the next heartbeat poll.
+    // Self-heal a genuinely-missing seat (e.g. after a roster reset) — but
+    // never resurrect one the facilitator terminated.
+    const existing = await query<{ removed_at: string | null }>(
+      `SELECT removed_at FROM participants WHERE id = $1 AND session_id = $2`,
+      [rawParticipantId, id]
+    );
+    if (existing.rows[0]) {
+      // Row exists but verifyParticipant failed → it was removed.
+      return NextResponse.json(
+        { error: "You've been removed from this session", removed: true },
+        { status: 403 }
+      );
+    }
     await query(
       `INSERT INTO participants (id, session_id, name)
        VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`,
@@ -79,6 +90,7 @@ export async function POST(
     scale?: number;
     richItems?: unknown[];
     revealed?: number;
+    answerRevealed?: boolean;
   } = {};
   try {
     config = JSON.parse(activity.config);
@@ -86,8 +98,73 @@ export async function POST(
     /* treated as empty below */
   }
 
-  // Word cloud: submit a word into the single shared bucket (column 0).
+  // Word cloud: submissions (column 0), participant downvotes (column -2).
   if (activity.kind === "wordcloud") {
+    // Participant downvote toggle — shrinks/hides a word (column -2, one per
+    // participant per word).
+    if (body?.action === "downvote") {
+      const word =
+        typeof body?.value === "string" ? body.value.trim().toLowerCase() : "";
+      if (!word || !participantId) {
+        return NextResponse.json({ error: "Nothing to vote on" }, { status: 400 });
+      }
+      const existing = await query<{ id: string }>(
+        `SELECT id FROM activity_responses
+           WHERE activity_id = $1 AND participant_id = $2
+             AND column_index = -2 AND lower(value) = $3`,
+        [activity.id, participantId, word]
+      );
+      if (existing.rows[0]) {
+        await query(`DELETE FROM activity_responses WHERE id = $1`, [
+          existing.rows[0].id,
+        ]);
+      } else {
+        await query(
+          `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+           VALUES ($1, $2, $3, -2, $4)`,
+          [randomUUID(), activity.id, participantId, word.slice(0, 60)]
+        );
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // Facilitator: clear a word's downvotes (restore it). Facilitator-gated.
+    if (body?.action === "clearDownvotes") {
+      if (!(await authorizeSession(req, id))) {
+        return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+      }
+      const word =
+        typeof body?.value === "string" ? body.value.trim().toLowerCase() : "";
+      if (word) {
+        await query(
+          `DELETE FROM activity_responses
+             WHERE activity_id = $1 AND column_index = -2 AND lower(value) = $2`,
+          [activity.id, word]
+        );
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // Facilitator: seed several words at once. Facilitator-gated.
+    if (Array.isArray(body?.words)) {
+      if (!(await authorizeSession(req, id))) {
+        return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+      }
+      const words = (body.words as unknown[])
+        .map((w) => (typeof w === "string" ? w.trim() : ""))
+        .filter(Boolean)
+        .slice(0, 60);
+      for (const w of words) {
+        await query(
+          `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+           VALUES ($1, $2, $3, 0, $4)`,
+          [randomUUID(), activity.id, participantId, w.slice(0, 60)]
+        );
+      }
+      return NextResponse.json({ ok: true, added: words.length });
+    }
+
+    // Single word submission (participant or facilitator seat).
     const value = typeof body?.value === "string" ? body.value.trim() : "";
     if (!value) {
       return NextResponse.json({ error: "Nothing to add" }, { status: 400 });
@@ -210,13 +287,21 @@ export async function POST(
     return NextResponse.json({ ok: true });
   }
 
-  if (activity.kind === "vote") {
+  if (activity.kind === "vote" || activity.kind === "quiz") {
+    // Once a quiz answer is revealed, choices are locked (no changing to the
+    // correct one after the fact).
+    if (activity.kind === "quiz" && config.answerRevealed) {
+      return NextResponse.json(
+        { error: "The answer has been revealed", removed: false },
+        { status: 409 }
+      );
+    }
     const option = body?.option;
     const max = (config.options ?? []).length;
     if (!Number.isInteger(option) || option < 0 || option >= max) {
       return NextResponse.json({ error: "Invalid option" }, { status: 400 });
     }
-    // One vote per participant; re-voting replaces the earlier choice.
+    // One answer per participant; re-answering replaces the earlier choice.
     await query(
       `DELETE FROM activity_responses WHERE activity_id = $1 AND participant_id = $2`,
       [activity.id, participantId]

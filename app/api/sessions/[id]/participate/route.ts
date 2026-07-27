@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
+import { getFacilitator } from "@/lib/viewer";
 import { randomUUID } from "crypto";
 import { query } from "@/lib/db";
-import { getFacilitatorFromRequest } from "@/lib/facilitators";
 import { authorizeSession } from "@/lib/sessions";
 
 // A facilitator's roster seat: lets them answer votes, add comments, rate,
@@ -13,7 +13,7 @@ export async function POST(
 ) {
   const { id } = await ctx.params;
   const session = await authorizeSession(req, id);
-  const facilitator = await getFacilitatorFromRequest(req);
+  const facilitator = await getFacilitator();
   if (!session || !facilitator) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }

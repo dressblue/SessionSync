@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
+import { getFacilitator } from "@/lib/viewer";
 import { query } from "@/lib/db";
 import {
   getCourseByCode,
-  getFacilitatorFromRequest,
 } from "@/lib/facilitators";
 
 // A facilitator joins a course team using the stable course code.
 export async function POST(req: Request) {
-  const facilitator = await getFacilitatorFromRequest(req);
+  const facilitator = await getFacilitator();
   if (!facilitator) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }

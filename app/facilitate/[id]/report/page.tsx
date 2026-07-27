@@ -2,13 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  facilitatorHeaders,
-  loadFacilitatorIdentity,
-  type FacilitatorIdentity,
-} from "@/components/identity";
 import type { ActivityState, Stroke } from "@/components/useSessionState";
 import { LikertChart } from "@/components/LikertChart";
+import { WordCloud } from "@/components/WordCloud";
 import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
 
 interface ReportData {
@@ -22,10 +18,12 @@ interface ReportData {
 
 const KIND_LABEL: Record<string, string> = {
   vote: "Vote",
+  quiz: "Quiz",
   likert: "Scoring survey",
   columns: "Comment board",
   reveal: "Reveal",
-  wheel: "Wheel",
+  wheel: "Network",
+  workflow: "Workflow",
   whiteboard: "Whiteboard",
   exhibit: "Presented",
   video: "Video",
@@ -64,6 +62,19 @@ function activityLines(a: ActivityState): string[] {
         `${o} — ${a.votes!.counts[i]} vote${a.votes!.counts[i] === 1 ? "" : "s"} (${Math.round((a.votes!.counts[i] / total) * 100)}%)`
     );
   }
+  if (a.kind === "quiz" && a.quiz) {
+    const total = a.quiz.total || 1;
+    const counts = a.quiz.counts ?? [];
+    const lines = (a.options ?? []).map((o, i) => {
+      const c = counts[i] ?? 0;
+      const mark = a.quiz!.correctIndex === i ? " ✓ correct" : "";
+      return `${o} — ${c} (${Math.round((c / total) * 100)}%)${mark}`;
+    });
+    if (a.quiz.correctCount != null) {
+      lines.push(`${a.quiz.correctCount} of ${a.quiz.total} answered correctly`);
+    }
+    return lines;
+  }
   if (a.kind === "likert") {
     return (a.items ?? []).map((item, i) => {
       const r = a.ratings?.[i];
@@ -74,6 +85,20 @@ function activityLines(a: ActivityState): string[] {
     return (a.richItems ?? []).map((i) =>
       i.note ? `${i.title} — ${i.note}` : i.title
     );
+  }
+  if (a.kind === "workflow") {
+    const g = a.workflow?.graph;
+    if (!g) return [];
+    const byId = new Map(g.nodes.map((n) => [n.id, n] as const));
+    // List each step, then its outgoing branches (with any choice label).
+    return g.nodes.flatMap((n) => {
+      const lines = [n.note ? `${n.title} — ${n.note}` : n.title];
+      for (const e of g.edges.filter((e) => e.from === n.id)) {
+        const to = byId.get(e.to)?.title ?? "";
+        lines.push(`  → ${e.label ? `${e.label}: ` : ""}${to}`);
+      }
+      return lines;
+    });
   }
   if (a.kind === "reveal") {
     // Each revealed item, followed by the words the room captured for it.
@@ -232,27 +257,13 @@ function drawLikertSlide(slide: any, a: ActivityState) {
 export default function ReportPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [identity, setIdentity] = useState<FacilitatorIdentity | null>(null);
-  const [key, setKey] = useState<string | null>(null);
-  const [checked, setChecked] = useState(false);
   const [report, setReport] = useState<ReportData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    setIdentity(loadFacilitatorIdentity());
-    setKey(localStorage.getItem(`ss_facilitator_${id}`));
-    setChecked(true);
-  }, [id]);
-
   const load = useCallback(async () => {
-    if (!checked) return;
     const res = await fetch(`/api/sessions/${id}/report`, {
-      headers: {
-        ...(key ? { "x-facilitator-key": key } : {}),
-        ...facilitatorHeaders(identity),
-      },
       cache: "no-store",
     });
     const data = await res.json();
@@ -261,7 +272,7 @@ export default function ReportPage() {
       return;
     }
     setReport(data);
-  }, [checked, id, key, identity]);
+  }, [id]);
 
   useEffect(() => {
     load();
@@ -365,19 +376,6 @@ export default function ReportPage() {
     }
   }
 
-  if (!checked) return null;
-  if (!identity && !key) {
-    return (
-      <main className="flex-1 flex items-center justify-center px-6 text-center">
-        <div>
-          <h1 className="text-xl font-semibold">Facilitator access needed</h1>
-          <p className="text-slate-500 mt-2">
-            Open this report from the session console.
-          </p>
-        </div>
-      </main>
-    );
-  }
   if (!report) {
     return (
       <main className="flex-1 flex items-center justify-center text-slate-500">
@@ -543,6 +541,17 @@ export default function ReportPage() {
                     );
                   })}
                 </ul>
+              ) : a.kind === "wordcloud" && (a.cloud?.length ?? 0) > 0 ? (
+                <div className="mt-2">
+                  <WordCloud
+                    cloud={a.cloud ?? []}
+                    canModerate={false}
+                    readOnly
+                    onDownvote={() => {}}
+                    onHide={() => {}}
+                    onClearDownvotes={() => {}}
+                  />
+                </div>
               ) : (
                 <ul className="mt-1.5 text-sm text-slate-700 space-y-0.5">
                   {activityLines(a).map((line, i) => (

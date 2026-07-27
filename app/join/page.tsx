@@ -9,7 +9,13 @@ function JoinForm() {
   const [code, setCode] = useState(searchParams.get("code")?.toUpperCase() ?? "");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const linkError =
+    {
+      badlink: "That personal link isn't valid. Ask your facilitator for a new one.",
+      nosession: "This course has no session yet — check back soon.",
+      closed: "This cohort isn't open right now. Check the dates with your facilitator.",
+    }[searchParams.get("e") ?? ""] ?? null;
+  const [error, setError] = useState<string | null>(linkError);
 
   async function join(e: React.FormEvent) {
     e.preventDefault();

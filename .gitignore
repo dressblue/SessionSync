@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local embedded database
 .data/
+
+# clerk configuration (can include secrets)
+/.clerk/

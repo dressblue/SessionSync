@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { query } from "@/lib/db";
-import { getSessionByCode, type SessionRow } from "@/lib/sessions";
+import {
+  cohortAccessError,
+  getSessionByCode,
+  type SessionRow,
+} from "@/lib/sessions";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -35,6 +39,11 @@ export async function POST(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "No session found for that key" }, { status: 404 });
   }
+  // Cohort access window: templates never joinable; cohorts only in-window.
+  const windowErr = await cohortAccessError(session.course_id);
+  if (windowErr) {
+    return NextResponse.json({ error: windowErr }, { status: 403 });
+  }
   // Rejoining with the same name reclaims the existing identity (reconnect or
   // device switch) instead of creating a roster duplicate.
   const trimmed = name.slice(0, 80).trim();
@@ -45,9 +54,12 @@ export async function POST(req: Request) {
   let participantId: string;
   if (existing.rows[0]) {
     participantId = existing.rows[0].id;
-    await query(`UPDATE participants SET last_seen = now() WHERE id = $1`, [
-      participantId,
-    ]);
+    // Rejoining reclaims the seat — and clears any facilitator termination, so
+    // a re-joined participant isn't immediately booted by the removed check.
+    await query(
+      `UPDATE participants SET last_seen = now(), removed_at = NULL WHERE id = $1`,
+      [participantId]
+    );
   } else {
     participantId = randomUUID();
     await query(

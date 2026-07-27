@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
+import { getFacilitator } from "@/lib/viewer";
 import { query } from "@/lib/db";
 import {
   getCourse,
-  getFacilitatorFromRequest,
   isCourseFacilitator,
 } from "@/lib/facilitators";
 
@@ -11,7 +11,7 @@ export async function GET(
   ctx: { params: Promise<{ cid: string }> }
 ) {
   const { cid } = await ctx.params;
-  const facilitator = await getFacilitatorFromRequest(req);
+  const facilitator = await getFacilitator();
   if (!facilitator || !(await isCourseFacilitator(cid, facilitator.id))) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
@@ -32,8 +32,16 @@ export async function GET(
        FROM sessions WHERE course_id = $1 ORDER BY position ASC, created_at ASC`,
       [cid]
     ),
-    query<{ id: string; name: string; role: string }>(
-      `SELECT f.id, f.name, cf.role FROM course_facilitators cf
+    query<{
+      id: string;
+      name: string;
+      email: string | null;
+      role: string;
+      pending: boolean;
+    }>(
+      `SELECT f.id, f.name, f.email, cf.role,
+              (f.clerk_user_id IS NULL) AS pending
+       FROM course_facilitators cf
        JOIN facilitators f ON f.id = cf.facilitator_id
        WHERE cf.course_id = $1 ORDER BY cf.added_at ASC`,
       [cid]
@@ -62,6 +70,17 @@ export async function GET(
       title: course.title,
       description: course.description,
       code: course.code,
+      isTemplate: course.is_template,
+      templateId: course.template_id,
+      startsAt: course.starts_at,
+      endsAt: course.ends_at,
+      cohortLabel: course.cohort_label,
+    },
+    // (DELETE handler below removes the whole course.)
+    me: {
+      id: facilitator.id,
+      role: team.rows.find((t) => t.id === facilitator.id)?.role ?? "facilitator",
+      isAdmin: facilitator.isAdmin,
     },
     team: team.rows,
     materials: materials.rows.map((m) => ({
@@ -90,4 +109,38 @@ export async function GET(
         new Date(s.join_key_expires).getTime() > now,
     })),
   });
+}
+
+// Delete a course and everything under it. Owner (of this course) or admin only.
+// sessions.course_id has no FK, so sessions are deleted explicitly first (which
+// CASCADEs steps → step_tools, activities → responses, participants, notes,
+// messages); deleting the course row then CASCADEs course_facilitators,
+// course_students, course_materials, course_files.
+export async function DELETE(
+  req: Request,
+  ctx: { params: Promise<{ cid: string }> }
+) {
+  const { cid } = await ctx.params;
+  const facilitator = await getFacilitator();
+  if (!facilitator) {
+    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  }
+  const owner = await query(
+    `SELECT 1 FROM course_facilitators
+       WHERE course_id = $1 AND facilitator_id = $2 AND role = 'owner'`,
+    [cid, facilitator.id]
+  );
+  if (!facilitator.isAdmin && owner.rows.length === 0) {
+    return NextResponse.json(
+      { error: "Only the course owner or an admin can delete a course" },
+      { status: 403 }
+    );
+  }
+  const course = await getCourse(cid);
+  if (!course) {
+    return NextResponse.json({ error: "Course not found" }, { status: 404 });
+  }
+  await query(`DELETE FROM sessions WHERE course_id = $1`, [cid]);
+  await query(`DELETE FROM courses WHERE id = $1`, [cid]);
+  return NextResponse.json({ ok: true });
 }

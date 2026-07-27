@@ -12,6 +12,7 @@ import { LikertChart } from "./LikertChart";
 import { VideoPlayer } from "./VideoPlayer";
 import { TimerDisplay } from "./TimerDisplay";
 import { WordCloud } from "./WordCloud";
+import { WorkflowBuilder } from "./WorkflowBuilder";
 import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
 
 interface Props {
@@ -25,6 +26,8 @@ interface Props {
   moderationHeaders?: Record<string, string>;
   /** Session roster — enables the who's-responded strip. */
   roster?: RosterEntry[];
+  /** Projector/presenter mode — scale visuals up for across-the-room viewing. */
+  presentation?: boolean;
   onChanged: () => void;
 }
 
@@ -41,6 +44,7 @@ export function ActivityPanel({
   participantName,
   moderationHeaders,
   roster,
+  presentation = false,
   onChanged,
 }: Props) {
   const [drafts, setDrafts] = useState<Record<number, string>>({});
@@ -449,7 +453,7 @@ export function ActivityPanel({
     const activeItem = active >= 0 ? items[active] : null;
     return (
       <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
-        {header("Wheel")}
+        {header("Network")}
         <div style={{ perspective: 1000 }}>
           <svg
             viewBox="0 0 520 500"
@@ -554,9 +558,195 @@ export function ActivityPanel({
     );
   }
 
+  // ---- Workflow (facilitator-driven step graph, with branching) ----
+  if (activity.kind === "workflow") {
+    const wf = activity.workflow;
+    if (!wf || wf.total === 0) return null;
+    const {
+      current,
+      step,
+      choices,
+      visited,
+      atStart,
+      isEnd,
+      showMap,
+      graph,
+      history,
+    } = wf;
+    // The predecessor for the word-sequence breadcrumb: the step we came from
+    // (history), else a graph edge that points at the current step.
+    const nodeTitleById = (id: string) =>
+      graph?.nodes.find((n) => n.id === id)?.title ?? "";
+    const prevId =
+      history.length > 0
+        ? history[history.length - 1]
+        : (graph?.edges.find((e) => e.to === current)?.from ?? null);
+    const prevTitle = prevId ? nodeTitleById(prevId) : null;
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Workflow")}
+        <p
+          className={`font-semibold uppercase tracking-wide text-slate-400 ${
+            presentation ? "text-sm" : "text-[11px]"
+          }`}
+        >
+          Step {visited}
+          {isEnd ? " · final" : ""}
+        </p>
+
+        {/* Word sequence: predecessor → current → successor(s). Facilitator only
+            (revealing the next steps to participants would break "no peeking"). */}
+        {canModerate && (prevTitle || choices.length > 0) && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+            {prevTitle && prevId && (
+              <>
+                <button
+                  onClick={() =>
+                    manage({ workflow: { action: "goto", nodeId: prevId } })
+                  }
+                  disabled={busy}
+                  title="Go to the previous step"
+                  className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+                >
+                  {prevTitle}
+                </button>
+                <span className="text-slate-300">→</span>
+              </>
+            )}
+            <span className="rounded-md bg-indigo-600 px-2 py-1 font-semibold text-white">
+              {step?.title ?? "—"}
+            </span>
+            {choices.length > 0 && <span className="text-slate-300">→</span>}
+            {choices.map((c) => (
+              <button
+                key={c.to}
+                onClick={() =>
+                  manage({ workflow: { action: "goto", nodeId: c.to } })
+                }
+                disabled={busy}
+                title="Go to this step"
+                className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+              >
+                {c.label ? `${c.label}: ${c.title}` : c.title}
+              </button>
+            ))}
+            {isEnd && (
+              <span className="text-[11px] font-medium text-emerald-600">
+                ✓ end
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Current step — highlighted, large on the projector */}
+        {step && (
+          <div
+            key={current}
+            className="reveal-in mt-1.5 rounded-xl border-2 border-indigo-500 bg-indigo-50/40 px-4 py-3"
+          >
+            <h3
+              className={`font-bold text-slate-900 ${
+                presentation ? "text-3xl" : "text-xl"
+              }`}
+            >
+              {step.title}
+            </h3>
+            {step.note && (
+              <div
+                className={`mt-2 prose prose-slate max-w-none ${
+                  presentation ? "prose-lg" : "prose-sm"
+                }`}
+              >
+                <Markdown>{step.note}</Markdown>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Facilitator: Back / Restart + the live map. Navigation happens by
+            clicking a step or a connector on the map, or a chip in the sequence
+            above — so no separate Continue/choice buttons are needed. */}
+        {canModerate ? (
+          <>
+            {isEnd && (
+              <p className="mt-4 text-sm font-medium text-emerald-600">
+                ✓ End of this path.
+              </p>
+            )}
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => manage({ workflow: { action: "back" } })}
+                disabled={busy || history.length === 0}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+              >
+                ← Back
+              </button>
+              <button
+                onClick={() => manage({ workflow: { action: "restart" } })}
+                disabled={busy || atStart}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-40"
+              >
+                ↺ Restart
+              </button>
+              {/* Show the whole flow on participants' + the projector screen. */}
+              <button
+                onClick={() =>
+                  manage({ workflow: { action: "showMap", value: !showMap } })
+                }
+                disabled={busy}
+                className={`ml-auto rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-40 ${
+                  showMap
+                    ? "bg-emerald-600 text-white hover:bg-emerald-500"
+                    : "border border-slate-300 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {showMap ? "✓ Showing map to room" : "Show map to room"}
+              </button>
+            </div>
+
+            {/* Live map — click any step or connector to jump there */}
+            {graph && (
+              <div className="mt-4">
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Map — click a step or connector to jump
+                </p>
+                <WorkflowBuilder
+                  value={graph}
+                  readOnly
+                  currentId={current}
+                  visited={history}
+                  height={520}
+                  onSelect={(nodeId) =>
+                    manage({ workflow: { action: "goto", nodeId } })
+                  }
+                />
+              </div>
+            )}
+          </>
+        ) : showMap && graph ? (
+          /* Participant / projector: the facilitator is showing the whole flow,
+             auto-fit to the screen with the current step highlighted. */
+          <div className="mt-4">
+            <WorkflowBuilder
+              value={graph}
+              readOnly
+              currentId={current}
+              height={presentation ? 460 : 320}
+            />
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-slate-400">
+            Your facilitator is guiding this workflow.
+          </p>
+        )}
+      </div>
+    );
+  }
+
   // ---- Word cloud ----
   if (activity.kind === "wordcloud") {
-    const entries = activity.entries ?? [];
+    const cloud = activity.cloud ?? [];
     async function toggleWord(ids: string[], hide: boolean) {
       if (!moderationHeaders || busy) return;
       setBusy(true);
@@ -579,11 +769,15 @@ export function ActivityPanel({
       <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
         {header("Word cloud")}
         <WordCloud
-          entries={entries}
+          cloud={cloud}
           canModerate={canModerate}
-          onToggleWord={toggleWord}
+          readOnly={!participantId && !canModerate}
+          present={presentation}
+          onDownvote={(word) => send({ value: word, action: "downvote" })}
+          onHide={toggleWord}
+          onClearDownvotes={(word) => send({ value: word, action: "clearDownvotes" })}
         />
-        {participantId && (
+        {participantId && !canModerate && (
           <form
             className="mt-4 flex gap-1.5"
             onSubmit={(e) => {
@@ -608,6 +802,41 @@ export function ActivityPanel({
             >
               Add
             </button>
+          </form>
+        )}
+        {canModerate && (
+          <form
+            className="mt-4 flex flex-col gap-1.5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const words = (drafts[1] ?? "")
+                .split(/[,\n]/)
+                .map((s) => s.trim())
+                .filter(Boolean);
+              if (!words.length) return;
+              send({ words });
+              setDrafts((d) => ({ ...d, 1: "" }));
+            }}
+          >
+            <p className="text-[11px] text-slate-400">
+              Seed the cloud — words separated by commas or new lines.
+              Participants add their own and tap to shrink.
+            </p>
+            <div className="flex gap-1.5">
+              <input
+                value={drafts[1] ?? ""}
+                onChange={(e) => setDrafts((d) => ({ ...d, 1: e.target.value }))}
+                placeholder="courage, patience, listening, presence"
+                className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <button
+                type="submit"
+                disabled={busy || !(drafts[1] ?? "").trim()}
+                className="rounded-lg border border-indigo-300 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50 disabled:opacity-40"
+              >
+                Add words
+              </button>
+            </div>
           </form>
         )}
         {responderStrip("Contributed")}
@@ -733,6 +962,117 @@ export function ActivityPanel({
   }
 
   // ---- Population vote ----
+  // ---- Quiz: a poll with a correct answer, revealed on the facilitator's cue ----
+  if (activity.kind === "quiz") {
+    const { options = [], quiz } = activity;
+    const revealed = quiz?.revealed ?? false;
+    const showAnswer = revealed || canModerate;
+    const counts = quiz?.counts ?? [];
+    const haveCounts = counts.length === options.length;
+    const total = quiz?.total ?? 0;
+    const myChoice = quiz?.myChoice ?? null;
+    const correctIndex = quiz?.correctIndex ?? null;
+    const answered = myChoice !== null;
+    const locked = revealed; // answers freeze once the reveal happens
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Quiz")}
+        <div className="flex flex-col gap-2">
+          {options.map((opt, i) => {
+            const chosen = myChoice === i;
+            const isCorrect = correctIndex === i;
+            const pct =
+              showAnswer && haveCounts && total > 0
+                ? Math.round((counts[i] / total) * 100)
+                : 0;
+            let cls = "border-slate-200 hover:border-slate-300";
+            if (showAnswer && isCorrect)
+              cls = "border-green-500 ring-1 ring-green-500 bg-green-50";
+            else if (revealed && chosen && !isCorrect)
+              cls = "border-rose-400 ring-1 ring-rose-400 bg-rose-50";
+            else if (chosen) cls = "border-indigo-500 ring-1 ring-indigo-500";
+            const interactive = !!participantId && !locked && !canModerate;
+            return (
+              <button
+                key={i}
+                disabled={!interactive || busy}
+                onClick={() => interactive && send({ option: i })}
+                className={`relative overflow-hidden text-left rounded-lg border px-4 py-3 transition ${cls} ${
+                  interactive ? "cursor-pointer" : "cursor-default"
+                }`}
+              >
+                {showAnswer && haveCounts && (
+                  <span
+                    className="absolute inset-y-0 left-0 bg-slate-100"
+                    style={{ width: `${pct}%` }}
+                  />
+                )}
+                <span className="relative flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium flex items-center gap-1.5">
+                    {showAnswer && isCorrect && (
+                      <span className="text-green-600">✓</span>
+                    )}
+                    {revealed && chosen && !isCorrect && (
+                      <span className="text-rose-500">✗</span>
+                    )}
+                    {!showAnswer && chosen && (
+                      <span className="text-indigo-600">●</span>
+                    )}
+                    {opt}
+                    {canModerate && isCorrect && !revealed && (
+                      <span className="text-[10px] uppercase font-semibold text-green-600 ml-1">
+                        answer
+                      </span>
+                    )}
+                  </span>
+                  {showAnswer && haveCounts && (
+                    <span className="text-xs text-slate-500 tabular-nums">
+                      {counts[i]} · {pct}%
+                    </span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-3 text-xs text-slate-400">
+          {revealed
+            ? answered
+              ? myChoice === correctIndex
+                ? "✓ You got it right!"
+                : "Not quite — the correct answer is highlighted."
+              : `${total} answered`
+            : participantId
+              ? answered
+                ? "Answer locked in — waiting for the reveal."
+                : "Tap your answer."
+              : `${total} answered`}
+        </p>
+        {canModerate && (
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              onClick={() => manage({ revealAnswer: !revealed })}
+              disabled={busy}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-40 ${
+                revealed
+                  ? "border border-slate-300 text-slate-600 hover:bg-slate-50"
+                  : "bg-green-600 text-white hover:bg-green-700"
+              }`}
+            >
+              {revealed ? "Hide answer" : "Reveal answer"}
+            </button>
+            {revealed && quiz?.correctCount != null && (
+              <span className="text-xs text-slate-500 tabular-nums">
+                {quiz.correctCount} of {total} correct
+              </span>
+            )}
+          </div>
+        )}
+        {responderStrip("Answered")}
+      </div>
+    );
+  }
+
   if (activity.kind === "vote") {
     const { options = [], votes } = activity;
     const counts = votes?.counts ?? options.map(() => 0);

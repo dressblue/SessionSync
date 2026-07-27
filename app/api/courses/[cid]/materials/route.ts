@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
+import { getFacilitator } from "@/lib/viewer";
 import { randomUUID } from "crypto";
 import { query } from "@/lib/db";
 import {
-  getFacilitatorFromRequest,
   isCourseFacilitator,
 } from "@/lib/facilitators";
 
@@ -12,7 +12,7 @@ export async function POST(
   ctx: { params: Promise<{ cid: string }> }
 ) {
   const { cid } = await ctx.params;
-  const facilitator = await getFacilitatorFromRequest(req);
+  const facilitator = await getFacilitator();
   if (!facilitator || !(await isCourseFacilitator(cid, facilitator.id))) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }

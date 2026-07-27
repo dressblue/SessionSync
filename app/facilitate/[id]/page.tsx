@@ -1,23 +1,28 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
-import { useSessionState, type StepTool } from "@/components/useSessionState";
+import { useParams } from "next/navigation";
+import { UserButton, useUser } from "@clerk/nextjs";
+import {
+  useSessionState,
+  type StepTool,
+  type WorkflowGraph,
+} from "@/components/useSessionState";
+import { WorkflowBuilder } from "@/components/WorkflowBuilder";
 import { Markdown } from "@/components/Markdown";
 import { ActivityConsole } from "@/components/ActivityConsole";
-import {
-  facilitatorHeaders,
-  loadFacilitatorIdentity,
-  type FacilitatorIdentity,
-} from "@/components/identity";
+import { Chat } from "@/components/Chat";
+import { SpotlightBanner } from "@/components/SpotlightMessage";
 import { LIKERT_ANCHOR_LABELS } from "@/lib/likert";
+import { shareOrigin } from "@/lib/appOrigin";
 
 const TOOL_BADGES: Record<string, string> = {
   vote: "Vote",
   likert: "Score",
   columns: "Board",
   reveal: "Reveal",
-  wheel: "Wheel",
+  wheel: "Network",
+  workflow: "Flow",
   whiteboard: "Draw",
   exhibit: "Present",
   video: "Video",
@@ -27,9 +32,7 @@ const TOOL_BADGES: Record<string, string> = {
 
 function Console() {
   const { id } = useParams<{ id: string }>();
-  const searchParams = useSearchParams();
-  const [key, setKey] = useState<string | null>(null);
-  const [identity, setIdentity] = useState<FacilitatorIdentity | null>(null);
+  const { user } = useUser();
   const [checked, setChecked] = useState(false);
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
@@ -37,6 +40,7 @@ function Console() {
   // Agenda editing state
   const [newTitle, setNewTitle] = useState("");
   const [newContent, setNewContent] = useState("");
+  const [addStepOpen, setAddStepOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
@@ -46,10 +50,12 @@ function Console() {
   const [toolsOpenFor, setToolsOpenFor] = useState<string | null>(null);
   const [toolKind, setToolKind] = useState<
     | "vote"
+    | "quiz"
     | "likert"
     | "columns"
     | "reveal"
     | "wheel"
+    | "workflow"
     | "whiteboard"
     | "exhibit"
     | "video"
@@ -58,22 +64,24 @@ function Console() {
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
+  const [toolGraph, setToolGraph] = useState<WorkflowGraph | null>(null);
   const [toolSourced, setToolSourced] = useState(false);
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
   const [toolExhibitType, setToolExhibitType] = useState<"file" | "url" | "text">("file");
   const [toolExhibitRef, setToolExhibitRef] = useState("");
   const [toolAnchorSet, setToolAnchorSet] = useState("agreement");
   const [toolTimerMin, setToolTimerMin] = useState(5);
+  // Tool library
+  const [viewerAdmin, setViewerAdmin] = useState(false);
+  const [libPickFor, setLibPickFor] = useState<string | null>(null);
+  const [libTools, setLibTools] = useState<
+    { id: string; name: string; description: string; category: string; kind: string }[] | null
+  >(null);
+  const [libQ, setLibQ] = useState("");
 
   useEffect(() => {
-    const urlKey = searchParams.get("key");
-    const stored = localStorage.getItem(`ss_facilitator_${id}`);
-    const resolved = urlKey ?? stored;
-    if (urlKey) localStorage.setItem(`ss_facilitator_${id}`, urlKey);
-    setKey(resolved);
-    setIdentity(loadFacilitatorIdentity());
     setChecked(true);
-    setOrigin(window.location.origin);
+    setOrigin(shareOrigin());
     // Restore an unsent "add step" draft after a reload or dropped tab.
     const draft = localStorage.getItem(`ss_draft_${id}`);
     if (draft) {
@@ -81,11 +89,13 @@ function Console() {
         const { title, content } = JSON.parse(draft);
         setNewTitle(title ?? "");
         setNewContent(content ?? "");
+        // Surface an unsent draft so it isn't hidden behind the collapse.
+        if (title || content) setAddStepOpen(true);
       } catch {
         localStorage.removeItem(`ss_draft_${id}`);
       }
     }
-  }, [id, searchParams]);
+  }, [id]);
 
   // Keep the add-step draft on disk so unsaved typing survives a reconnect.
   useEffect(() => {
@@ -100,23 +110,15 @@ function Console() {
     }
   }, [checked, id, newTitle, newContent]);
 
-  const authHeaders = {
-    ...(key ? { "x-facilitator-key": key } : {}),
-    ...facilitatorHeaders(identity),
-  };
   // The facilitator's own roster seat, so they can participate in activities
-  // like a student while keeping full control.
+  // like a student while keeping full control. Auth rides the Clerk cookie.
   const [myPid, setMyPid] = useState<string | undefined>(undefined);
   useEffect(() => {
-    if (!checked || !identity || myPid) return;
+    if (!checked || myPid) return;
     (async () => {
       try {
         const res = await fetch(`/api/sessions/${id}/participate`, {
           method: "POST",
-          headers: {
-            ...(key ? { "x-facilitator-key": key } : {}),
-            ...facilitatorHeaders(identity),
-          },
         });
         if (res.ok) {
           const data = await res.json();
@@ -126,11 +128,10 @@ function Console() {
         /* participation is optional; console still works without it */
       }
     })();
-  }, [checked, identity, key, id, myPid]);
+  }, [checked, id, myPid]);
 
   const { state, error, refresh } = useSessionState(id, {
     intervalMs: 2000,
-    headers: authHeaders,
     participantId: myPid,
   });
 
@@ -140,11 +141,7 @@ function Console() {
       try {
         const res = await fetch(path, {
           method,
-          headers: {
-            "Content-Type": "application/json",
-            ...(key ? { "x-facilitator-key": key } : {}),
-            ...facilitatorHeaders(identity),
-          },
+          headers: { "Content-Type": "application/json" },
           body: body === undefined ? undefined : JSON.stringify(body),
         });
         if (!res.ok) {
@@ -158,8 +155,63 @@ function Console() {
         return false;
       }
     },
-    [key, identity, refresh]
+    [refresh]
   );
+
+  // Is the viewer an admin? (gates the "⭐ To library" promote action)
+  useEffect(() => {
+    fetch("/api/me", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setViewerAdmin(!!d?.isAdmin))
+      .catch(() => {});
+  }, []);
+
+  async function openLibPicker(stepId: string) {
+    setLibPickFor(stepId);
+    setLibQ("");
+    const res = await fetch("/api/tool-library", { cache: "no-store" });
+    if (res.ok) setLibTools((await res.json()).tools);
+  }
+  async function searchLib(q: string) {
+    setLibQ(q);
+    const res = await fetch(
+      `/api/tool-library?q=${encodeURIComponent(q)}`,
+      { cache: "no-store" }
+    );
+    if (res.ok) setLibTools((await res.json()).tools);
+  }
+  async function cloneFromLibrary(templateId: string) {
+    if (!libPickFor) return;
+    const ok = await api(
+      `/api/sessions/${id}/steps/${libPickFor}/tools`,
+      "POST",
+      { fromTemplateId: templateId }
+    );
+    if (ok) {
+      setLibPickFor(null);
+      setLibTools(null);
+    }
+  }
+  async function promoteToLibrary(tool: StepTool) {
+    const name = window.prompt(
+      "Save this tool to the library as:",
+      tool.prompt || tool.kind
+    );
+    if (name == null || !name.trim()) return;
+    const category =
+      window.prompt("Category (optional — e.g. Workflow, Hello session):", "") ??
+      "";
+    const res = await fetch("/api/tool-library", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fromStepToolId: tool.id,
+        name: name.trim(),
+        category: category.trim(),
+      }),
+    });
+    setActionError(res.ok ? "Saved to the tool library ✓" : "Could not save to library");
+  }
 
   const control = (action: string, step?: number) =>
     api(`/api/sessions/${id}/control`, "POST", { action, step });
@@ -196,6 +248,7 @@ function Console() {
   function resetToolForm() {
     setToolPrompt("");
     setToolList("");
+    setToolGraph(null);
     setToolSourced(false);
     setEditingToolId(null);
     setToolExhibitType("file");
@@ -223,6 +276,15 @@ function Console() {
       body.url = toolExhibitRef;
     } else if (toolKind === "timer") {
       body.minutes = toolTimerMin;
+    } else if (toolKind === "workflow") {
+      body.graph = toolGraph;
+      // A workflow's name is optional — fall back to the start step's title.
+      if (!toolPrompt.trim()) {
+        const start =
+          toolGraph?.nodes.find((n) => n.id === toolGraph.startId) ??
+          toolGraph?.nodes[0];
+        body.prompt = start?.title || "Workflow";
+      }
     } else if ((toolKind === "vote" || toolKind === "likert") && toolSourced)
       body.sourcing = "participants";
     else if (toolKind === "vote") body.options = list;
@@ -259,6 +321,7 @@ function Console() {
         ? (t.text ?? "")
         : (t.options ?? t.items ?? t.columns ?? []).join("\n")
     );
+    setToolGraph(t.graph ?? null);
   }
 
   function launchTool(tool: StepTool) {
@@ -268,6 +331,7 @@ function Console() {
       options: tool.options,
       columns: tool.columns,
       items: tool.items,
+      graph: tool.graph,
       sourcing: tool.sourcing,
       anchorSet: tool.anchorSet,
       exhibit: tool.exhibit,
@@ -290,21 +354,6 @@ function Console() {
 
   if (!checked) return null;
 
-  if (!key && !identity) {
-    return (
-      <main className="flex-1 flex items-center justify-center px-6 text-center">
-        <div>
-          <h1 className="text-xl font-semibold">Facilitator access needed</h1>
-          <p className="text-slate-500 mt-2 max-w-md">
-            Open this console from your course page in the facilitator portal,
-            or use the full facilitator link (it contains a <code>?key=…</code>{" "}
-            secret).
-          </p>
-        </div>
-      </main>
-    );
-  }
-
   if (!state) {
     return (
       <main className="flex-1 flex items-center justify-center text-slate-500">
@@ -313,7 +362,8 @@ function Console() {
     );
   }
 
-  const { session, steps, participants, activities, pastActivities } = state;
+  const { session, steps, participants, activities, pastActivities, spotlight } =
+    state;
   const isCourseSession = !!session.courseId;
   const keyActive =
     !!session.joinKey &&
@@ -356,9 +406,22 @@ function Console() {
           )}
           <h1 className="text-xl font-bold truncate">{session.title}</h1>
         </div>
+        <button
+          onClick={() =>
+            window.open(
+              `${origin || ""}/present/${id}`,
+              "SessionSyncPresenter",
+              "width=1280,height=800"
+            )
+          }
+          title="Open a clean, read-only screen to share in Zoom/Teams"
+          className="ml-auto rounded-lg border border-indigo-300 text-indigo-700 px-3 py-1.5 text-xs font-medium hover:bg-indigo-50"
+        >
+          ⤢ Presenter View
+        </button>
         <a
           href={`/facilitate/${id}/report`}
-          className="ml-auto rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
         >
           Session report
         </a>
@@ -367,6 +430,7 @@ function Console() {
         >
           {session.status}
         </span>
+        <UserButton />
       </header>
 
       {(actionError || error) && (
@@ -377,7 +441,7 @@ function Console() {
 
       <div className="max-w-[1600px] mx-auto px-6 py-6 grid gap-6 lg:grid-cols-[3fr_7fr] items-start">
         {/* Left column: agenda, participants, invite */}
-        <div className="flex flex-col gap-6">
+        <div className="flex min-w-0 flex-col gap-6">
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
             <h2 className="font-semibold mb-3">Agenda</h2>
             <ol className="flex flex-col gap-2">
@@ -535,6 +599,15 @@ function Console() {
                               >
                                 Edit
                               </button>
+                              {viewerAdmin && (
+                                <button
+                                  onClick={() => promoteToLibrary(t)}
+                                  title="Save this tool to the shared library"
+                                  className="shrink-0 rounded-md border border-violet-300 px-2 py-1 text-[11px] font-medium text-violet-700 hover:bg-violet-50"
+                                >
+                                  ⭐ To library
+                                </button>
+                              )}
                               <button
                                 onClick={(ev) => {
                                   ev.stopPropagation();
@@ -569,7 +642,8 @@ function Console() {
                             <option value="likert">Scoring survey (1–5)</option>
                             <option value="columns">Comment board</option>
                             <option value="reveal">Reveal list</option>
-                            <option value="wheel">Wheel</option>
+                            <option value="wheel">Network</option>
+                            <option value="workflow">Workflow (guided steps)</option>
                             <option value="whiteboard">Whiteboard</option>
                             <option value="exhibit">
                               Present (file / link / text)
@@ -578,6 +652,13 @@ function Console() {
                             <option value="timer">Countdown timer</option>
                             <option value="wordcloud">Word cloud</option>
                           </select>
+                          <button
+                            type="button"
+                            onClick={() => openLibPicker(s.id)}
+                            className="rounded-md border border-violet-300 px-2 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-50"
+                          >
+                            📚 From library
+                          </button>
                           {toolKind === "exhibit" && (
                             <select
                               value={toolExhibitType}
@@ -619,13 +700,15 @@ function Console() {
                             </select>
                           )}
                         </div>
-                        <input
-                          value={toolPrompt}
-                          onChange={(e) => setToolPrompt(e.target.value)}
-                          placeholder="Prompt / question shown to participants"
-                          maxLength={300}
-                          className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
+                        {toolKind !== "workflow" && (
+                          <input
+                            value={toolPrompt}
+                            onChange={(e) => setToolPrompt(e.target.value)}
+                            placeholder="Prompt / question shown to participants"
+                            maxLength={300}
+                            className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        )}
                         {toolKind === "exhibit" && toolExhibitType === "file" && (
                           <select
                             value={toolExhibitRef}
@@ -685,11 +768,20 @@ function Console() {
                             className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           />
                         )}
+                        {toolKind === "workflow" && (
+                          <div className="rounded-md border border-indigo-200 bg-indigo-50/50 px-3 py-2 text-xs text-indigo-700">
+                            ✎ This flow opens in the wide{" "}
+                            <span className="font-semibold">Workflow builder</span>{" "}
+                            on the right — arrange steps there, then use{" "}
+                            <span className="font-semibold">Save to outline</span>.
+                          </div>
+                        )}
                         {toolKind !== "whiteboard" &&
                           toolKind !== "exhibit" &&
                           toolKind !== "video" &&
                           toolKind !== "timer" &&
                           toolKind !== "wordcloud" &&
+                          toolKind !== "workflow" &&
                           !(
                             (toolKind === "vote" || toolKind === "likert") &&
                             toolSourced
@@ -710,31 +802,33 @@ function Console() {
                               className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             />
                           )}
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => saveTool(s.id)}
-                            disabled={
-                              toolKind === "video"
-                                ? !toolExhibitRef.trim()
-                                : toolKind === "timer"
-                                  ? false
-                                  : !toolPrompt.trim()
-                            }
-                            className="rounded-md bg-slate-800 text-white px-3 py-1.5 text-xs font-medium hover:bg-slate-900 disabled:opacity-40"
-                          >
-                            {editingToolId
-                              ? "Save tool changes"
-                              : "Add tool to this step"}
-                          </button>
-                          {editingToolId && (
+                        {toolKind !== "workflow" && (
+                          <div className="flex items-center gap-1.5">
                             <button
-                              onClick={resetToolForm}
-                              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                              onClick={() => saveTool(s.id)}
+                              disabled={
+                                toolKind === "video"
+                                  ? !toolExhibitRef.trim()
+                                  : toolKind === "timer"
+                                    ? false
+                                    : !toolPrompt.trim()
+                              }
+                              className="rounded-md bg-slate-800 text-white px-3 py-1.5 text-xs font-medium hover:bg-slate-900 disabled:opacity-40"
                             >
-                              Cancel
+                              {editingToolId
+                                ? "Save tool changes"
+                                : "Add tool to this step"}
                             </button>
-                          )}
-                        </div>
+                            {editingToolId && (
+                              <button
+                                onClick={resetToolForm}
+                                className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                              >
+                                Cancel
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -742,35 +836,74 @@ function Console() {
               ))}
             </ol>
 
-            <form
-              onSubmit={addStep}
-              className="mt-4 border-t border-slate-100 pt-4 flex flex-col gap-2"
-            >
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Add step
-              </p>
-              <input
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="Step title, e.g. Welcome & objectives"
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                maxLength={200}
-              />
-              <textarea
-                value={newContent}
-                onChange={(e) => setNewContent(e.target.value)}
-                rows={4}
-                placeholder="Step content shown to participants (Markdown supported)"
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
+            <div className="mt-4 border-t border-slate-100 pt-3">
               <button
-                type="submit"
-                disabled={!newTitle.trim()}
-                className="self-start rounded-lg bg-slate-800 text-white px-4 py-2 text-sm font-medium hover:bg-slate-900 disabled:opacity-40 transition"
+                type="button"
+                onClick={() => setAddStepOpen((v) => !v)}
+                className="w-full flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-600"
               >
-                Add to agenda
+                <span>+ Add step</span>
+                <span className="text-sm">{addStepOpen ? "▾" : "▸"}</span>
               </button>
-            </form>
+              {addStepOpen && (
+                <form onSubmit={addStep} className="mt-3 flex flex-col gap-2">
+                  <input
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    placeholder="Step title, e.g. Welcome & objectives"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    maxLength={200}
+                  />
+                  <textarea
+                    value={newContent}
+                    onChange={(e) => setNewContent(e.target.value)}
+                    rows={4}
+                    placeholder="Step content shown to participants (Markdown supported)"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newTitle.trim()}
+                    className="self-start rounded-lg bg-slate-800 text-white px-4 py-2 text-sm font-medium hover:bg-slate-900 disabled:opacity-40 transition"
+                  >
+                    Add to agenda
+                  </button>
+                </form>
+              )}
+            </div>
+          </section>
+
+          <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <h2 className="font-semibold mb-3">Chat</h2>
+            {spotlight && (
+              <div className="mb-3 rounded-lg border border-amber-200 overflow-hidden">
+                <SpotlightBanner
+                  spotlight={spotlight}
+                  onClear={async () => {
+                    await fetch(`/api/sessions/${id}/chat`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ spotlight: null }),
+                    });
+                    refresh();
+                  }}
+                />
+                <p className="bg-amber-50 px-6 pb-2 text-[10px] text-amber-600">
+                  Live to the room{spotlight.style === "card" ? " · full-screen" : " · banner"}
+                </p>
+              </div>
+            )}
+            <div className="h-80">
+              <Chat
+                sessionId={id}
+                messages={state.messages ?? []}
+                canModerate
+                chatMode={state.session.chatMode}
+                roster={state.participants}
+                spotlightId={spotlight?.id ?? null}
+                onChanged={refresh}
+              />
+            </div>
           </section>
 
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
@@ -782,7 +915,7 @@ function Console() {
             </h2>
             <ul className="flex flex-col gap-1.5 max-h-72 overflow-y-auto">
               {participants.map((p) => (
-                <li key={p.id} className="flex items-center gap-2 text-sm">
+                <li key={p.id} className="flex items-center gap-2 text-sm group">
                   <span
                     className={`w-2 h-2 rounded-full ${
                       p.online ? "bg-emerald-500" : "bg-slate-300"
@@ -795,6 +928,24 @@ function Console() {
                     <span className="text-[10px] uppercase font-semibold text-indigo-400">
                       facilitator
                     </span>
+                  )}
+                  {!p.isFacilitator && (
+                    <button
+                      onClick={() => {
+                        if (
+                          confirm(`Remove ${p.name} from this session?`)
+                        ) {
+                          api(
+                            `/api/sessions/${id}/participants/${p.id}`,
+                            "DELETE"
+                          );
+                        }
+                      }}
+                      title="End this participant's session"
+                      className="ml-auto text-xs text-slate-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+                    >
+                      Remove
+                    </button>
                   )}
                 </li>
               ))}
@@ -840,6 +991,19 @@ function Console() {
                 {joinUrl && (
                   <p className="mt-2 text-xs text-slate-400 break-all">{joinUrl}</p>
                 )}
+                <button
+                  onClick={() =>
+                    window.open(
+                      `${origin || ""}/welcome/${id}`,
+                      "SessionSyncWelcome",
+                      "width=1280,height=800"
+                    )
+                  }
+                  title="Open a full-screen QR + join code to project as people arrive"
+                  className="mt-2 w-full rounded-lg border border-indigo-300 text-indigo-700 px-3 py-2 text-sm font-medium hover:bg-indigo-50 transition"
+                >
+                  ⤢ Show welcome screen (QR)
+                </button>
               </>
             ) : (
               <p className="text-sm text-slate-400 mb-2">
@@ -856,27 +1020,71 @@ function Console() {
                 {keyActive ? "Rotate student key" : "Generate 24-hour student key"}
               </button>
             )}
-            {key && (
-              <div className="mt-4 border-t border-slate-100 pt-3">
-                <p className="text-xs text-slate-400 mb-1.5">
-                  Facilitating from another device? This link is your control
-                  key — don&apos;t share it with participants.
-                </p>
-                <button
-                  onClick={() =>
-                    copy(`${origin}/facilitate/${id}?key=${key}`, "fkey")
-                  }
-                  className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
-                >
-                  {copied === "fkey" ? "Copied!" : "Copy facilitator link"}
-                </button>
-              </div>
-            )}
           </section>
         </div>
 
         {/* Right column: active session, tools, saved content */}
-        <div className="flex flex-col gap-6">
+        <div className="flex min-w-0 flex-col gap-6">
+          {/* Wide workflow builder — opens here when a Workflow tool is being
+              authored in the agenda (the left column is too narrow for the canvas). */}
+          {toolsOpenFor && toolKind === "workflow" && (
+            <section className="bg-white rounded-xl border-2 border-indigo-300 shadow-sm p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <h2 className="font-semibold">
+                  Workflow builder{" "}
+                  <span className="text-xs font-normal text-slate-400">
+                    — {editingToolId ? "editing" : "new flow"} on step “
+                    {steps.find((s) => s.id === toolsOpenFor)?.title ?? "?"}”
+                  </span>
+                </h2>
+                <button
+                  onClick={() => {
+                    resetToolForm();
+                    setToolKind("vote");
+                  }}
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                >
+                  Close
+                </button>
+              </div>
+              <input
+                value={toolPrompt}
+                onChange={(e) => setToolPrompt(e.target.value)}
+                placeholder="Workflow name (optional — defaults to the start step)"
+                maxLength={300}
+                className="mb-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <WorkflowBuilder
+                value={toolGraph}
+                onChange={setToolGraph}
+                height={460}
+              />
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    await saveTool(toolsOpenFor);
+                    setToolKind("vote");
+                  }}
+                  disabled={(toolGraph?.nodes.length ?? 0) < 2}
+                  className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40"
+                >
+                  {editingToolId ? "Save changes to outline" : "Save to outline"}
+                </button>
+                <button
+                  onClick={() => {
+                    resetToolForm();
+                    setToolKind("vote");
+                  }}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <span className="text-xs text-slate-400">
+                  Saves as a tool on this agenda step.
+                </span>
+              </div>
+            </section>
+          )}
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
             <div className="flex flex-wrap items-center gap-2">
               {session.status !== "live" ? (
@@ -964,21 +1172,87 @@ function Console() {
           {session.status === "live" && (
             <ActivityConsole
               sessionId={id}
-              authHeaders={{
-                ...(key ? { "x-facilitator-key": key } : {}),
-                ...facilitatorHeaders(identity),
-              }}
+              authHeaders={{}}
               activities={activities}
               pastActivities={pastActivities}
               files={state.files}
               myParticipantId={myPid}
-              myParticipantName={identity?.name}
+              myParticipantName={user?.fullName ?? user?.username ?? undefined}
               roster={participants}
               onChanged={refresh}
             />
           )}
         </div>
       </div>
+
+      {/* Tool-library picker: clone a saved library tool into the chosen step. */}
+      {libPickFor && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 p-4 pt-16"
+          onClick={() => setLibPickFor(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-xl bg-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 border-b border-slate-100 p-4">
+              <h2 className="font-semibold">Add from tool library</h2>
+              <button
+                onClick={() => setLibPickFor(null)}
+                className="ml-auto text-sm text-slate-400 hover:text-slate-600"
+              >
+                Close
+              </button>
+            </div>
+            <div className="p-4">
+              <input
+                value={libQ}
+                onChange={(e) => searchLib(e.target.value)}
+                placeholder="Search by name, category, or kind…"
+                className="mb-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                autoFocus
+              />
+              <div className="max-h-80 overflow-y-auto flex flex-col gap-1.5">
+                {libTools === null && (
+                  <p className="text-sm text-slate-400">Loading…</p>
+                )}
+                {libTools?.length === 0 && (
+                  <p className="text-sm text-slate-400">
+                    No matching library tools.
+                  </p>
+                )}
+                {libTools?.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => cloneFromLibrary(t.id)}
+                    className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-left hover:border-indigo-300 hover:bg-indigo-50/40"
+                  >
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-500 shrink-0">
+                      {t.kind}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium truncate">
+                        {t.name}
+                      </span>
+                      {t.description && (
+                        <span className="block text-xs text-slate-400 truncate">
+                          {t.description}
+                        </span>
+                      )}
+                    </span>
+                    {t.category && (
+                      <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-violet-700 shrink-0">
+                        {t.category}
+                      </span>
+                    )}
+                    <span className="text-xs text-indigo-500 shrink-0">Add →</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

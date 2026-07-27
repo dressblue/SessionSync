@@ -14,10 +14,12 @@ export interface ActivityEntry {
 
 export type ActivityKind =
   | "vote"
+  | "quiz"
   | "columns"
   | "likert"
   | "reveal"
   | "wheel"
+  | "workflow"
   | "whiteboard"
   | "exhibit"
   | "video"
@@ -27,6 +29,25 @@ export type ActivityKind =
 export interface RichItem {
   title: string;
   note: string;
+}
+
+export interface WorkflowNode {
+  id: string;
+  title: string;
+  note: string;
+  x: number;
+  y: number;
+}
+export interface WorkflowEdge {
+  id: string;
+  from: string;
+  to: string;
+  label: string;
+}
+export interface WorkflowGraph {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  startId: string;
 }
 
 export interface Stroke {
@@ -45,7 +66,24 @@ export interface ActivityState {
   options?: string[];
   columns?: string[];
   votes?: { counts: number[]; total: number; myVote: number | null };
+  quiz?: {
+    total: number;
+    counts: number[];
+    myChoice: number | null;
+    revealed: boolean;
+    correctIndex: number | null;
+    correctCount: number | null;
+  };
   entries?: ActivityEntry[];
+  cloud?: {
+    text: string;
+    count: number;
+    downvotes: number;
+    weight: number;
+    mine: boolean;
+    hidden: boolean;
+    ids: string[];
+  }[];
   scale?: number;
   items?: string[];
   ratings?: {
@@ -60,6 +98,18 @@ export interface ActivityState {
   revealed?: number;
   total?: number;
   active?: number;
+  workflow?: {
+    current: string;
+    step: { title: string; note: string } | null;
+    choices: { to: string; label: string; title: string }[];
+    total: number;
+    visited: number;
+    atStart: boolean;
+    isEnd: boolean;
+    showMap: boolean;
+    graph: WorkflowGraph | null;
+    history: string[];
+  };
   strokes?: Stroke[];
   responders?: { id: string; count: number }[];
   exhibit?: "file" | "url" | "text";
@@ -99,6 +149,7 @@ export interface StepTool {
   options?: string[];
   columns?: string[];
   items?: string[];
+  graph?: WorkflowGraph;
   sourcing?: "participants";
   anchorSet?: string;
   exhibit?: "file" | "url" | "text";
@@ -119,6 +170,9 @@ export interface VideoState {
 
 export interface StatePayload {
   build?: string;
+  // Set when the facilitator has terminated this participant; the rest of the
+  // payload is then absent, so callers must check this before reading `session`.
+  removed?: boolean;
   session: {
     id: string;
     title: string;
@@ -129,6 +183,7 @@ export interface StatePayload {
     courseId: string | null;
     joinKey: string | null;
     joinKeyExpires: string | null;
+    chatMode: "group" | "facilitator" | "open";
   };
   activities: ActivityState[];
   pastActivities: {
@@ -154,6 +209,33 @@ export interface StatePayload {
     tools: StepTool[];
   }[];
   participants: RosterEntry[];
+  messages?: ChatMessage[];
+  /** A chat message the facilitator has promoted to the whole room. */
+  spotlight?: SpotlightMessage | null;
+}
+
+export interface SpotlightMessage {
+  id: string;
+  name: string;
+  body: string;
+  style: "banner" | "card";
+}
+
+export interface ChatMessage {
+  id: string;
+  name: string;
+  body: string;
+  at: string;
+  fromFacilitator: boolean;
+  /** The sender's participant id (null when the facilitator sent it). */
+  fromParticipantId: string | null;
+  /** DM target: a participant id, or null for group / facilitator-private. */
+  toParticipantId: string | null;
+  /** True when a participant addressed the facilitator privately. */
+  toFacilitator: boolean;
+  /** Any message not addressed to the whole group. */
+  direct: boolean;
+  mine: boolean;
 }
 
 // Poll-based sync transport. Deliberately a thin seam: swapping in a push
@@ -164,11 +246,12 @@ export function useSessionState(
     participantId?: string;
     participantName?: string;
     intervalMs?: number;
-    headers?: Record<string, string>;
+    /** Force the participant-facing view even for a logged-in facilitator
+     *  (the projector/presenter screen). */
+    publicView?: boolean;
   } = {}
 ) {
-  const { participantId, participantName, intervalMs = 1500, headers } = opts;
-  const headersKey = JSON.stringify(headers ?? {});
+  const { participantId, participantName, intervalMs = 1500, publicView } = opts;
   const [state, setState] = useState<StatePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const lastPayloadRef = useRef<string>("");
@@ -176,16 +259,15 @@ export function useSessionState(
 
   const tick = useCallback(async () => {
     try {
-      const qs = participantId
-        ? `?participantId=${encodeURIComponent(participantId)}${
-            participantName
-              ? `&name=${encodeURIComponent(participantName)}`
-              : ""
-          }`
-        : "";
+      const params = new URLSearchParams();
+      if (participantId) params.set("participantId", participantId);
+      if (participantId && participantName) params.set("name", participantName);
+      if (publicView) params.set("view", "public");
+      const qs = params.toString() ? `?${params}` : "";
+      // Facilitator elevation rides the Clerk session cookie (sent
+      // automatically on same-origin requests); students send none.
       const res = await fetch(`/api/sessions/${sessionId}/state${qs}`, {
         cache: "no-store",
-        headers: JSON.parse(headersKey),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -226,7 +308,7 @@ export function useSessionState(
         setError(e instanceof Error ? e.message : "Connection lost");
       }
     }
-  }, [sessionId, participantId, participantName, headersKey]);
+  }, [sessionId, participantId, participantName, publicView]);
 
   useEffect(() => {
     // Cancellation must be scoped to THIS loop instance. A shared ref gets

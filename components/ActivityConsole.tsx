@@ -1,8 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import type { ActivityState, RosterEntry, StatePayload } from "./useSessionState";
+import type {
+  ActivityState,
+  RosterEntry,
+  StatePayload,
+  WorkflowGraph,
+} from "./useSessionState";
 import { ActivityPanel } from "./ActivityPanel";
+import { WorkflowBuilder } from "./WorkflowBuilder";
 import { LIKERT_ANCHOR_LABELS } from "@/lib/likert";
 
 interface Props {
@@ -21,10 +27,12 @@ interface Props {
 
 type Kind =
   | "vote"
+  | "quiz"
   | "likert"
   | "columns"
   | "reveal"
   | "wheel"
+  | "workflow"
   | "whiteboard"
   | "exhibit"
   | "video"
@@ -34,10 +42,12 @@ type Sourcing = "facilitator" | "participants";
 
 const KIND_LABEL: Record<string, string> = {
   vote: "Vote",
+  quiz: "Quiz",
   likert: "Scoring survey",
   columns: "Comment board",
   reveal: "Reveal",
-  wheel: "Wheel",
+  wheel: "Network",
+  workflow: "Workflow",
   whiteboard: "Whiteboard",
   exhibit: "Presented",
   video: "Video",
@@ -63,6 +73,7 @@ export function ActivityConsole({
   const [sourcing, setSourcing] = useState<Sourcing>("facilitator");
   const [prompt, setPrompt] = useState("");
   const [listText, setListText] = useState("");
+  const [graph, setGraph] = useState<WorkflowGraph | null>(null);
   const [columns, setColumns] = useState<string[]>(["", ""]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,6 +87,13 @@ export function ActivityConsole({
   const [videoFileId, setVideoFileId] = useState("");
   const [timerMin, setTimerMin] = useState(5);
   const [exhibitText, setExhibitText] = useState("");
+  const [correctIndex, setCorrectIndex] = useState(0);
+
+  // Live-parsed answer lines for the quiz builder (mark-correct radios).
+  const quizOptions = listText
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   async function call(path: string, method: string, body?: unknown) {
     setError(null);
@@ -119,6 +137,16 @@ export function ActivityConsole({
       else body.url = videoUrl;
     } else if (kind === "timer") {
       body.minutes = timerMin;
+    } else if (kind === "quiz") {
+      body.options = list;
+      body.correctIndex = Math.min(correctIndex, Math.max(0, list.length - 1));
+    } else if (kind === "workflow") {
+      body.graph = graph;
+      if (!prompt.trim()) {
+        const start =
+          graph?.nodes.find((n) => n.id === graph.startId) ?? graph?.nodes[0];
+        body.prompt = start?.title || "Workflow";
+      }
     } else if (
       (kind === "vote" || kind === "likert") &&
       sourcing === "participants"
@@ -134,10 +162,12 @@ export function ActivityConsole({
     if (ok) {
       setPrompt("");
       setListText("");
+      setGraph(null);
       setColumns(["", ""]);
       setExhibitUrl("");
       setExhibitText("");
       setVideoUrl("");
+      setCorrectIndex(0);
     }
   }
 
@@ -269,10 +299,12 @@ export function ActivityConsole({
             {(
               [
                 ["vote", "Vote"],
+                ["quiz", "Quiz"],
                 ["likert", "Scoring survey"],
                 ["columns", "Comment board"],
                 ["reveal", "Reveal"],
-                ["wheel", "Wheel"],
+                ["wheel", "Network"],
+                ["workflow", "Workflow"],
                 ["whiteboard", "Whiteboard"],
                 ["exhibit", "Present"],
                 ["video", "Video"],
@@ -335,12 +367,16 @@ export function ActivityConsole({
               placeholder={
                 kind === "vote"
                   ? "Question, e.g. Which risk concerns you most?"
+                  : kind === "quiz"
+                    ? "Quiz question, e.g. Which trait is about handling feelings?"
                   : kind === "likert"
                     ? "Prompt, e.g. Rate how strongly each applies to you"
                     : kind === "reveal"
                       ? "Heading, e.g. The 5 Traits of the 24:7 Dad"
                       : kind === "wheel"
                         ? "Heading, e.g. How the 5 Traits connect"
+                        : kind === "workflow"
+                          ? "Workflow name, e.g. Repair Conversation"
                         : kind === "whiteboard"
                           ? "Prompt, e.g. Sketch your support network"
                           : kind === "exhibit"
@@ -547,11 +583,50 @@ export function ActivityConsole({
                   all screens in sync. Participants tap once to start watching.
                 </p>
               </div>
+            ) : kind === "quiz" ? (
+              <div className="flex flex-col gap-2">
+                <textarea
+                  value={listText}
+                  onChange={(e) => setListText(e.target.value)}
+                  rows={4}
+                  placeholder={"One answer per line (2–8)\nSelf-Awareness\nCaring for Self\nFathering Skills"}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                {quizOptions.length >= 2 ? (
+                  <div className="flex flex-col gap-1 rounded-lg bg-slate-50 border border-slate-200 p-2.5">
+                    <p className="text-[11px] font-medium text-slate-500 mb-0.5">
+                      Mark the correct answer:
+                    </p>
+                    {quizOptions.map((opt, i) => (
+                      <label
+                        key={i}
+                        className="flex items-center gap-2 text-sm cursor-pointer"
+                      >
+                        <input
+                          type="radio"
+                          name="quiz-correct"
+                          checked={correctIndex === i}
+                          onChange={() => setCorrectIndex(i)}
+                          className="accent-green-600"
+                        />
+                        <span>{opt}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400">
+                    Add at least two answers, then mark the correct one. It stays
+                    hidden from participants until you reveal it.
+                  </p>
+                )}
+              </div>
             ) : kind === "wordcloud" ? (
               <p className="text-[11px] text-slate-400">
                 Participants submit words; each renders sized by how often
                 it&apos;s submitted. Click a word to hide it.
               </p>
+            ) : kind === "workflow" ? (
+              <WorkflowBuilder value={graph} onChange={setGraph} height={360} />
             ) : kind === "whiteboard" ? null : (kind === "vote" ||
                 kind === "likert") &&
               sourcing === "participants" ? (
@@ -588,7 +663,11 @@ export function ActivityConsole({
                     : !videoFileId
                   : kind === "timer"
                     ? false
-                    : !prompt.trim())
+                    : kind === "quiz"
+                      ? !prompt.trim() || quizOptions.length < 2
+                      : kind === "workflow"
+                        ? (graph?.nodes.length ?? 0) < 2
+                        : !prompt.trim())
               }
               className="self-start rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40 transition"
             >

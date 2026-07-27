@@ -2,12 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  facilitatorHeaders,
-  loadFacilitatorIdentity,
-  saveFacilitatorIdentity,
-  type FacilitatorIdentity,
-} from "@/components/identity";
+import { UserButton, useUser } from "@clerk/nextjs";
 
 interface CourseSummary {
   id: string;
@@ -16,13 +11,29 @@ interface CourseSummary {
   code: string;
   sessionCount: number;
   facilitatorCount: number;
+  isTemplate: boolean;
+  templateId: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  cohortLabel: string;
+}
+
+function cohortPill(c: CourseSummary): { label: string; cls: string } | null {
+  if (c.isTemplate)
+    return { label: "Template", cls: "bg-violet-100 text-violet-700" };
+  if (!c.startsAt && !c.endsAt) return null;
+  const now = Date.now();
+  if (c.startsAt && new Date(c.startsAt).getTime() > now)
+    return { label: "Upcoming", cls: "bg-amber-100 text-amber-700" };
+  if (c.endsAt && new Date(c.endsAt).getTime() < now)
+    return { label: "Ended", cls: "bg-slate-100 text-slate-500" };
+  return { label: "Active", cls: "bg-emerald-100 text-emerald-700" };
 }
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [identity, setIdentity] = useState<FacilitatorIdentity | null>(null);
-  const [checked, setChecked] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
+  const { user } = useUser();
+  const [isAdmin, setIsAdmin] = useState(false);
   const [courses, setCourses] = useState<CourseSummary[] | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -30,16 +41,10 @@ export default function DashboardPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setIdentity(loadFacilitatorIdentity());
-    setChecked(true);
-  }, []);
-
-  const loadCourses = useCallback(async (who: FacilitatorIdentity) => {
-    const res = await fetch("/api/courses", {
-      headers: facilitatorHeaders(who),
-      cache: "no-store",
-    });
+  // The /dashboard route is protected by the Clerk proxy, so anyone here is
+  // already signed in — the browser sends the session cookie automatically.
+  const loadCourses = useCallback(async () => {
+    const res = await fetch("/api/courses", { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       setCourses(data.courses);
@@ -49,43 +54,22 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (identity) loadCourses(identity);
-  }, [identity, loadCourses]);
-
-  async function createIdentity(e: React.FormEvent) {
-    e.preventDefault();
-    if (!nameDraft.trim() || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/facilitators", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: nameDraft }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not create identity");
-      saveFacilitatorIdentity(data);
-      setIdentity(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create identity");
-    } finally {
-      setBusy(false);
-    }
-  }
+    loadCourses();
+    fetch("/api/me", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setIsAdmin(!!d?.isAdmin))
+      .catch(() => {});
+  }, [loadCourses]);
 
   async function createCourse(e: React.FormEvent) {
     e.preventDefault();
-    if (!identity || !newTitle.trim() || busy) return;
+    if (!newTitle.trim() || busy) return;
     setBusy(true);
     setError(null);
     try {
       const res = await fetch("/api/courses", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...facilitatorHeaders(identity),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: newTitle, description: newDesc }),
       });
       const data = await res.json();
@@ -99,16 +83,13 @@ export default function DashboardPage() {
 
   async function joinCourse(e: React.FormEvent) {
     e.preventDefault();
-    if (!identity || !joinCode.trim() || busy) return;
+    if (!joinCode.trim() || busy) return;
     setBusy(true);
     setError(null);
     try {
       const res = await fetch("/api/courses/join", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...facilitatorHeaders(identity),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: joinCode }),
       });
       const data = await res.json();
@@ -120,42 +101,6 @@ export default function DashboardPage() {
     }
   }
 
-  if (!checked) return null;
-
-  if (!identity) {
-    return (
-      <main className="flex-1 flex items-center justify-center px-4 py-16">
-        <form
-          onSubmit={createIdentity}
-          className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 w-full max-w-sm flex flex-col gap-4"
-        >
-          <div className="text-center">
-            <h1 className="text-2xl font-bold">Facilitator portal</h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Enter your name to set up this device. Your courses and sessions
-              will be tied to this identity.
-            </p>
-          </div>
-          <input
-            value={nameDraft}
-            onChange={(e) => setNameDraft(e.target.value)}
-            placeholder="Your name"
-            maxLength={120}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <button
-            type="submit"
-            disabled={busy || !nameDraft.trim()}
-            className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40 transition"
-          >
-            {busy ? "Setting up…" : "Continue"}
-          </button>
-          {error && <p className="text-sm text-red-600 text-center">{error}</p>}
-        </form>
-      </main>
-    );
-  }
-
   return (
     <div className="flex-1 min-h-screen">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center gap-4">
@@ -165,7 +110,20 @@ export default function DashboardPage() {
           </p>
           <h1 className="text-xl font-bold">My courses</h1>
         </div>
-        <span className="ml-auto text-sm text-slate-500">{identity.name}</span>
+        <div className="ml-auto flex items-center gap-3">
+          {isAdmin && (
+            <button
+              onClick={() => router.push("/admin")}
+              className="rounded-lg border border-indigo-300 text-indigo-700 px-3 py-1.5 text-xs font-semibold hover:bg-indigo-50 transition"
+            >
+              Admin
+            </button>
+          )}
+          <span className="text-sm text-slate-500">
+            {user?.firstName ?? user?.username ?? ""}
+          </span>
+          <UserButton />
+        </div>
       </header>
 
       {error && (
@@ -185,12 +143,27 @@ export default function DashboardPage() {
               onClick={() => router.push(`/course/${c.id}`)}
               className="text-left bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:border-indigo-300 transition"
             >
-              <div className="flex items-baseline gap-3">
+              <div className="flex items-baseline gap-2">
                 <h2 className="font-semibold text-lg">{c.title}</h2>
+                {(() => {
+                  const p = cohortPill(c);
+                  return p ? (
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${p.cls}`}
+                    >
+                      {p.label}
+                    </span>
+                  ) : null;
+                })()}
                 <span className="ml-auto font-mono text-xs text-slate-400">
                   {c.code}
                 </span>
               </div>
+              {c.cohortLabel && (
+                <p className="mt-0.5 text-xs font-medium text-slate-500">
+                  {c.cohortLabel}
+                </p>
+              )}
               {c.description && (
                 <p className="text-sm text-slate-500 mt-1 line-clamp-2">
                   {c.description}

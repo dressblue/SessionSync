@@ -1,9 +1,7 @@
 import { randomUUID, randomBytes } from "crypto";
 import { query } from "./db";
-import {
-  getFacilitatorFromRequest,
-  isCourseFacilitator,
-} from "./facilitators";
+import { isCourseFacilitator } from "./facilitators";
+import { getFacilitator } from "./viewer";
 import { anchorLabels } from "./likert";
 
 export type SessionStatus = "lobby" | "live" | "ended";
@@ -21,14 +19,19 @@ export interface SessionRow {
   position: number;
   join_key: string | null;
   join_key_expires: string | null;
+  chat_mode: "group" | "facilitator" | "open";
+  spotlight_message_id: string | null;
+  spotlight_style: "banner" | "card" | null;
 }
 
 export type ActivityKind =
   | "vote"
+  | "quiz"
   | "columns"
   | "likert"
   | "reveal"
   | "wheel"
+  | "workflow"
   | "whiteboard"
   | "exhibit"
   | "video"
@@ -49,6 +52,61 @@ export interface RichItem {
   note: string;
 }
 
+// A workflow is a directed graph of steps. A node with more than one outgoing
+// edge is a branch; each edge's label is a choice the facilitator picks.
+export interface WorkflowNode {
+  id: string;
+  title: string;
+  note: string; // 1–2 sentences of supplemental guidance
+  x: number; // canvas position (px)
+  y: number;
+}
+export interface WorkflowEdge {
+  id: string;
+  from: string;
+  to: string;
+  label: string; // the choice text, e.g. "They agree" / "Still upset"
+}
+export interface WorkflowGraph {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  startId: string;
+}
+
+// Derive a graph from a workflow config, converting a legacy linear
+// (richItems) workflow into a straight chain so old activities still play.
+export function resolveWorkflowGraph(config: {
+  nodes?: WorkflowNode[];
+  edges?: WorkflowEdge[];
+  startId?: string;
+  richItems?: RichItem[];
+}): WorkflowGraph {
+  if (config.nodes && config.nodes.length > 0) {
+    const nodes = config.nodes;
+    const ids = new Set(nodes.map((n) => n.id));
+    const edges = (config.edges ?? []).filter(
+      (e) => ids.has(e.from) && ids.has(e.to)
+    );
+    const startId =
+      config.startId && ids.has(config.startId) ? config.startId : nodes[0].id;
+    return { nodes, edges, startId };
+  }
+  // Legacy: chain the richItems left-to-right.
+  const items = config.richItems ?? [];
+  const nodes: WorkflowNode[] = items.map((it, i) => ({
+    id: `n${i}`,
+    title: it.title,
+    note: it.note,
+    x: 40 + i * 220,
+    y: 60,
+  }));
+  const edges: WorkflowEdge[] = [];
+  for (let i = 0; i < nodes.length - 1; i++) {
+    edges.push({ id: `e${i}`, from: nodes[i].id, to: nodes[i + 1].id, label: "" });
+  }
+  return { nodes, edges, startId: nodes[0]?.id ?? "" };
+}
+
 export interface Stroke {
   id: string;
   mine: boolean;
@@ -64,6 +122,15 @@ export interface ActivityPayload {
   options?: string[];
   columns?: string[];
   votes?: { counts: number[]; total: number; myVote: number | null };
+  // quiz — a poll with a correct answer, withheld until the facilitator reveals
+  quiz?: {
+    total: number; // how many have answered
+    counts: number[]; // per-option tallies — empty for participants pre-reveal
+    myChoice: number | null;
+    revealed: boolean;
+    correctIndex: number | null; // null for participants until revealed
+    correctCount: number | null; // how many got it right — null until revealed
+  };
   entries?: {
     id: string;
     column: number;
@@ -72,6 +139,16 @@ export interface ActivityPayload {
     mine: boolean;
     highlighted: boolean;
     hidden: boolean;
+  }[];
+  // wordcloud — grouped words with downvote weighting
+  cloud?: {
+    text: string;
+    count: number; // submissions (S)
+    downvotes: number; // D
+    weight: number; // max(0, S - D) → drives size
+    mine: boolean; // did the viewer downvote it
+    hidden: boolean; // facilitator-hidden, or shrunk to nothing
+    ids: string[]; // submission response ids (for facilitator hide/restore)
   }[];
   // likert
   phase?: "collect" | "rate";
@@ -90,6 +167,19 @@ export interface ActivityPayload {
   revealed?: number;
   total?: number;
   active?: number;
+  // workflow — a facilitator-driven step graph (supports branching)
+  workflow?: {
+    current: string; // active node id
+    step: { title: string; note: string } | null; // current node — everyone
+    choices: { to: string; label: string; title: string }[]; // branch options from current
+    total: number; // node count
+    visited: number; // steps taken so far (history depth + 1)
+    atStart: boolean;
+    isEnd: boolean; // current node has no outgoing edges
+    showMap: boolean; // facilitator is showing the whole map to the room
+    graph: WorkflowGraph | null; // the full map — facilitator, or everyone when showMap
+    history: string[]; // visited node ids — facilitator only
+  };
   // whiteboard
   strokes?: Stroke[];
   /** Who has responded (vote/likert/collect): participant id + response count. */
@@ -187,6 +277,204 @@ export async function getSession(id: string): Promise<SessionRow | null> {
   return res.rows[0] ?? null;
 }
 
+/**
+ * Whether a student may enter a course session right now. Returns a
+ * human-readable reason to BLOCK, or null to allow. Templates are never
+ * joinable; a cohort is joinable only within its [starts_at, ends_at] window.
+ * Legacy standalone sessions (no course_id) are always allowed.
+ */
+export async function cohortAccessError(
+  courseId: string | null
+): Promise<string | null> {
+  if (!courseId) return null;
+  const c = await query<{
+    is_template: boolean;
+    starts_at: string | null;
+    ends_at: string | null;
+  }>(`SELECT is_template, starts_at, ends_at FROM courses WHERE id = $1`, [
+    courseId,
+  ]);
+  const course = c.rows[0];
+  if (!course) return null;
+  if (course.is_template) return "This is a course template, not a live cohort.";
+  const now = Date.now();
+  if (course.starts_at && new Date(course.starts_at).getTime() > now) {
+    return `This cohort opens on ${new Date(course.starts_at).toLocaleDateString()}.`;
+  }
+  if (course.ends_at && new Date(course.ends_at).getTime() < now) {
+    return `This cohort ended on ${new Date(course.ends_at).toLocaleDateString()}.`;
+  }
+  return null;
+}
+
+export interface DeepCopyOpts {
+  title?: string;
+  isTemplate: boolean;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  cohortLabel?: string;
+  ownerFacilitatorId: string;
+}
+
+/**
+ * Deep-copy a course's STRUCTURE into a new course: sessions → steps →
+ * step_tools, plus course_materials and course_files (bytes copied). Live/runtime
+ * data (rosters, participants, activities, chat, notes) is NOT copied. Used for
+ * both "save as template" (isTemplate:true) and "create cohort" (isTemplate:false,
+ * with a date-window). The new course's team starts with `ownerFacilitatorId` as
+ * owner. Returns the new course id + code.
+ */
+export async function deepCopyCourse(
+  sourceId: string,
+  opts: DeepCopyOpts
+): Promise<{ id: string; code: string }> {
+  const src = await query<{ title: string; description: string }>(
+    `SELECT title, description FROM courses WHERE id = $1`,
+    [sourceId]
+  );
+  if (!src.rows[0]) throw new Error("source course not found");
+
+  const newId = randomUUID();
+  const title = (opts.title ?? src.rows[0].title).slice(0, 200);
+  let code = "";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    code = makeCode(8);
+    try {
+      await query(
+        `INSERT INTO courses
+           (id, title, description, code, created_by, is_template, template_id,
+            starts_at, ends_at, cohort_label)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [
+          newId,
+          title,
+          src.rows[0].description,
+          code,
+          opts.ownerFacilitatorId,
+          opts.isTemplate,
+          opts.isTemplate ? null : sourceId,
+          opts.startsAt ?? null,
+          opts.endsAt ?? null,
+          (opts.cohortLabel ?? "").slice(0, 120),
+        ]
+      );
+      break;
+    } catch (err) {
+      if (attempt === 4) throw err;
+    }
+  }
+
+  await query(
+    `INSERT INTO course_facilitators (course_id, facilitator_id, role)
+     VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING`,
+    [newId, opts.ownerFacilitatorId]
+  );
+
+  // sessions → steps → step_tools
+  const sessions = await query<{ id: string; title: string; position: number }>(
+    `SELECT id, title, position FROM sessions
+       WHERE course_id = $1 ORDER BY position ASC, created_at ASC`,
+    [sourceId]
+  );
+  const sessionIdMap = new Map<string, string>();
+  for (const s of sessions.rows) {
+    const ns = await createSession(s.title, newId, s.position);
+    sessionIdMap.set(s.id, ns.id);
+    const steps = await query<{
+      id: string;
+      title: string;
+      kind: string;
+      content: string;
+      position: number;
+    }>(
+      `SELECT id, title, kind, content, position FROM steps
+         WHERE session_id = $1 ORDER BY position ASC`,
+      [s.id]
+    );
+    for (const st of steps.rows) {
+      const newStepId = randomUUID();
+      await query(
+        `INSERT INTO steps (id, session_id, position, title, kind, content)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [newStepId, ns.id, st.position, st.title, st.kind, st.content]
+      );
+      const tools = await query<{
+        kind: string;
+        prompt: string;
+        config: string;
+        position: number;
+      }>(
+        `SELECT kind, prompt, config, position FROM step_tools
+           WHERE step_id = $1 ORDER BY position ASC`,
+        [st.id]
+      );
+      for (const t of tools.rows) {
+        await query(
+          `INSERT INTO step_tools (id, step_id, kind, prompt, config, position)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [randomUUID(), newStepId, t.kind, t.prompt, t.config, t.position]
+        );
+      }
+    }
+  }
+
+  const mapSession = (sid: string | null) =>
+    sid ? (sessionIdMap.get(sid) ?? null) : null;
+
+  // course_materials (course-wide session_id stays null)
+  const mats = await query<{
+    session_id: string | null;
+    title: string;
+    note: string;
+    position: number;
+  }>(
+    `SELECT session_id, title, note, position FROM course_materials WHERE course_id = $1`,
+    [sourceId]
+  );
+  for (const m of mats.rows) {
+    await query(
+      `INSERT INTO course_materials (id, course_id, session_id, title, note, position)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [randomUUID(), newId, mapSession(m.session_id), m.title, m.note, m.position]
+    );
+  }
+
+  // course_files (copy the bytes)
+  const files = await query<{
+    session_id: string | null;
+    title: string;
+    filename: string;
+    mime: string;
+    size: number;
+    data: Buffer;
+    position: number;
+  }>(
+    `SELECT session_id, title, filename, mime, size, data, position
+       FROM course_files WHERE course_id = $1`,
+    [sourceId]
+  );
+  for (const f of files.rows) {
+    await query(
+      `INSERT INTO course_files
+         (id, course_id, session_id, title, filename, mime, size, data, position)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [
+        randomUUID(),
+        newId,
+        mapSession(f.session_id),
+        f.title,
+        f.filename,
+        f.mime,
+        f.size,
+        f.data,
+        f.position,
+      ]
+    );
+  }
+
+  return { id: newId, code };
+}
+
 export async function getSessionByCode(code: string): Promise<SessionRow | null> {
   const res = await query<SessionRow>(
     `SELECT * FROM sessions WHERE code = $1`,
@@ -207,25 +495,22 @@ export async function getAuthorizedSession(
 }
 
 /**
- * Facilitator authorization for a session: either the legacy per-session
- * secret key, or a signed-in facilitator who is on the session's course team.
+ * Facilitator authorization for a session: the signed-in Clerk facilitator must
+ * be on the session's course team. The `req` argument is retained for call-site
+ * compatibility — Clerk resolves identity from the request context, not headers.
  */
 export async function authorizeSession(
-  req: Request,
+  _req: Request,
   sessionId: string
 ): Promise<SessionRow | null> {
   const session = await getSession(sessionId);
-  if (!session) return null;
-  const legacy = req.headers.get("x-facilitator-key");
-  if (legacy && legacy === session.facilitator_key) return session;
-  if (session.course_id) {
-    const facilitator = await getFacilitatorFromRequest(req);
-    if (
-      facilitator &&
-      (await isCourseFacilitator(session.course_id, facilitator.id))
-    ) {
-      return session;
-    }
+  if (!session || !session.course_id) return null;
+  const facilitator = await getFacilitator();
+  if (!facilitator) return null;
+  // Admins can manage any course (including templates) even without a team row.
+  if (facilitator.isAdmin) return session;
+  if (await isCourseFacilitator(session.course_id, facilitator.id)) {
+    return session;
   }
   return null;
 }
@@ -265,6 +550,18 @@ export interface ActivityConfig {
   revealed?: number;
   active?: number;
   anchorSet?: string;
+  // quiz
+  correctIndex?: number;
+  answerRevealed?: boolean;
+  // workflow — a step graph (branching). Legacy linear workflows still carry
+  // richItems + a numeric current; new ones carry nodes/edges/startId and a
+  // node-id current + history.
+  current?: number | string;
+  nodes?: WorkflowNode[];
+  edges?: WorkflowEdge[];
+  startId?: string;
+  history?: string[];
+  showMap?: boolean;
 }
 
 export function parseActivityConfig(activity: ActivityRow): ActivityConfig {
@@ -308,7 +605,7 @@ export function extractActivityTexts(
     texts = rows
       .filter((r) => (r.column_index ?? 0) >= 0 && !r.hidden)
       .map((r) => r.value);
-  } else if (activity.kind === "vote") {
+  } else if (activity.kind === "vote" || activity.kind === "quiz") {
     texts = config.options ?? [];
   } else if (activity.kind === "likert") {
     texts = config.items ?? [];
@@ -405,6 +702,40 @@ export function buildActivityPayload(
   if (activity.kind === "wheel") {
     payload.richItems = config.richItems ?? [];
     payload.active = config.active ?? -1;
+    return payload;
+  }
+  if (activity.kind === "workflow") {
+    const graph = resolveWorkflowGraph(config);
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+    // current is a node id (new) or a numeric index (legacy). Fall back to start.
+    let currentId =
+      typeof config.current === "string" ? config.current : graph.startId;
+    if (typeof config.current === "number")
+      currentId = graph.nodes[config.current]?.id ?? graph.startId;
+    if (!byId.has(currentId)) currentId = graph.startId;
+    const node = byId.get(currentId) ?? null;
+    const outgoing = graph.edges.filter((e) => e.from === currentId);
+    const history = Array.isArray(config.history) ? config.history : [];
+    // When the facilitator turns on "show map to room", the whole graph goes to
+    // participants too — otherwise they only ever see the current step.
+    const showMap = !!config.showMap;
+    payload.workflow = {
+      current: currentId,
+      step: node ? { title: node.title, note: node.note } : null,
+      // Branch options are visible to everyone (the room sees where it can go).
+      choices: outgoing.map((e) => ({
+        to: e.to,
+        label: e.label,
+        title: byId.get(e.to)?.title ?? "",
+      })),
+      total: graph.nodes.length,
+      visited: history.length + 1,
+      atStart: currentId === graph.startId,
+      isEnd: outgoing.length === 0,
+      showMap,
+      graph: facilitatorView || showMap ? graph : null,
+      history: facilitatorView ? history : [],
+    };
     return payload;
   }
   if (activity.kind === "timer") {
@@ -517,6 +848,46 @@ export function buildActivityPayload(
           Number(r.value) < options.length
       )
     );
+  } else if (activity.kind === "quiz") {
+    const options = config.options ?? [];
+    const counts = options.map(() => 0);
+    const correctIndex =
+      typeof config.correctIndex === "number" ? config.correctIndex : -1;
+    let myChoice: number | null = null;
+    let correctCount = 0;
+    for (const r of responses.rows) {
+      if (r.column_index !== null && r.column_index !== undefined) continue;
+      const idx = Number(r.value);
+      if (Number.isInteger(idx) && idx >= 0 && idx < counts.length) {
+        counts[idx]++;
+        if (idx === correctIndex) correctCount++;
+        if (viewerParticipantId && r.participant_id === viewerParticipantId) {
+          myChoice = idx;
+        }
+      }
+    }
+    const revealed = !!config.answerRevealed;
+    // The correct answer and the per-option tallies stay hidden from
+    // participants until the facilitator reveals — no peeking at the payload.
+    const showAnswer = revealed || facilitatorView;
+    payload.options = options;
+    payload.quiz = {
+      total: counts.reduce((a, b) => a + b, 0),
+      counts: showAnswer ? counts : [],
+      myChoice,
+      revealed,
+      correctIndex: showAnswer ? correctIndex : null,
+      correctCount: showAnswer ? correctCount : null,
+    };
+    payload.responders = respondersFrom(
+      responseRows.filter(
+        (r) =>
+          (r.column_index === null || r.column_index === undefined) &&
+          Number.isInteger(Number(r.value)) &&
+          Number(r.value) >= 0 &&
+          Number(r.value) < options.length
+      )
+    );
   } else if (activity.kind === "likert") {
     const items = config.items ?? [];
     const scale = config.scale ?? 5;
@@ -554,13 +925,68 @@ export function buildActivityPayload(
       )
     );
   } else if (activity.kind === "wordcloud") {
-    // Single bucket of submitted words; the client sizes each by frequency.
-    payload.entries = entriesFrom(
-      responses.rows.filter((r) => (r.column_index ?? 0) >= 0)
-    );
-    payload.responders = respondersFrom(
-      responseRows.filter((r) => (r.column_index ?? 0) >= 0)
-    );
+    // Submissions live in column 0; participant downvotes in column -2.
+    const subs = responseRows.filter((r) => r.column_index === 0);
+    const downs = responseRows.filter((r) => r.column_index === -2);
+    const groups = new Map<
+      string,
+      {
+        text: string;
+        s: number;
+        d: number;
+        ids: string[];
+        allHidden: boolean;
+        mine: boolean;
+      }
+    >();
+    for (const r of subs) {
+      const key = r.value.trim().toLowerCase();
+      if (!key) continue;
+      const g = groups.get(key) ?? {
+        text: r.value.trim(),
+        s: 0,
+        d: 0,
+        ids: [],
+        allHidden: true,
+        mine: false,
+      };
+      g.ids.push(r.id);
+      g.s += 1;
+      if (!r.hidden) g.allHidden = false;
+      groups.set(key, g);
+    }
+    for (const r of downs) {
+      const key = r.value.trim().toLowerCase();
+      const g = groups.get(key);
+      if (!g) continue; // a downvote for a word nobody submitted — ignore
+      g.d += 1;
+      if (viewerParticipantId && r.participant_id === viewerParticipantId) {
+        g.mine = true;
+      }
+    }
+    // A word hides only once its downvotes exceed its submissions by
+    // HIDE_MARGIN — so it visibly shrinks as it's downvoted but takes real
+    // group consensus to remove (a word one person added needs HIDE_MARGIN + 1
+    // downvotes to disappear). Bump this to make removal harder.
+    const HIDE_MARGIN = 2;
+    payload.cloud = [...groups.values()].map((g) => {
+      const net = g.s - g.d;
+      return {
+        text: g.text,
+        count: g.s,
+        downvotes: g.d,
+        // Natural (submission-based) weight. Downvotes shrink the rendered size
+        // client-side by up to 50% (floored, so it stays readable) and outline
+        // the word; it hides once net drops past -HIDE_MARGIN.
+        weight: g.s,
+        mine: g.mine,
+        hidden: g.allHidden || net <= -HIDE_MARGIN,
+        ids: g.ids,
+      };
+    });
+    // Keep entries (visible submissions) for the close-out report.
+    payload.entries = entriesFrom(subs);
+    payload.responders = respondersFrom(subs);
   } else {
     payload.columns = config.columns ?? [];
     payload.entries = entriesFrom(
@@ -745,7 +1171,7 @@ export async function getStepTools(
 export async function getParticipants(sessionId: string): Promise<ParticipantRow[]> {
   const res = await query<ParticipantRow>(
     `SELECT id, name, joined_at, last_seen, facilitator_id FROM participants
-     WHERE session_id = $1 ORDER BY joined_at ASC`,
+     WHERE session_id = $1 AND removed_at IS NULL ORDER BY joined_at ASC`,
     [sessionId]
   );
   return res.rows;

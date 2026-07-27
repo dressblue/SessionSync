@@ -6,13 +6,22 @@ import { useSessionState } from "@/components/useSessionState";
 import { Markdown } from "@/components/Markdown";
 import { NotesPad } from "@/components/NotesPad";
 import { ActivityPanel } from "@/components/ActivityPanel";
+import { Chat } from "@/components/Chat";
+import { SpotlightBanner, SpotlightCard } from "@/components/SpotlightMessage";
+import { shareOrigin } from "@/lib/appOrigin";
 
 interface Identity {
   participantId: string;
   name: string;
 }
 
-type SideTab = "agenda" | "notes" | "materials" | "downloads" | "people";
+type SideTab =
+  | "agenda"
+  | "chat"
+  | "notes"
+  | "materials"
+  | "downloads"
+  | "people";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -34,7 +43,7 @@ function ParticipantView() {
   const refreshEpochRef = useRef<number | null>(null);
 
   useEffect(() => {
-    setOrigin(window.location.origin);
+    setOrigin(shareOrigin());
     // A personal resume link (?p=participantId) lets the same participant
     // continue from any device; it wins over whatever this device has stored.
     const p = searchParams.get("p");
@@ -66,7 +75,7 @@ function ParticipantView() {
   // Once state arrives, resolve the display name from the roster and persist
   // the identity on this device (covers the resume-link path).
   useEffect(() => {
-    if (!state || !identity) return;
+    if (!state || state.removed || !identity) return;
     const me = state.participants.find((p) => p.id === identity.participantId);
     if (me && me.name !== identity.name) {
       const next = { participantId: identity.participantId, name: me.name };
@@ -77,7 +86,7 @@ function ParticipantView() {
 
   // Facilitator-pushed refresh: hard-reload when the epoch increases.
   useEffect(() => {
-    if (!state) return;
+    if (!state || state.removed) return;
     const epoch = state.session.refreshEpoch;
     if (refreshEpochRef.current === null) {
       refreshEpochRef.current = epoch;
@@ -87,7 +96,7 @@ function ParticipantView() {
   }, [state]);
 
   const onlineCount = useMemo(
-    () => state?.participants.filter((p) => p.online).length ?? 0,
+    () => state?.participants?.filter((p) => p.online).length ?? 0,
     [state]
   );
 
@@ -101,7 +110,31 @@ function ParticipantView() {
     );
   }
 
-  const { session, steps, activities, materials, files } = state;
+  // The facilitator ended this participant's session.
+  if (state.removed) {
+    return (
+      <main className="flex-1 flex items-center justify-center px-6 text-center">
+        <div className="max-w-sm">
+          <h1 className="text-xl font-semibold">You&apos;ve left the session</h1>
+          <p className="text-slate-500 mt-2">
+            The facilitator ended your session. If this was a mistake, ask them
+            for the current key and rejoin.
+          </p>
+          <button
+            onClick={() => {
+              localStorage.removeItem(`ss_participant_${id}`);
+              router.replace("/join");
+            }}
+            className="mt-5 rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700"
+          >
+            Back to join
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  const { session, steps, activities, materials, files, spotlight } = state;
   const current = steps[session.currentStep];
   const resumeUrl = origin
     ? `${origin}/s/${id}?p=${identity.participantId}`
@@ -187,6 +220,7 @@ function ParticipantView() {
         >
           <div className="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1 m-3 mb-2">
             {tabBtn("agenda", "Agenda")}
+            {tabBtn("chat", "Chat")}
             {tabBtn("notes", "Notes")}
             {tabBtn("materials", "Materials")}
             {tabBtn("downloads", "Downloads")}
@@ -246,6 +280,21 @@ function ParticipantView() {
                 </button>
               </div>
             )}
+          </div>
+
+          <div
+            className={`flex-1 min-h-0 flex-col p-3 ${sideTab === "chat" ? "flex" : "hidden"}`}
+          >
+            <Chat
+              sessionId={id}
+              messages={state.messages ?? []}
+              participantId={identity.participantId}
+              participantName={identity.name}
+              chatMode={state.session.chatMode}
+              roster={state.participants}
+              spotlightId={spotlight?.id ?? null}
+              onChanged={refresh}
+            />
           </div>
 
           <div
@@ -383,6 +432,17 @@ function ParticipantView() {
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto">
+          {spotlight &&
+            (spotlight.style === "banner" ? (
+              <SpotlightBanner spotlight={spotlight} />
+            ) : (
+              <div className="mx-auto max-w-3xl px-6 pt-8">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 py-8">
+                  <SpotlightCard spotlight={spotlight} />
+                </div>
+              </div>
+            ))}
+
           {session.status === "lobby" && (
             <div className="h-full flex flex-col items-center justify-center text-center px-6 py-16">
               <div className="w-3 h-3 rounded-full bg-indigo-500 animate-pulse mb-4" />
@@ -406,7 +466,7 @@ function ParticipantView() {
                 </p>
               )}
               <div
-                className={`grid gap-6 items-start ${
+                className={`grid gap-6 items-start [&>*]:min-w-0 ${
                   activities.length > 1 ? "xl:grid-cols-2" : ""
                 }`}
               >

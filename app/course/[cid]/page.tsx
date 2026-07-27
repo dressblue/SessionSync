@@ -2,15 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  facilitatorHeaders,
-  loadFacilitatorIdentity,
-  type FacilitatorIdentity,
-} from "@/components/identity";
+import { UserButton, useUser } from "@clerk/nextjs";
 
 interface CourseDetail {
   course: { id: string; title: string; description: string; code: string };
-  team: { id: string; name: string; role: string }[];
+  me: { id: string; role: string; isAdmin: boolean };
+  team: {
+    id: string;
+    name: string;
+    email: string | null;
+    role: string;
+    pending: boolean;
+  }[];
   materials: { id: string; title: string; note: string; sessionId: string | null }[];
   files: {
     id: string;
@@ -48,13 +51,14 @@ function expiryLabel(expires: string | null): string {
 export default function CoursePage() {
   const { cid } = useParams<{ cid: string }>();
   const router = useRouter();
-  const [identity, setIdentity] = useState<FacilitatorIdentity | null>(null);
-  const [checked, setChecked] = useState(false);
+  const { user } = useUser();
   const [detail, setDetail] = useState<CourseDetail | null>(null);
   const [newSession, setNewSession] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteMsg, setInviteMsg] = useState<string | null>(null);
 
   // Materials & downloads management
   const [matTitle, setMatTitle] = useState("");
@@ -62,18 +66,12 @@ export default function CoursePage() {
   const [matScope, setMatScope] = useState("");
   const [fileTitle, setFileTitle] = useState("");
   const [fileScope, setFileScope] = useState("");
-  const [fileToUpload, setFileToUpload] = useState<File | null>(null);
+  const [filesToUpload, setFilesToUpload] = useState<File[]>([]);
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
-    setIdentity(loadFacilitatorIdentity());
-    setChecked(true);
-  }, []);
-
   const load = useCallback(async () => {
-    if (!identity) return;
     const res = await fetch(`/api/courses/${cid}`, {
-      headers: facilitatorHeaders(identity),
       cache: "no-store",
     });
     const data = await res.json();
@@ -82,22 +80,67 @@ export default function CoursePage() {
       return;
     }
     setDetail(data);
-  }, [cid, identity]);
+  }, [cid]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  async function inviteMember(e: React.FormEvent) {
+    e.preventDefault();
+    if (!inviteEmail.trim() || busy) return;
+    setBusy(true);
+    setInviteMsg(null);
+    try {
+      const res = await fetch(`/api/courses/${cid}/team`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: inviteEmail }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "Could not invite");
+      setInviteEmail("");
+      setInviteMsg(
+        data?.invited
+          ? "Invitation emailed — they'll join the team when they sign in."
+          : "Added to the team — they'll have access when they sign in with that email."
+      );
+      await load();
+    } catch (err) {
+      setInviteMsg(err instanceof Error ? err.message : "Could not invite");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeMember(fid: string, label: string) {
+    if (busy || !confirm(`Remove ${label} from this course team?`)) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/courses/${cid}/team/${fid}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? "Could not remove");
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function addSession(e: React.FormEvent) {
     e.preventDefault();
-    if (!identity || !newSession.trim() || busy) return;
+    if (!newSession.trim() || busy) return;
     setBusy(true);
     try {
       const res = await fetch(`/api/courses/${cid}/sessions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...facilitatorHeaders(identity),
         },
         body: JSON.stringify({ title: newSession }),
       });
@@ -115,14 +158,13 @@ export default function CoursePage() {
   }
 
   async function generateKey(sessionId: string) {
-    if (!identity || busy) return;
+    if (busy) return;
     setBusy(true);
     try {
       const res = await fetch(`/api/sessions/${sessionId}/joinkey`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...facilitatorHeaders(identity),
         },
         body: JSON.stringify({ ttlHours: 24 }),
       });
@@ -140,14 +182,13 @@ export default function CoursePage() {
 
   async function addMaterial(e: React.FormEvent) {
     e.preventDefault();
-    if (!identity || !matTitle.trim() || busy) return;
+    if (!matTitle.trim() || busy) return;
     setBusy(true);
     try {
       const res = await fetch(`/api/courses/${cid}/materials`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...facilitatorHeaders(identity),
         },
         body: JSON.stringify({
           title: matTitle,
@@ -171,40 +212,46 @@ export default function CoursePage() {
 
   async function uploadFile(e: React.FormEvent) {
     e.preventDefault();
-    if (!identity || !fileToUpload || uploading) return;
+    if (filesToUpload.length === 0 || uploading) return;
     setUploading(true);
     setError(null);
+    // A single shared display title only makes sense for one file; when several
+    // are selected each keeps its own filename as the title (the API falls back
+    // to file.name when no title is sent).
+    const single = filesToUpload.length === 1;
     try {
-      const form = new FormData();
-      form.append("file", fileToUpload);
-      if (fileTitle.trim()) form.append("title", fileTitle.trim());
-      if (fileScope) form.append("sessionId", fileScope);
-      const res = await fetch(`/api/courses/${cid}/files`, {
-        method: "POST",
-        headers: facilitatorHeaders(identity),
-        body: form,
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? "Upload failed");
+      for (const file of filesToUpload) {
+        const form = new FormData();
+        form.append("file", file);
+        if (single && fileTitle.trim()) form.append("title", fileTitle.trim());
+        if (fileScope) form.append("sessionId", fileScope);
+        const res = await fetch(`/api/courses/${cid}/files`, {
+          method: "POST",
+          body: form,
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.error ?? `Upload failed for "${file.name}"`);
+        }
       }
       setFileTitle("");
-      setFileToUpload(null);
+      setFilesToUpload([]);
+      setFileInputKey((k) => k + 1); // remount the input to clear the selection
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
+      await load(); // surface any files that uploaded before the failure
     } finally {
       setUploading(false);
     }
   }
 
   async function remove(path: string) {
-    if (!identity || busy) return;
+    if (busy) return;
     setBusy(true);
     try {
       await fetch(path, {
         method: "DELETE",
-        headers: facilitatorHeaders(identity),
       });
       await load();
     } finally {
@@ -222,27 +269,6 @@ export default function CoursePage() {
     }
   }
 
-  if (!checked) return null;
-
-  if (!identity) {
-    return (
-      <main className="flex-1 flex items-center justify-center px-6 text-center">
-        <div>
-          <h1 className="text-xl font-semibold">Facilitator sign-in needed</h1>
-          <p className="text-slate-500 mt-2">
-            Set up your facilitator identity first, then open this course.
-          </p>
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="mt-4 rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700"
-          >
-            Go to the portal
-          </button>
-        </div>
-      </main>
-    );
-  }
-
   if (!detail) {
     return (
       <main className="flex-1 flex items-center justify-center text-slate-500">
@@ -251,7 +277,31 @@ export default function CoursePage() {
     );
   }
 
-  const { course, team, sessions, materials, files } = detail;
+  const { course, me, team, sessions, materials, files } = detail;
+  const isOwner = me.role === "owner" || me.isAdmin;
+
+  async function deleteCourse() {
+    const typed = window.prompt(
+      `This permanently deletes "${course.title}" and ALL of its sessions, tools, student roster, chat, and attendance history. This cannot be undone.\n\nType the course name to confirm:`
+    );
+    if (typed == null) return;
+    if (typed.trim() !== course.title.trim()) {
+      setError("The name didn't match — course was not deleted.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/courses/${cid}`, { method: "DELETE" });
+      if (res.ok) {
+        router.push("/dashboard");
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error ?? "Could not delete the course.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const scopeLabel = (sessionId: string | null) => {
     if (!sessionId) return "course-wide";
@@ -289,7 +339,21 @@ export default function CoursePage() {
           </button>
           <h1 className="text-xl font-bold truncate">{course.title}</h1>
         </div>
-        <span className="ml-auto text-sm text-slate-500">{identity.name}</span>
+        <div className="ml-auto flex items-center gap-3">
+          {isOwner && (
+            <button
+              onClick={deleteCourse}
+              disabled={busy}
+              className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-40"
+            >
+              Delete course
+            </button>
+          )}
+          <span className="text-sm text-slate-500">
+            {user?.firstName ?? user?.username ?? ""}
+          </span>
+          <UserButton />
+        </div>
       </header>
 
       {error && (
@@ -500,27 +564,39 @@ export default function CoursePage() {
             </ul>
             <form onSubmit={uploadFile} className="flex flex-wrap gap-1.5 items-center">
               <input
+                key={fileInputKey}
                 type="file"
-                onChange={(e) => setFileToUpload(e.target.files?.[0] ?? null)}
+                multiple
+                onChange={(e) => setFilesToUpload(Array.from(e.target.files ?? []))}
                 className="text-xs text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-medium file:text-slate-600 hover:file:bg-slate-200"
               />
               <input
                 value={fileTitle}
                 onChange={(e) => setFileTitle(e.target.value)}
-                placeholder="Display title (optional)"
+                placeholder={
+                  filesToUpload.length > 1
+                    ? "Titles taken from filenames"
+                    : "Display title (optional)"
+                }
+                disabled={filesToUpload.length > 1}
                 maxLength={200}
-                className="flex-1 min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-400"
               />
               {scopeSelect(fileScope, setFileScope)}
               <button
                 type="submit"
-                disabled={uploading || !fileToUpload}
+                disabled={uploading || filesToUpload.length === 0}
                 className="rounded-lg bg-indigo-600 text-white px-3 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40"
               >
-                {uploading ? "Uploading…" : "Upload"}
+                {uploading
+                  ? "Uploading…"
+                  : filesToUpload.length > 1
+                    ? `Upload ${filesToUpload.length} files`
+                    : "Upload"}
               </button>
               <p className="w-full text-[11px] text-slate-400">
-                PDFs, checklists, worksheets — up to 15 MB per file.
+                PDFs, checklists, worksheets — up to 15 MB each. Select several at
+                once to upload them together.
               </p>
             </form>
           </section>
@@ -551,17 +627,73 @@ export default function CoursePage() {
             <h2 className="font-semibold mb-3">Facilitator team</h2>
             <ul className="flex flex-col gap-1.5">
               {team.map((f) => (
-                <li key={f.id} className="flex items-center gap-2 text-sm">
-                  <span className="w-2 h-2 rounded-full bg-indigo-400" />
-                  {f.name}
+                <li key={f.id} className="flex items-center gap-2 text-sm group">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      f.pending ? "bg-amber-300" : "bg-indigo-400"
+                    }`}
+                  />
+                  <span className="min-w-0">
+                    <span className="truncate">{f.name}</span>
+                    {f.email && f.email !== f.name && (
+                      <span className="text-slate-400 ml-1 text-xs">
+                        {f.email}
+                      </span>
+                    )}
+                  </span>
                   {f.role === "owner" && (
                     <span className="text-[10px] uppercase font-semibold text-slate-400">
                       owner
                     </span>
                   )}
+                  {f.pending && (
+                    <span className="text-[10px] uppercase font-semibold text-amber-500">
+                      invited
+                    </span>
+                  )}
+                  {isOwner && f.role !== "owner" && f.id !== me.id && (
+                    <button
+                      onClick={() => removeMember(f.id, f.name)}
+                      className="ml-auto text-xs text-slate-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
+
+            {isOwner ? (
+              <form onSubmit={inviteMember} className="mt-4 flex flex-col gap-2">
+                <p className="text-xs text-slate-500">
+                  Invite a co-facilitator by email, or share the course code{" "}
+                  <span className="font-mono">{course.code}</span>.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="name@example.com"
+                    className="flex-1 min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={busy || !inviteEmail.trim()}
+                    className="rounded-lg bg-indigo-600 text-white px-3 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40 transition"
+                  >
+                    Invite
+                  </button>
+                </div>
+                {inviteMsg && (
+                  <p className="text-xs text-slate-500">{inviteMsg}</p>
+                )}
+              </form>
+            ) : (
+              <p className="mt-4 text-xs text-slate-400">
+                Only the course owner can invite or remove facilitators.
+              </p>
+            )}
           </section>
         </div>
       </div>

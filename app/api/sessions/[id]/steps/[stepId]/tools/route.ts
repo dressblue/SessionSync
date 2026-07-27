@@ -15,10 +15,44 @@ export async function POST(
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
   const body = await req.json().catch(() => null);
+
+  // Clone a tool straight from the library into this step (config is already a
+  // complete, launch-ready spec — no per-kind validation/assembly needed).
+  if (typeof body?.fromTemplateId === "string" && body.fromTemplateId) {
+    const step = await query<{ id: string }>(
+      `SELECT id FROM steps WHERE id = $1 AND session_id = $2`,
+      [stepId, id]
+    );
+    if (!step.rows[0]) {
+      return NextResponse.json({ error: "Step not found" }, { status: 404 });
+    }
+    const t = await query<{ kind: string; prompt: string; config: string }>(
+      `SELECT kind, prompt, config FROM tool_templates WHERE id = $1`,
+      [body.fromTemplateId]
+    );
+    if (!t.rows[0]) {
+      return NextResponse.json(
+        { error: "Library tool not found" },
+        { status: 404 }
+      );
+    }
+    const pos = await query<{ next: number }>(
+      `SELECT COALESCE(MAX(position), -1) + 1 AS next FROM step_tools WHERE step_id = $1`,
+      [stepId]
+    );
+    const toolId = randomUUID();
+    await query(
+      `INSERT INTO step_tools (id, step_id, kind, prompt, config, position)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [toolId, stepId, t.rows[0].kind, t.rows[0].prompt, t.rows[0].config, pos.rows[0].next]
+    );
+    return NextResponse.json({ id: toolId });
+  }
+
   const kind = body?.kind;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   if (
-    !["vote", "likert", "columns", "reveal", "wheel", "whiteboard", "exhibit", "video", "timer", "wordcloud"].includes(kind)
+    !["vote", "likert", "columns", "reveal", "wheel", "workflow", "whiteboard", "exhibit", "video", "timer", "wordcloud"].includes(kind)
   ) {
     return NextResponse.json({ error: "Unknown tool kind" }, { status: 400 });
   }
@@ -36,6 +70,7 @@ export async function POST(
   if (Array.isArray(body?.options)) config.options = body.options;
   if (Array.isArray(body?.columns)) config.columns = body.columns;
   if (Array.isArray(body?.items)) config.items = body.items;
+  if (body?.graph && typeof body.graph === "object") config.graph = body.graph;
   if (body?.sourcing === "participants") config.sourcing = "participants";
   if (typeof body?.anchorSet === "string") config.anchorSet = body.anchorSet;
   if (typeof body?.exhibit === "string") config.exhibit = body.exhibit;

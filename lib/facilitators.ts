@@ -1,11 +1,5 @@
-import { randomUUID, randomBytes } from "crypto";
+import { randomBytes } from "crypto";
 import { query } from "./db";
-
-export interface FacilitatorRow {
-  id: string;
-  name: string;
-  key: string;
-}
 
 export interface CourseRow {
   id: string;
@@ -13,6 +7,11 @@ export interface CourseRow {
   description: string;
   code: string;
   created_by: string | null;
+  is_template: boolean;
+  template_id: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  cohort_label: string;
 }
 
 // Same unambiguous alphabet used for session codes.
@@ -25,30 +24,6 @@ export function makeCode(length = 6): string {
     out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
   }
   return out;
-}
-
-export async function createFacilitator(name: string): Promise<FacilitatorRow> {
-  const id = randomUUID();
-  const key = randomBytes(24).toString("base64url");
-  await query(
-    `INSERT INTO facilitators (id, name, key) VALUES ($1, $2, $3)`,
-    [id, name.slice(0, 120), key]
-  );
-  return { id, name, key };
-}
-
-/** Resolve the facilitator identity from request headers, or null. */
-export async function getFacilitatorFromRequest(
-  req: Request
-): Promise<FacilitatorRow | null> {
-  const id = req.headers.get("x-facilitator-id");
-  const secret = req.headers.get("x-facilitator-secret");
-  if (!id || !secret) return null;
-  const res = await query<FacilitatorRow>(
-    `SELECT id, name, key FROM facilitators WHERE id = $1 AND key = $2`,
-    [id, secret]
-  );
-  return res.rows[0] ?? null;
 }
 
 export async function isCourseFacilitator(

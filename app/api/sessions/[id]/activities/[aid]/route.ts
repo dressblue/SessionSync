@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { authorizeSession, type ActivityRow } from "@/lib/sessions";
+import {
+  authorizeSession,
+  resolveWorkflowGraph,
+  type ActivityRow,
+} from "@/lib/sessions";
 
 type Ctx = { params: Promise<{ id: string; aid: string }> };
 
@@ -134,6 +138,94 @@ export async function PATCH(req: Request, ctx: Ctx) {
     } else {
       return NextResponse.json({ error: "Unknown video action" }, { status: 400 });
     }
+    await query(`UPDATE activities SET config = $1 WHERE id = $2`, [
+      JSON.stringify(config),
+      aid,
+    ]);
+    return NextResponse.json({ ok: true });
+  }
+
+  // Quiz: reveal (or re-hide) the correct answer for everyone.
+  if (typeof body?.revealAnswer === "boolean") {
+    const res = await query<ActivityRow>(
+      `SELECT * FROM activities WHERE id = $1 AND session_id = $2 AND status = 'open'`,
+      [aid, id]
+    );
+    const activity = res.rows[0];
+    if (!activity || activity.kind !== "quiz") {
+      return NextResponse.json({ error: "No quiz activity" }, { status: 404 });
+    }
+    let config: Record<string, unknown> = {};
+    try {
+      config = JSON.parse(activity.config);
+    } catch {
+      /* rebuilt below */
+    }
+    config.answerRevealed = body.revealAnswer;
+    await query(`UPDATE activities SET config = $1 WHERE id = $2`, [
+      JSON.stringify(config),
+      aid,
+    ]);
+    return NextResponse.json({ ok: true });
+  }
+
+  // Workflow: move through the step graph. Actions:
+  //   goto {nodeId}  — jump to a node (a branch choice, or a click on the map)
+  //   back           — pop the visited history
+  //   restart        — return to the start and clear history
+  if (body?.workflow && typeof body.workflow === "object") {
+    const res = await query<ActivityRow>(
+      `SELECT * FROM activities WHERE id = $1 AND session_id = $2 AND status = 'open'`,
+      [aid, id]
+    );
+    const activity = res.rows[0];
+    if (!activity || activity.kind !== "workflow") {
+      return NextResponse.json({ error: "Workflow not open" }, { status: 404 });
+    }
+    let config: Record<string, unknown> = {};
+    try {
+      config = JSON.parse(activity.config);
+    } catch {
+      /* rebuilt below */
+    }
+    const graph = resolveWorkflowGraph(config);
+    const ids = new Set(graph.nodes.map((n) => n.id));
+    let current =
+      typeof config.current === "string" ? config.current : graph.startId;
+    if (typeof config.current === "number")
+      current = graph.nodes[config.current]?.id ?? graph.startId;
+    if (!ids.has(current)) current = graph.startId;
+    const history: string[] = Array.isArray(config.history)
+      ? (config.history as string[])
+      : [];
+
+    const w = body.workflow as {
+      action?: string;
+      nodeId?: string;
+      value?: boolean;
+    };
+    if (w.action === "showMap") {
+      config.showMap = !!w.value;
+    } else if (w.action === "goto" && typeof w.nodeId === "string") {
+      if (!ids.has(w.nodeId)) {
+        return NextResponse.json({ error: "Unknown step" }, { status: 400 });
+      }
+      if (w.nodeId !== current) history.push(current);
+      current = w.nodeId;
+    } else if (w.action === "back") {
+      const prev = history.pop();
+      if (prev) current = prev;
+    } else if (w.action === "restart") {
+      current = graph.startId;
+      history.length = 0;
+    } else {
+      return NextResponse.json(
+        { error: "Unknown workflow action" },
+        { status: 400 }
+      );
+    }
+    config.current = current;
+    config.history = history.slice(-200);
     await query(`UPDATE activities SET config = $1 WHERE id = $2`, [
       JSON.stringify(config),
       aid,

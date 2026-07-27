@@ -1,6 +1,6 @@
 "use client";
 
-import type { ActivityEntry } from "./useSessionState";
+import { useMemo } from "react";
 
 const CLOUD_COLORS = [
   "#4f46e5",
@@ -9,107 +9,206 @@ const CLOUD_COLORS = [
   "#d97706",
   "#db2777",
   "#7c3aed",
+  "#b91c1c",
+  "#0d9488",
 ];
 
-interface Props {
-  entries: ActivityEntry[];
-  canModerate: boolean;
-  /** Facilitator: hide/unhide every submission of a word. */
-  onToggleWord: (ids: string[], hide: boolean) => void;
+export interface CloudWord {
+  text: string;
+  count: number;
+  downvotes: number;
+  weight: number;
+  mine: boolean;
+  hidden: boolean;
+  ids: string[];
 }
 
-// Frequency-sized word cloud. Words are grouped case-insensitively; the more
-// people submit the same word, the larger it renders.
-export function WordCloud({ entries, canModerate, onToggleWord }: Props) {
-  // Group by lowercased text.
-  const groups = new Map<
-    string,
-    { text: string; visible: number; ids: string[]; hidden: boolean }
-  >();
-  for (const e of entries) {
-    const key = e.value.trim().toLowerCase();
-    if (!key) continue;
-    const g = groups.get(key) ?? {
-      text: e.value.trim(),
-      visible: 0,
-      ids: [],
-      hidden: true,
-    };
-    g.ids.push(e.id);
-    if (!e.hidden) {
-      g.visible += 1;
-      g.hidden = false;
+interface Props {
+  cloud: CloudWord[];
+  /** Absent for participants (they downvote instead of moderating). */
+  canModerate: boolean;
+  onDownvote: (word: string) => void;
+  onHide: (ids: string[], hide: boolean) => void;
+  onClearDownvotes: (word: string) => void;
+  /** Static display (e.g. the close-out report) — no interaction or hints. */
+  readOnly?: boolean;
+  /** Projector mode — fill the screen for across-the-room viewing. */
+  present?: boolean;
+}
+
+interface Placed {
+  w: CloudWord;
+  x: number;
+  y: number;
+  size: number;
+  color: string;
+}
+
+// Stable color per word (so a word keeps its colour across live updates).
+const colorFor = (text: string) =>
+  CLOUD_COLORS[
+    ([...text].reduce((a, c) => a + c.charCodeAt(0), 0)) % CLOUD_COLORS.length
+  ];
+
+// Archimedean-spiral packer. Words are placed largest-first from the centre;
+// each is dropped at the first spiral position where its box clears everything
+// already placed. Deterministic (same input → same layout), so live updates
+// animate smoothly via CSS transitions rather than reshuffling.
+function packWords(cloud: CloudWord[]): {
+  placed: Placed[];
+  vb: { x: number; y: number; w: number; h: number };
+} {
+  const visible = cloud
+    .filter((w) => !w.hidden && w.weight > 0)
+    .sort((a, b) => b.weight - a.weight || a.text.localeCompare(b.text))
+    .slice(0, 80);
+  if (visible.length === 0) {
+    return { placed: [], vb: { x: 0, y: 0, w: 100, h: 60 } };
+  }
+  const maxW = Math.max(...visible.map((w) => w.weight));
+  const minW = Math.min(...visible.map((w) => w.weight));
+  const MIN_SIZE = 22;
+  // Natural size from submissions (weight); sqrt curve reads better.
+  const naturalSize = (weight: number) => {
+    const t = maxW === minW ? 0.5 : (weight - minW) / (maxW - minW);
+    return MIN_SIZE + Math.sqrt(t) * 54; // 22px → 76px
+  };
+  // Downvotes shrink a word by up to 50% of its natural size (floored at the
+  // minimum so it stays readable); it's outlined at render time to stay findable.
+  const sizeFor = (w: CloudWord) => {
+    const nat = naturalSize(w.weight);
+    if (w.downvotes <= 0) return nat;
+    const net = w.count - w.downvotes;
+    const factor = Math.max(0.5, Math.min(1, net / w.count));
+    return Math.max(MIN_SIZE, nat * factor);
+  };
+
+  const boxes: { x: number; y: number; w: number; h: number }[] = [];
+  const placed: Placed[] = [];
+  const overlaps = (
+    a: { x: number; y: number; w: number; h: number },
+    b: { x: number; y: number; w: number; h: number }
+  ) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+  const ASPECT = 0.6; // squash vertically → wider-than-tall cloud
+  for (const w of visible) {
+    const size = sizeFor(w);
+    const boxW = Math.max(size * 0.7, w.text.length * size * 0.56) + 10;
+    const boxH = size * 1.1;
+    let bx = -boxW / 2;
+    let by = -boxH / 2;
+    for (let t = 0; t < 1200; t += 0.22) {
+      const r = 3.2 * t;
+      const cx = r * Math.cos(t);
+      const cy = r * Math.sin(t) * ASPECT;
+      const cand = { x: cx - boxW / 2, y: cy - boxH / 2, w: boxW, h: boxH };
+      if (!boxes.some((b) => overlaps(cand, b))) {
+        bx = cand.x;
+        by = cand.y;
+        break;
+      }
     }
-    groups.set(key, g);
+    boxes.push({ x: bx, y: by, w: boxW, h: boxH });
+    placed.push({ w, x: bx + boxW / 2, y: by + boxH / 2, size, color: colorFor(w.text) });
   }
 
-  const all = [...groups.values()];
-  const visibleWords = all
-    .filter((g) => g.visible > 0)
-    .sort((a, b) => b.visible - a.visible);
-  const hiddenWords = all.filter((g) => g.visible === 0);
-
-  const maxCount = Math.max(1, ...visibleWords.map((g) => g.visible));
-  const minCount = Math.min(...visibleWords.map((g) => g.visible), 1);
-  // Font size scales 15px → 46px by frequency.
-  const sizeFor = (n: number) => {
-    if (maxCount === minCount) return 24;
-    return 15 + ((n - minCount) / (maxCount - minCount)) * 31;
+  const minX = Math.min(...boxes.map((b) => b.x));
+  const minY = Math.min(...boxes.map((b) => b.y));
+  const maxX = Math.max(...boxes.map((b) => b.x + b.w));
+  const maxY = Math.max(...boxes.map((b) => b.y + b.h));
+  const pad = 14;
+  return {
+    placed,
+    vb: { x: minX - pad, y: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 },
   };
+}
+
+export function WordCloud({
+  cloud,
+  canModerate,
+  onDownvote,
+  onHide,
+  onClearDownvotes,
+  readOnly = false,
+  present = false,
+}: Props) {
+  const { placed, vb } = useMemo(() => packWords(cloud), [cloud]);
+  const hidden = cloud.filter((w) => w.hidden || w.weight <= 0);
 
   return (
     <div>
-      {visibleWords.length === 0 ? (
-        <p className="text-sm text-slate-400 text-center py-8">
+      {placed.length === 0 ? (
+        <p className="text-sm text-slate-400 text-center py-10">
           No words yet — they&apos;ll appear here, sized by how often they&apos;re
           submitted.
         </p>
       ) : (
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 py-4">
-          {visibleWords.map((g, i) => (
-            <span
-              key={g.text}
-              onClick={
-                canModerate ? () => onToggleWord(g.ids, true) : undefined
-              }
-              title={
-                canModerate
-                  ? `${g.visible}× — click to hide`
-                  : `${g.visible} submission${g.visible === 1 ? "" : "s"}`
-              }
-              className={`font-bold leading-none ${
-                canModerate ? "cursor-pointer hover:opacity-70" : ""
-              }`}
+        <svg
+          viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+          className="w-full"
+          style={{ maxHeight: present ? "72vh" : 440 }}
+          role="img"
+          aria-label="Word cloud"
+        >
+          {placed.map((p) => (
+            <text
+              key={p.w.text}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill={p.color}
+              stroke={p.w.downvotes > 0 ? "#334155" : undefined}
+              strokeWidth={p.w.downvotes > 0 ? Math.max(0.6, p.size * 0.03) : undefined}
+              paintOrder="stroke"
+              className={`font-bold select-none ${readOnly ? "" : "cursor-pointer"}`}
               style={{
-                fontSize: `${sizeFor(g.visible)}px`,
-                color: CLOUD_COLORS[i % CLOUD_COLORS.length],
+                transform: `translate(${p.x}px, ${p.y}px)`,
+                fontSize: `${p.size}px`,
+                transition: "transform .5s ease, font-size .35s ease, opacity .2s",
+                opacity: p.w.mine && !canModerate && !readOnly ? 0.65 : 1,
               }}
+              onClick={
+                readOnly
+                  ? undefined
+                  : () =>
+                      canModerate ? onHide(p.w.ids, true) : onDownvote(p.w.text)
+              }
             >
-              {g.text}
-              {g.visible > 1 && (
-                <sup className="text-[10px] font-semibold text-slate-400 ml-0.5">
-                  {g.visible}
-                </sup>
-              )}
-            </span>
+              <title>
+                {canModerate
+                  ? `${p.w.count}×${p.w.downvotes ? ` · ${p.w.downvotes} downvote${p.w.downvotes === 1 ? "" : "s"}` : ""} — click to hide`
+                  : p.w.mine
+                    ? "you shrank this — tap to undo"
+                    : "tap to shrink"}
+              </title>
+              {p.w.text}
+            </text>
           ))}
-        </div>
+        </svg>
       )}
 
-      {canModerate && hiddenWords.length > 0 && (
+      {!canModerate && !readOnly && placed.length > 0 && (
+        <p className="mt-2 text-[11px] text-slate-400 text-center">
+          Tap a word to shrink it. Tap one you shrank to undo.
+        </p>
+      )}
+
+      {canModerate && hidden.length > 0 && (
         <div className="mt-3 border-t border-slate-100 pt-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
-            Hidden
+            Hidden / shrunk away
           </p>
           <div className="flex flex-wrap gap-1.5">
-            {hiddenWords.map((g) => (
+            {hidden.map((w) => (
               <button
-                key={g.text}
-                onClick={() => onToggleWord(g.ids, false)}
+                key={w.text}
+                onClick={() => {
+                  if (w.ids.length) onHide(w.ids, false);
+                  if (w.downvotes) onClearDownvotes(w.text);
+                }}
                 title="Click to restore"
                 className="rounded-full border border-dashed border-slate-300 bg-slate-50 px-2 py-0.5 text-xs text-slate-400 line-through hover:text-slate-600"
               >
-                {g.text}
+                {w.text}
               </button>
             ))}
           </div>

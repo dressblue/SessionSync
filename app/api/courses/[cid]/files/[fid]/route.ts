@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
+import { getFacilitator } from "@/lib/viewer";
 import { query } from "@/lib/db";
 import {
-  getFacilitatorFromRequest,
   isCourseFacilitator,
 } from "@/lib/facilitators";
 
@@ -10,7 +10,7 @@ export async function DELETE(
   ctx: { params: Promise<{ cid: string; fid: string }> }
 ) {
   const { cid, fid } = await ctx.params;
-  const facilitator = await getFacilitatorFromRequest(req);
+  const facilitator = await getFacilitator();
   if (!facilitator || !(await isCourseFacilitator(cid, facilitator.id))) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }

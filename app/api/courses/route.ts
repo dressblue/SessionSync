@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
+import { getFacilitator } from "@/lib/viewer";
 import { randomUUID } from "crypto";
 import { query } from "@/lib/db";
 import {
-  getFacilitatorFromRequest,
   makeCode,
   type CourseRow,
 } from "@/lib/facilitators";
 
 export async function GET(req: Request) {
-  const facilitator = await getFacilitatorFromRequest(req);
+  const facilitator = await getFacilitator();
   if (!facilitator) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
@@ -32,12 +32,17 @@ export async function GET(req: Request) {
       code: c.code,
       sessionCount: c.session_count,
       facilitatorCount: c.facilitator_count,
+      isTemplate: c.is_template,
+      templateId: c.template_id,
+      startsAt: c.starts_at,
+      endsAt: c.ends_at,
+      cohortLabel: c.cohort_label,
     })),
   });
 }
 
 export async function POST(req: Request) {
-  const facilitator = await getFacilitatorFromRequest(req);
+  const facilitator = await getFacilitator();
   if (!facilitator) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }

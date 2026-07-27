@@ -6,6 +6,8 @@ import {
   extractActivityTexts,
   fetchActivityResponses,
   type ActivityRow,
+  type WorkflowNode,
+  type WorkflowEdge,
 } from "@/lib/sessions";
 
 const cleanList = (v: unknown, max: number): string[] =>
@@ -15,6 +17,54 @@ const cleanList = (v: unknown, max: number): string[] =>
         .filter(Boolean)
         .slice(0, max)
     : [];
+
+const str = (v: unknown, max: number) =>
+  (typeof v === "string" ? v : "").slice(0, max);
+const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : 0);
+
+// Validate a workflow graph coming from the visual builder. Returns null if it
+// isn't a usable graph (fewer than two nodes), so the caller can fall back.
+function sanitizeWorkflowGraph(
+  raw: unknown
+): { nodes: WorkflowNode[]; edges: WorkflowEdge[]; startId: string } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const g = raw as { nodes?: unknown; edges?: unknown; startId?: unknown };
+  if (!Array.isArray(g.nodes)) return null;
+  const nodes: WorkflowNode[] = g.nodes
+    .slice(0, 60)
+    .map((n) => n as Record<string, unknown>)
+    .filter((n) => typeof n.id === "string" && str(n.title, 160).trim())
+    .map((n) => ({
+      id: n.id as string,
+      title: str(n.title, 160).trim(),
+      note: str(n.note, 800),
+      x: num(n.x),
+      y: num(n.y),
+    }));
+  if (nodes.length < 2) return null;
+  const ids = new Set(nodes.map((n) => n.id));
+  const edges: WorkflowEdge[] = (Array.isArray(g.edges) ? g.edges : [])
+    .slice(0, 200)
+    .map((e) => e as Record<string, unknown>)
+    .filter(
+      (e) =>
+        typeof e.from === "string" &&
+        typeof e.to === "string" &&
+        ids.has(e.from) &&
+        ids.has(e.to)
+    )
+    .map((e, i) => ({
+      id: typeof e.id === "string" ? e.id : `e${i}`,
+      from: e.from as string,
+      to: e.to as string,
+      label: str(e.label, 120),
+    }));
+  const startId =
+    typeof g.startId === "string" && ids.has(g.startId)
+      ? g.startId
+      : nodes[0].id;
+  return { nodes, edges, startId };
+}
 
 // Facilitator pushes a new activity. Any open activity is closed first —
 // one activity is live at a time.
@@ -89,6 +139,26 @@ export async function POST(
       }
       config = { options };
     }
+  } else if (kind === "quiz") {
+    const options = cleanList(body?.options, 8);
+    if (options.length < 2) {
+      return NextResponse.json(
+        { error: "A quiz needs at least two answers" },
+        { status: 400 }
+      );
+    }
+    const correctIndex = Number(body?.correctIndex);
+    if (
+      !Number.isInteger(correctIndex) ||
+      correctIndex < 0 ||
+      correctIndex >= options.length
+    ) {
+      return NextResponse.json(
+        { error: "Mark which answer is correct" },
+        { status: 400 }
+      );
+    }
+    config = { options, correctIndex, answerRevealed: false };
   } else if (kind === "likert") {
     const scale = 5;
     const anchorSet =
@@ -133,6 +203,33 @@ export async function POST(
     }
     config =
       kind === "reveal" ? { richItems, revealed: 0 } : { richItems, active: -1 };
+  } else if (kind === "workflow") {
+    // Preferred: a graph from the visual builder. Fallback: "Title | note" lines.
+    const graph = sanitizeWorkflowGraph(body?.graph);
+    if (graph) {
+      config = {
+        nodes: graph.nodes,
+        edges: graph.edges,
+        startId: graph.startId,
+        current: graph.startId,
+        history: [],
+      };
+    } else {
+      const richItems = cleanList(body?.items, 40).map((line) => {
+        const [title, ...rest] = line.split("|");
+        return {
+          title: title.trim().slice(0, 160),
+          note: rest.join("|").trim().slice(0, 800),
+        };
+      });
+      if (richItems.length < 2) {
+        return NextResponse.json(
+          { error: "A workflow needs at least two steps" },
+          { status: 400 }
+        );
+      }
+      config = { richItems, current: 0 };
+    }
   } else if (kind === "whiteboard") {
     config = {};
   } else if (kind === "exhibit") {
