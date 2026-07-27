@@ -82,6 +82,8 @@ export function ActivityConsole({
   const [listText, setListText] = useState("");
   const [graph, setGraph] = useState<WorkflowGraph | null>(null);
   const [columns, setColumns] = useState<string[]>(["", ""]);
+  // Words carried over to seed a NEW word cloud (applied after it's created).
+  const [seedWords, setSeedWords] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -181,15 +183,71 @@ export function ActivityConsole({
     setExhibitText("");
     setVideoUrl("");
     setCorrectIndex(0);
+    setSeedWords([]);
+  }
+
+  // Carry a source activity's word list into the Push-an-activity form for a new
+  // activity of `target`, pre-filled so the facilitator can adjust and launch.
+  function reuseWords(activity: ActivityState, target: Kind) {
+    const words =
+      activity.kind === "sort"
+        ? (activity.words ?? [])
+        : activity.kind === "wordcloud"
+          ? (activity.cloud ?? []).map((c) => c.text)
+          : (activity.options ?? activity.items ?? []);
+    resetForm();
+    setKind(target);
+    setPrompt(activity.prompt ?? "");
+    if (target === "wordcloud") {
+      setSeedWords(words);
+    } else if (target === "columns") {
+      const cols = words.slice(0, 4);
+      setColumns(cols.length >= 2 ? cols : [...cols, ...Array(2 - cols.length).fill("")]);
+    } else {
+      // vote / likert / sort / reveal / wheel — the shared list textarea.
+      if (target === "vote" || target === "likert") setSourcing("facilitator");
+      setListText(words.join("\n"));
+    }
+    setError(
+      words.length
+        ? `Loaded ${words.length} word${words.length === 1 ? "" : "s"} — adjust below, then push.`
+        : "That activity has no words yet."
+    );
   }
 
   async function push(e: React.FormEvent) {
     e.preventDefault();
-    const ok = await call(
-      `/api/sessions/${sessionId}/activities`,
-      "POST",
-      buildBody()
-    );
+    const body = buildBody();
+    // Word cloud carried over from another activity: create it, then seed it.
+    if (kind === "wordcloud" && seedWords.length) {
+      setError(null);
+      setBusy(true);
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}/activities`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => null);
+          throw new Error(d?.error ?? `Request failed (${res.status})`);
+        }
+        const { id: newId } = (await res.json()) as { id: string };
+        await fetch(`/api/sessions/${sessionId}/respond`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          body: JSON.stringify({ activityId: newId, words: seedWords }),
+        });
+        onChanged();
+        resetForm();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Action failed");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    const ok = await call(`/api/sessions/${sessionId}/activities`, "POST", body);
     if (ok) resetForm();
   }
 
@@ -224,10 +282,38 @@ export function ActivityConsole({
           </span>
         </h2>
         <div className="flex flex-wrap items-center gap-2">
+          {(activity.kind === "sort" || activity.kind === "wordcloud") && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] text-slate-500">Reuse words →</span>
+              {(
+                [
+                  ["wordcloud", "Cloud"],
+                  ["sort", "Sort"],
+                  ["vote", "Vote"],
+                  ["likert", "Scoring"],
+                  ["columns", "Board"],
+                ] as [Kind, string][]
+              )
+                .filter(([k]) => k !== activity.kind)
+                .map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => reuseWords(activity, k)}
+                    disabled={busy}
+                    title={`Load these words into a new ${label} activity`}
+                    className="rounded-lg border border-violet-300 text-violet-700 px-2.5 py-1.5 text-xs font-medium hover:bg-violet-50 disabled:opacity-40"
+                  >
+                    {label}
+                  </button>
+                ))}
+            </div>
+          )}
           {activity.kind !== "whiteboard" &&
             activity.kind !== "exhibit" &&
             activity.kind !== "video" &&
             activity.kind !== "timer" &&
+            activity.kind !== "sort" &&
+            activity.kind !== "wordcloud" &&
             !(activity.kind === "vote" && activity.phase !== "collect") && (
               <button
                 onClick={() =>
