@@ -7,6 +7,7 @@ import { LikertChart } from "@/components/LikertChart";
 import { WordCloud } from "@/components/WordCloud";
 import { CardSort } from "@/components/CardSort";
 import { ImpactBoard } from "@/components/ImpactBoard";
+import { SurveyBoard } from "@/components/SurveyBoard";
 import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
 
 interface ReportData {
@@ -36,6 +37,7 @@ const KIND_LABEL: Record<string, string> = {
   impact2: "Impact 2",
   impact3: "Impact 3",
   impact4: "Impact 4",
+  survey: "Survey",
 };
 
 function strokesToDataUrl(strokes: Stroke[]): string {
@@ -154,6 +156,25 @@ function activityLines(a: ActivityState): string[] {
       ...scales.map((s, i) => `  ${s.name}: ${valueText(i, e.ratings[i] ?? null)}`),
     ]);
     return [...header, ...(rows.length ? rows : ["No entries yet."])];
+  }
+  if (a.kind === "survey") {
+    const questions = a.questions ?? [];
+    const resp = a.surveyResponses ?? [];
+    return questions.flatMap((q, qi) => {
+      const forQ = resp.filter((r) => r.q === qi);
+      const lines = [
+        `${qi + 1}. ${q.text}  (${forQ.length} response${forQ.length === 1 ? "" : "s"})`,
+        ...q.options.map((opt, oi) => {
+          const c = forQ.filter((r) => r.selected.includes(oi)).length;
+          const pct = forQ.length ? Math.round((c / forQ.length) * 100) : 0;
+          return `  ${opt}: ${c} · ${pct}%`;
+        }),
+        ...forQ
+          .filter((r) => r.comment.trim())
+          .map((r) => `  “${r.comment}” — ${r.name}`),
+      ];
+      return lines;
+    });
   }
   if (a.kind === "whiteboard") {
     return [`Shared drawing with ${a.strokes?.length ?? 0} strokes`];
@@ -661,6 +682,16 @@ export default function ReportPage() {
                     onAdd={() => {}}
                     onDelete={() => {}}
                     onHighlight={() => {}}
+                  />
+                </div>
+              ) : a.kind === "survey" ? (
+                <div className="mt-2">
+                  <SurveyBoard
+                    mode={a.surveyMode ?? "single"}
+                    questions={a.questions ?? []}
+                    responses={a.surveyResponses ?? []}
+                    canAnswer={false}
+                    onAnswer={() => {}}
                   />
                 </div>
               ) : (

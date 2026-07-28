@@ -12,6 +12,7 @@ import { LikertChart } from "./LikertChart";
 import { VideoPlayer } from "./VideoPlayer";
 import { TimerDisplay } from "./TimerDisplay";
 import { WordCloud } from "./WordCloud";
+import { SurveyBoard } from "./SurveyBoard";
 import { CardSort } from "./CardSort";
 import { ImpactBoard } from "./ImpactBoard";
 import { WorkflowBuilder } from "./WorkflowBuilder";
@@ -1058,6 +1059,25 @@ export function ActivityPanel({
           onDelete={(entryId) => send({ entryId }, "DELETE")}
           onHighlight={(entryId, highlighted) =>
             moderate(entryId, { highlighted })
+          }
+          presentation={presentation}
+        />
+      </div>
+    );
+  }
+
+  // ---- Survey: several questions, single/multi-select + a comment each ----
+  if (activity.kind === "survey") {
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Survey")}
+        <SurveyBoard
+          mode={activity.surveyMode ?? "single"}
+          questions={activity.questions ?? []}
+          responses={activity.surveyResponses ?? []}
+          canAnswer={!!participantId && !canModerate}
+          onAnswer={(q, selected, comment) =>
+            send({ questionIndex: q, selected, comment }, "POST", false)
           }
           presentation={presentation}
         />

@@ -29,7 +29,8 @@ export type ActivityKind =
   | "impact1"
   | "impact2"
   | "impact3"
-  | "impact4";
+  | "impact4"
+  | "survey";
 
 export interface RichItem {
   title: string;
@@ -139,6 +140,17 @@ export interface ActivityState {
     mine: boolean;
     highlighted: boolean;
   }[];
+  surveyMode?: "single" | "multi";
+  questions?: { text: string; options: string[] }[];
+  surveyResponses?: {
+    id: string;
+    q: number;
+    selected: number[];
+    comment: string;
+    name: string;
+    participantId: string | null;
+    mine: boolean;
+  }[];
   video?: {
     provider: "youtube" | "video";
     ref: string;
@@ -173,6 +185,8 @@ export interface StepTool {
   items?: string[];
   topic?: string;
   scales?: { name: string; anchorSet: string; allowNA: boolean }[];
+  mode?: "single" | "multi";
+  questions?: { text: string; options: string[] }[];
   graph?: WorkflowGraph;
   sourcing?: "participants";
   anchorSet?: string;

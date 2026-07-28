@@ -87,6 +87,8 @@ export async function POST(
     columns?: string[];
     words?: string[];
     scales?: { name: string; anchorSet: string; allowNA: boolean }[];
+    mode?: "single" | "multi";
+    questions?: { text: string; options: string[] }[];
     items?: string[];
     phase?: string;
     scale?: number;
@@ -360,6 +362,47 @@ export async function POST(
         JSON.stringify({ text: text.slice(0, 500), ratings }),
       ]
     );
+    return NextResponse.json({ ok: true });
+  }
+
+  // Survey: save one question's answer (selected option indices + comment).
+  // Stored one row per participant per question at column_index = question
+  // index; re-answering replaces the prior row.
+  if (activity.kind === "survey") {
+    const questions = config.questions ?? [];
+    const qi = Number(body?.questionIndex);
+    if (!Number.isInteger(qi) || qi < 0 || qi >= questions.length) {
+      return NextResponse.json({ error: "Unknown question" }, { status: 400 });
+    }
+    const optCount = questions[qi].options.length;
+    let selected = Array.isArray(body?.selected)
+      ? (body.selected as unknown[])
+          .map((n) => Number(n))
+          .filter((n) => Number.isInteger(n) && n >= 0 && n < optCount)
+      : [];
+    selected = Array.from(new Set(selected));
+    if (config.mode !== "multi") selected = selected.slice(0, 1);
+    const comment =
+      typeof body?.comment === "string" ? body.comment.trim().slice(0, 500) : "";
+    await query(
+      `DELETE FROM activity_responses
+       WHERE activity_id = $1 AND participant_id = $2 AND column_index = $3`,
+      [activity.id, participantId, qi]
+    );
+    // Keep a row only if the participant chose something or left a comment.
+    if (selected.length || comment) {
+      await query(
+        `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          randomUUID(),
+          activity.id,
+          participantId,
+          qi,
+          JSON.stringify({ selected, comment }),
+        ]
+      );
+    }
     return NextResponse.json({ ok: true });
   }
 

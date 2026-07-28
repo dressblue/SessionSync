@@ -9,6 +9,7 @@ import type {
 } from "./useSessionState";
 import { ActivityPanel } from "./ActivityPanel";
 import { WorkflowBuilder } from "./WorkflowBuilder";
+import { SurveyBuilder } from "./SurveyBuilder";
 import { LIKERT_ANCHOR_LABELS } from "@/lib/likert";
 
 interface Props {
@@ -45,7 +46,8 @@ type Kind =
   | "impact1"
   | "impact2"
   | "impact3"
-  | "impact4";
+  | "impact4"
+  | "survey";
 type Sourcing = "facilitator" | "participants";
 
 const KIND_LABEL: Record<string, string> = {
@@ -66,6 +68,7 @@ const KIND_LABEL: Record<string, string> = {
   impact2: "Impact 2",
   impact3: "Impact 3",
   impact4: "Impact 4",
+  survey: "Survey",
 };
 
 // Facilitator's activity station: up to two activities run side by side
@@ -115,6 +118,11 @@ export function ActivityConsole({
         : kind === "impact2"
           ? 2
           : 1;
+  // Survey: single/multi for the whole tool + a list of questions (1–4 options).
+  const [surveyMode, setSurveyMode] = useState<"single" | "multi">("single");
+  const [surveyQuestions, setSurveyQuestions] = useState<
+    { text: string; options: string[] }[]
+  >([{ text: "", options: ["", ""] }]);
   const [exhibitType, setExhibitType] = useState<"file" | "url" | "text">("file");
   const [exhibitFileId, setExhibitFileId] = useState("");
   const [exhibitUrl, setExhibitUrl] = useState("");
@@ -201,6 +209,14 @@ export function ActivityConsole({
       kind === "impact4"
     ) {
       body.scales = impactScales.slice(0, impactN);
+    } else if (kind === "survey") {
+      body.mode = surveyMode;
+      body.questions = surveyQuestions
+        .map((q) => ({
+          text: q.text.trim(),
+          options: q.options.map((o) => o.trim()).filter(Boolean),
+        }))
+        .filter((q) => q.text && q.options.length >= 1);
     } else if (kind !== "whiteboard") {
       body.items = list;
     }
@@ -225,6 +241,8 @@ export function ActivityConsole({
     setVideoUrl("");
     setCorrectIndex(0);
     setSeedText("");
+    setSurveyMode("single");
+    setSurveyQuestions([{ text: "", options: ["", ""] }]);
   }
 
   // Carry a source activity's word list into the Push-an-activity form for a new
@@ -451,6 +469,7 @@ export function ActivityConsole({
                 ["impact2", "Impact 2"],
                 ["impact3", "Impact 3"],
                 ["impact4", "Impact 4"],
+                ["survey", "Survey"],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -539,7 +558,14 @@ export function ActivityConsole({
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
 
-            {kind === "impact1" ||
+            {kind === "survey" ? (
+              <SurveyBuilder
+                mode={surveyMode}
+                onModeChange={setSurveyMode}
+                questions={surveyQuestions}
+                onChange={setSurveyQuestions}
+              />
+            ) : kind === "impact1" ||
             kind === "impact2" ||
             kind === "impact3" ||
             kind === "impact4" ? (

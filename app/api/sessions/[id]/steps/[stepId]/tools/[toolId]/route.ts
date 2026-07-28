@@ -93,7 +93,7 @@ export async function PATCH(
   const kind = body?.kind;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   if (
-    !["vote", "likert", "columns", "reveal", "wheel", "workflow", "whiteboard", "exhibit", "video", "timer", "wordcloud", "sort", "impact1", "impact2", "impact3", "impact4"].includes(kind)
+    !["vote", "likert", "columns", "reveal", "wheel", "workflow", "whiteboard", "exhibit", "video", "timer", "wordcloud", "sort", "impact1", "impact2", "impact3", "impact4", "survey"].includes(kind)
   ) {
     return NextResponse.json({ error: "Unknown tool kind" }, { status: 400 });
   }
@@ -105,6 +105,8 @@ export async function PATCH(
   if (Array.isArray(body?.columns)) config.columns = body.columns;
   if (Array.isArray(body?.words)) config.words = body.words;
   if (Array.isArray(body?.scales)) config.scales = body.scales;
+  if (body?.mode === "single" || body?.mode === "multi") config.mode = body.mode;
+  if (Array.isArray(body?.questions)) config.questions = body.questions;
   if (Array.isArray(body?.items)) config.items = body.items;
   if (body?.graph && typeof body.graph === "object") config.graph = body.graph;
   if (body?.sourcing === "participants") config.sourcing = "participants";

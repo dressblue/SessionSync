@@ -41,7 +41,8 @@ export type ActivityKind =
   | "impact1"
   | "impact2"
   | "impact3"
-  | "impact4";
+  | "impact4"
+  | "survey";
 
 export interface ActivityRow {
   id: string;
@@ -214,6 +215,18 @@ export interface ActivityPayload {
     participantId: string | null;
     mine: boolean;
     highlighted: boolean;
+  }[];
+  // survey (several questions, each single- or multi-select + a comment)
+  surveyMode?: "single" | "multi";
+  questions?: { text: string; options: string[] }[];
+  surveyResponses?: {
+    id: string;
+    q: number; // question index
+    selected: number[]; // chosen option indices
+    comment: string;
+    name: string;
+    participantId: string | null;
+    mine: boolean;
   }[];
   // video (synchronized playback)
   video?: {
@@ -905,6 +918,47 @@ export function buildActivityPayload(
         };
       })
       .filter((e) => e.text);
+    return payload;
+  }
+  if (activity.kind === "survey") {
+    const c = config as {
+      mode?: "single" | "multi";
+      questions?: { text: string; options: string[] }[];
+    };
+    payload.surveyMode = c.mode === "multi" ? "multi" : "single";
+    payload.questions = c.questions ?? [];
+    // Participants see only their own rows; facilitators/report see all.
+    payload.surveyResponses = responseRows
+      .filter(
+        (r) =>
+          facilitatorView ||
+          (!!viewerParticipantId && r.participant_id === viewerParticipantId)
+      )
+      .map((r) => {
+        let selected: number[] = [];
+        let comment = "";
+        try {
+          const v = JSON.parse(r.value) as {
+            selected?: number[];
+            comment?: string;
+          };
+          selected = Array.isArray(v.selected)
+            ? v.selected.filter((n) => Number.isInteger(n))
+            : [];
+          comment = typeof v.comment === "string" ? v.comment : "";
+        } catch {
+          /* skip malformed */
+        }
+        return {
+          id: r.id,
+          q: r.column_index ?? 0,
+          selected,
+          comment,
+          name: r.name ?? "Facilitator",
+          participantId: r.participant_id,
+          mine: !!viewerParticipantId && r.participant_id === viewerParticipantId,
+        };
+      });
     return payload;
   }
 

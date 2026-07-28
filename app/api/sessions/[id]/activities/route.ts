@@ -392,6 +392,31 @@ export async function POST(
       };
     });
     config = { scales };
+  } else if (kind === "survey") {
+    // Several questions, each with 1–4 answers; single- or multi-select for the
+    // whole tool, plus a per-question comment participants fill in.
+    const mode = body?.mode === "multi" ? "multi" : "single";
+    const rawQ = Array.isArray(body?.questions) ? body.questions : [];
+    const questions = rawQ
+      .map((q: unknown) => {
+        const qq = (q ?? {}) as { text?: unknown; options?: unknown };
+        const text =
+          typeof qq.text === "string" ? qq.text.trim().slice(0, 200) : "";
+        const options = (Array.isArray(qq.options) ? qq.options : [])
+          .map((o) => (typeof o === "string" ? o.trim().slice(0, 120) : ""))
+          .filter(Boolean)
+          .slice(0, 4);
+        return { text, options };
+      })
+      .filter((q: { text: string; options: string[] }) => q.text && q.options.length >= 1)
+      .slice(0, 20);
+    if (!questions.length) {
+      return NextResponse.json(
+        { error: "Add at least one question with an answer" },
+        { status: 400 }
+      );
+    }
+    config = { mode, questions };
   } else {
     return NextResponse.json({ error: "Unknown activity kind" }, { status: 400 });
   }

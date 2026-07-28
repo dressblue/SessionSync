@@ -9,6 +9,7 @@ import {
   type WorkflowGraph,
 } from "@/components/useSessionState";
 import { WorkflowBuilder } from "@/components/WorkflowBuilder";
+import { SurveyBuilder } from "@/components/SurveyBuilder";
 import { Markdown } from "@/components/Markdown";
 import { ActivityConsole } from "@/components/ActivityConsole";
 import { Chat } from "@/components/Chat";
@@ -33,6 +34,7 @@ const TOOL_BADGES: Record<string, string> = {
   impact2: "Impact 2",
   impact3: "Impact 3",
   impact4: "Impact 4",
+  survey: "Survey",
 };
 
 // Compact delete affordance (replaces the word "Delete" to save row space).
@@ -102,6 +104,7 @@ function Console() {
     | "impact2"
     | "impact3"
     | "impact4"
+    | "survey"
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
@@ -116,6 +119,13 @@ function Console() {
     { name: "", anchorSet: "agreement", allowNA: false },
     { name: "", anchorSet: "agreement", allowNA: false },
   ]);
+  // Survey step-tool config.
+  const [toolSurveyMode, setToolSurveyMode] = useState<"single" | "multi">(
+    "single"
+  );
+  const [toolSurveyQuestions, setToolSurveyQuestions] = useState<
+    { text: string; options: string[] }[]
+  >([{ text: "", options: ["", ""] }]);
   const [toolGraph, setToolGraph] = useState<WorkflowGraph | null>(null);
   const [toolSourced, setToolSourced] = useState(false);
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
@@ -322,6 +332,8 @@ function Console() {
       { name: "", anchorSet: "agreement", allowNA: false },
       { name: "", anchorSet: "agreement", allowNA: false },
     ]);
+    setToolSurveyMode("single");
+    setToolSurveyQuestions([{ text: "", options: ["", ""] }]);
   }
 
   async function saveTool(stepId: string) {
@@ -377,6 +389,14 @@ function Console() {
               ? 2
               : 1;
       body.scales = toolImpactScales.slice(0, n);
+    } else if (toolKind === "survey") {
+      body.mode = toolSurveyMode;
+      body.questions = toolSurveyQuestions
+        .map((q) => ({
+          text: q.text.trim(),
+          options: q.options.map((o) => o.trim()).filter(Boolean),
+        }))
+        .filter((q) => q.text && q.options.length >= 1);
     } else if (toolKind !== "whiteboard") body.items = list;
     if (toolKind === "likert") body.anchorSet = toolAnchorSet;
     const ok = await api(
@@ -417,6 +437,12 @@ function Console() {
           t.scales?.[i] ?? { name: "", anchorSet: "agreement", allowNA: false }
       )
     );
+    setToolSurveyMode(t.mode === "multi" ? "multi" : "single");
+    setToolSurveyQuestions(
+      t.questions && t.questions.length
+        ? t.questions.map((q) => ({ text: q.text, options: [...q.options] }))
+        : [{ text: "", options: ["", ""] }]
+    );
     setToolGraph(t.graph ?? null);
   }
 
@@ -431,6 +457,8 @@ function Console() {
       // activities route seeds the cloud from `seedWords`.
       seedWords: tool.kind === "wordcloud" ? tool.words : undefined,
       scales: tool.scales,
+      mode: tool.mode,
+      questions: tool.questions,
       items: tool.items,
       graph: tool.graph,
       sourcing: tool.sourcing,
@@ -858,6 +886,7 @@ function Console() {
                             <option value="impact2">Impact 2 (comment + 2 scales)</option>
                             <option value="impact3">Impact 3 (comment + 3 scales)</option>
                             <option value="impact4">Impact 4 (comment + 4 scales)</option>
+                            <option value="survey">Survey (questions + comments)</option>
                           </select>
                           <button
                             type="button"
@@ -989,6 +1018,14 @@ function Console() {
                             onChange={(e) => setToolSortColumns(e.target.value)}
                             placeholder="Column titles (2–4), comma-separated"
                             className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        )}
+                        {toolKind === "survey" && (
+                          <SurveyBuilder
+                            mode={toolSurveyMode}
+                            onModeChange={setToolSurveyMode}
+                            questions={toolSurveyQuestions}
+                            onChange={setToolSurveyQuestions}
                           />
                         )}
                         {(toolKind === "impact1" ||
@@ -1124,6 +1161,7 @@ function Console() {
                           toolKind !== "impact2" &&
                           toolKind !== "impact3" &&
                           toolKind !== "impact4" &&
+                          toolKind !== "survey" &&
                           !(
                             (toolKind === "vote" || toolKind === "likert") &&
                             toolSourced
