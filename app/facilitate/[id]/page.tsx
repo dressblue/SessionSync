@@ -431,6 +431,25 @@ function Console() {
     });
   }
 
+  // Move a tool to another step, or clone a copy into it. `spec` is
+  // "move:<stepId>" or "clone:<stepId>" from the row's Move/Copy picker.
+  async function relocateTool(
+    fromStepId: string,
+    toolId: string,
+    spec: string
+  ) {
+    const [action, toStepId] = spec.split(":");
+    if (!toStepId) return;
+    if (editingToolId === toolId) resetToolForm();
+    await api(
+      `/api/sessions/${id}/steps/${fromStepId}/tools/${toolId}`,
+      "PATCH",
+      action === "clone"
+        ? { cloneToStepId: toStepId }
+        : { moveToStepId: toStepId }
+    );
+  }
+
   async function copy(text: string, tag: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -720,6 +739,39 @@ function Console() {
                               >
                                 ↓
                               </button>
+                              {steps.length > 1 && (
+                                <select
+                                  value=""
+                                  title="Move or copy this tool to another step"
+                                  aria-label="Move or copy tool to another step"
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    e.target.value = "";
+                                    if (v) relocateTool(s.id, t.id, v);
+                                  }}
+                                  className="shrink-0 rounded-md border border-slate-300 px-1 py-1 text-[11px] text-slate-600 bg-white max-w-[104px]"
+                                >
+                                  <option value="">Move/Copy…</option>
+                                  <optgroup label="Move to step">
+                                    {steps.map((x, xi) =>
+                                      x.id === s.id ? null : (
+                                        <option key={`m${x.id}`} value={`move:${x.id}`}>
+                                          {xi + 1}. {x.title}
+                                        </option>
+                                      )
+                                    )}
+                                  </optgroup>
+                                  <optgroup label="Copy to step">
+                                    {steps.map((x, xi) =>
+                                      x.id === s.id ? null : (
+                                        <option key={`c${x.id}`} value={`clone:${x.id}`}>
+                                          {xi + 1}. {x.title}
+                                        </option>
+                                      )
+                                    )}
+                                  </optgroup>
+                                </select>
+                              )}
                               <button
                                 onClick={() => beginToolEdit(s.id, t)}
                                 className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"

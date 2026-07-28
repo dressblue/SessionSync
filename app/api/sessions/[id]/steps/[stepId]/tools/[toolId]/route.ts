@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { authorizeSession } from "@/lib/sessions";
@@ -42,6 +43,49 @@ export async function PATCH(
           order[i],
         ]);
       }
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  // Move this tool to another step, or clone a copy into another step. Both
+  // land at the end of the target step's tool list. Target must belong to the
+  // same session.
+  if (
+    typeof body?.moveToStepId === "string" ||
+    typeof body?.cloneToStepId === "string"
+  ) {
+    const isClone = typeof body?.cloneToStepId === "string";
+    const targetStepId = (isClone ? body.cloneToStepId : body.moveToStepId) as string;
+    const target = await query<{ id: string }>(
+      `SELECT id FROM steps WHERE id = $1 AND session_id = $2`,
+      [targetStepId, id]
+    );
+    if (!target.rows[0]) {
+      return NextResponse.json({ error: "Target step not found" }, { status: 404 });
+    }
+    const src = await query<{ kind: string; prompt: string; config: string }>(
+      `SELECT kind, prompt, config FROM step_tools
+       WHERE id = $1 AND step_id IN (SELECT id FROM steps WHERE id = $2 AND session_id = $3)`,
+      [toolId, stepId, id]
+    );
+    if (!src.rows[0]) {
+      return NextResponse.json({ error: "Tool not found" }, { status: 404 });
+    }
+    const pos = await query<{ next: number }>(
+      `SELECT COALESCE(MAX(position), -1) + 1 AS next FROM step_tools WHERE step_id = $1`,
+      [targetStepId]
+    );
+    if (isClone) {
+      await query(
+        `INSERT INTO step_tools (id, step_id, kind, prompt, config, position)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [randomUUID(), targetStepId, src.rows[0].kind, src.rows[0].prompt, src.rows[0].config, pos.rows[0].next]
+      );
+    } else {
+      await query(
+        `UPDATE step_tools SET step_id = $1, position = $2 WHERE id = $3`,
+        [targetStepId, pos.rows[0].next, toolId]
+      );
     }
     return NextResponse.json({ ok: true });
   }
