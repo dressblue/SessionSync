@@ -210,8 +210,10 @@ export function ImpactBoard({
         </div>
       )}
 
-      {/* summary: one row per response, grouped by participant */}
-      {groups.length === 0 ? (
+      {/* summary: one row per response, grouped by participant. The scale
+          header columns show even with no entries so the configured order
+          is always documented (e.g. in the session report). */}
+      {scales.length === 0 && groups.length === 0 ? (
         <p className="text-sm text-slate-400">No entries yet.</p>
       ) : (
         <div className="overflow-x-auto">
@@ -233,6 +235,16 @@ export function ImpactBoard({
               </tr>
             </thead>
             <tbody>
+              {groups.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={colCount}
+                    className="py-3 text-sm text-slate-400"
+                  >
+                    No entries yet.
+                  </td>
+                </tr>
+              )}
               {groups.map((g, gi) => (
                 <Fragment key={g.pid}>
                   <tr className={gi > 0 ? "border-t-2 border-slate-300" : ""}>

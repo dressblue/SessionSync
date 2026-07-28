@@ -133,12 +133,19 @@ function activityLines(a: ActivityState): string[] {
     a.kind === "impact4"
   ) {
     const scales = a.scales ?? [];
-    return (a.impactEntries ?? []).flatMap((e) => [
+    // Document the scales (in their configured order) as a header, then the
+    // responses. The header keeps the scale order visible in exports even
+    // when no one has responded yet.
+    const header = scales.map(
+      (s, i) => `Scale ${i + 1}: ${s.name}${s.allowNA ? " (N/A allowed)" : ""}`
+    );
+    const rows = (a.impactEntries ?? []).flatMap((e) => [
       `${e.text} — ${e.name}`,
       ...scales.map(
         (s, i) => `  ${s.name}: ${e.ratings[i] == null ? "N/A" : e.ratings[i]}`
       ),
     ]);
+    return [...header, ...(rows.length ? rows : ["No entries yet."])];
   }
   if (a.kind === "whiteboard") {
     return [`Shared drawing with ${a.strokes?.length ?? 0} strokes`];
@@ -592,11 +599,10 @@ export default function ReportPage() {
                     readOnly
                   />
                 </div>
-              ) : (a.kind === "impact1" ||
-                  a.kind === "impact2" ||
-                  a.kind === "impact3" ||
-                  a.kind === "impact4") &&
-                (a.impactEntries?.length ?? 0) > 0 ? (
+              ) : a.kind === "impact1" ||
+                a.kind === "impact2" ||
+                a.kind === "impact3" ||
+                a.kind === "impact4" ? (
                 <div className="mt-2">
                   <ImpactBoard
                     topic={a.topic ?? a.prompt ?? ""}
