@@ -13,6 +13,7 @@ import { VideoPlayer } from "./VideoPlayer";
 import { TimerDisplay } from "./TimerDisplay";
 import { WordCloud } from "./WordCloud";
 import { CardSort } from "./CardSort";
+import { ImpactBoard } from "./ImpactBoard";
 import { WorkflowBuilder } from "./WorkflowBuilder";
 import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
 
@@ -1009,6 +1010,32 @@ export function ActivityPanel({
           }
           onAddWord={(word) => send({ action: "addword", word }, "POST", false)}
           readOnly={!participantId && !canModerate}
+          presentation={presentation}
+        />
+      </div>
+    );
+  }
+
+  // ---- Impact: a comment + 1–3 five-point scales per entry ----
+  if (
+    activity.kind === "impact1" ||
+    activity.kind === "impact2" ||
+    activity.kind === "impact3"
+  ) {
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Impact")}
+        <ImpactBoard
+          topic={activity.topic ?? activity.prompt ?? ""}
+          scales={activity.scales ?? []}
+          entries={activity.impactEntries ?? []}
+          canAdd={!!participantId || canModerate}
+          canModerate={canModerate}
+          onAdd={(text, ratings) => send({ text, ratings }, "POST", false)}
+          onDelete={(entryId) => send({ entryId }, "DELETE")}
+          onHighlight={(entryId, highlighted) =>
+            moderate(entryId, { highlighted })
+          }
           presentation={presentation}
         />
       </div>

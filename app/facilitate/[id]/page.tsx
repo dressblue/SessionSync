@@ -29,6 +29,9 @@ const TOOL_BADGES: Record<string, string> = {
   timer: "Timer",
   wordcloud: "Cloud",
   sort: "Sort",
+  impact1: "Impact 1",
+  impact2: "Impact 2",
+  impact3: "Impact 3",
 };
 
 // Compact delete affordance (replaces the word "Delete" to save row space).
@@ -81,11 +84,22 @@ function Console() {
     | "timer"
     | "wordcloud"
     | "sort"
+    | "impact1"
+    | "impact2"
+    | "impact3"
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
   // Word-sort columns (comma- or newline-separated); the word list uses toolList.
   const [toolSortColumns, setToolSortColumns] = useState("");
+  // Impact 1/2/3 scale config for the step-tool authoring form.
+  const [toolImpactScales, setToolImpactScales] = useState<
+    { name: string; anchorSet: string; allowNA: boolean }[]
+  >([
+    { name: "", anchorSet: "agreement", allowNA: false },
+    { name: "", anchorSet: "agreement", allowNA: false },
+    { name: "", anchorSet: "agreement", allowNA: false },
+  ]);
   const [toolGraph, setToolGraph] = useState<WorkflowGraph | null>(null);
   const [toolSourced, setToolSourced] = useState(false);
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
@@ -286,6 +300,11 @@ function Console() {
     setToolAnchorSet("agreement");
     setToolTimerMin(5);
     setToolSortColumns("");
+    setToolImpactScales([
+      { name: "", anchorSet: "agreement", allowNA: false },
+      { name: "", anchorSet: "agreement", allowNA: false },
+      { name: "", anchorSet: "agreement", allowNA: false },
+    ]);
   }
 
   async function saveTool(stepId: string) {
@@ -325,6 +344,13 @@ function Console() {
         .split(/[,\n]/)
         .map((c) => c.trim())
         .filter(Boolean);
+    } else if (
+      toolKind === "impact1" ||
+      toolKind === "impact2" ||
+      toolKind === "impact3"
+    ) {
+      const n = toolKind === "impact3" ? 3 : toolKind === "impact2" ? 2 : 1;
+      body.scales = toolImpactScales.slice(0, n);
     } else if (toolKind !== "whiteboard") body.items = list;
     if (toolKind === "likert") body.anchorSet = toolAnchorSet;
     const ok = await api(
@@ -359,6 +385,12 @@ function Console() {
         : (t.words ?? t.options ?? t.items ?? t.columns ?? []).join("\n")
     );
     setToolSortColumns((t.columns ?? []).join(", "));
+    setToolImpactScales(
+      [0, 1, 2].map(
+        (i) =>
+          t.scales?.[i] ?? { name: "", anchorSet: "agreement", allowNA: false }
+      )
+    );
     setToolGraph(t.graph ?? null);
   }
 
@@ -369,6 +401,7 @@ function Console() {
       options: tool.options,
       columns: tool.columns,
       words: tool.words,
+      scales: tool.scales,
       items: tool.items,
       graph: tool.graph,
       sourcing: tool.sourcing,
@@ -726,6 +759,9 @@ function Console() {
                             <option value="timer">Countdown timer</option>
                             <option value="wordcloud">Word cloud</option>
                             <option value="sort">Word sort (drag to columns)</option>
+                            <option value="impact1">Impact 1 (comment + 1 scale)</option>
+                            <option value="impact2">Impact 2 (comment + 2 scales)</option>
+                            <option value="impact3">Impact 3 (comment + 3 scales)</option>
                           </select>
                           <button
                             type="button"
@@ -859,12 +895,94 @@ function Console() {
                             className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           />
                         )}
+                        {(toolKind === "impact1" ||
+                          toolKind === "impact2" ||
+                          toolKind === "impact3") && (
+                          <div className="flex flex-col gap-1.5">
+                            {Array.from(
+                              {
+                                length:
+                                  toolKind === "impact3"
+                                    ? 3
+                                    : toolKind === "impact2"
+                                      ? 2
+                                      : 1,
+                              },
+                              (_, i) => (
+                                <div
+                                  key={i}
+                                  className="flex flex-wrap items-center gap-1.5"
+                                >
+                                  <input
+                                    value={toolImpactScales[i]?.name ?? ""}
+                                    onChange={(e) =>
+                                      setToolImpactScales((prev) =>
+                                        prev.map((s, j) =>
+                                          j === i
+                                            ? { ...s, name: e.target.value }
+                                            : s
+                                        )
+                                      )
+                                    }
+                                    placeholder={`Scale ${i + 1} name`}
+                                    maxLength={60}
+                                    className="flex-1 min-w-[140px] rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
+                                  />
+                                  <select
+                                    value={
+                                      toolImpactScales[i]?.anchorSet ?? "agreement"
+                                    }
+                                    onChange={(e) =>
+                                      setToolImpactScales((prev) =>
+                                        prev.map((s, j) =>
+                                          j === i
+                                            ? { ...s, anchorSet: e.target.value }
+                                            : s
+                                        )
+                                      )
+                                    }
+                                    className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white"
+                                  >
+                                    {Object.entries(LIKERT_ANCHOR_LABELS).map(
+                                      ([k, lab]) => (
+                                        <option key={k} value={k}>
+                                          {lab}
+                                        </option>
+                                      )
+                                    )}
+                                  </select>
+                                  <label className="flex items-center gap-1 text-[11px] text-slate-500">
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        toolImpactScales[i]?.allowNA ?? false
+                                      }
+                                      onChange={(e) =>
+                                        setToolImpactScales((prev) =>
+                                          prev.map((s, j) =>
+                                            j === i
+                                              ? { ...s, allowNA: e.target.checked }
+                                              : s
+                                          )
+                                        )
+                                      }
+                                    />
+                                    N/A
+                                  </label>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        )}
                         {toolKind !== "whiteboard" &&
                           toolKind !== "exhibit" &&
                           toolKind !== "video" &&
                           toolKind !== "timer" &&
                           toolKind !== "wordcloud" &&
                           toolKind !== "workflow" &&
+                          toolKind !== "impact1" &&
+                          toolKind !== "impact2" &&
+                          toolKind !== "impact3" &&
                           !(
                             (toolKind === "vote" || toolKind === "likert") &&
                             toolSourced

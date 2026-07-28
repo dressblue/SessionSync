@@ -6,6 +6,7 @@ import type { ActivityState, Stroke } from "@/components/useSessionState";
 import { LikertChart } from "@/components/LikertChart";
 import { WordCloud } from "@/components/WordCloud";
 import { CardSort } from "@/components/CardSort";
+import { ImpactBoard } from "@/components/ImpactBoard";
 import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
 
 interface ReportData {
@@ -31,6 +32,9 @@ const KIND_LABEL: Record<string, string> = {
   timer: "Timer",
   wordcloud: "Word cloud",
   sort: "Word sort",
+  impact1: "Impact 1",
+  impact2: "Impact 2",
+  impact3: "Impact 3",
 };
 
 function strokesToDataUrl(strokes: Stroke[]): string {
@@ -119,6 +123,15 @@ function activityLines(a: ActivityState): string[] {
     return cols.flatMap((title, ci) => [
       `${title}:`,
       ...placements.filter((p) => p.col === ci).map((p) => `  ${p.word}`),
+    ]);
+  }
+  if (a.kind === "impact1" || a.kind === "impact2" || a.kind === "impact3") {
+    const scales = a.scales ?? [];
+    return (a.impactEntries ?? []).flatMap((e) => [
+      `${e.text} — ${e.name}`,
+      ...scales.map(
+        (s, i) => `  ${s.name}: ${e.ratings[i] == null ? "N/A" : e.ratings[i]}`
+      ),
     ]);
   }
   if (a.kind === "whiteboard") {
@@ -571,6 +584,22 @@ export default function ReportPage() {
                     onPlace={() => {}}
                     onUnplace={() => {}}
                     readOnly
+                  />
+                </div>
+              ) : (a.kind === "impact1" ||
+                  a.kind === "impact2" ||
+                  a.kind === "impact3") &&
+                (a.impactEntries?.length ?? 0) > 0 ? (
+                <div className="mt-2">
+                  <ImpactBoard
+                    topic={a.topic ?? a.prompt ?? ""}
+                    scales={a.scales ?? []}
+                    entries={a.impactEntries ?? []}
+                    canAdd={false}
+                    canModerate={false}
+                    onAdd={() => {}}
+                    onDelete={() => {}}
+                    onHighlight={() => {}}
                   />
                 </div>
               ) : (

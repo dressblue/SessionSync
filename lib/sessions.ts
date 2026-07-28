@@ -37,7 +37,10 @@ export type ActivityKind =
   | "video"
   | "timer"
   | "wordcloud"
-  | "sort";
+  | "sort"
+  | "impact1"
+  | "impact2"
+  | "impact3";
 
 export interface ActivityRow {
   id: string;
@@ -197,6 +200,18 @@ export interface ActivityPayload {
   // `columns` reuses the existing comment-board field above.
   words?: string[];
   placements?: { id: string; word: string; col: number; mine: boolean }[];
+  // impact (a comment + 1–3 five-point scales per entry; N/A optional per scale)
+  topic?: string;
+  scales?: { name: string; anchorSet: string; allowNA: boolean }[];
+  impactEntries?: {
+    id: string;
+    text: string;
+    ratings: (number | null)[];
+    name: string;
+    participantId: string | null;
+    mine: boolean;
+    highlighted: boolean;
+  }[];
   // video (synchronized playback)
   video?: {
     provider: "youtube" | "video";
@@ -848,6 +863,44 @@ export function buildActivityPayload(
           (!!viewerParticipantId && r.participant_id === viewerParticipantId) ||
           (facilitatorView && r.participant_id === null),
       }));
+    return payload;
+  }
+  if (
+    activity.kind === "impact1" ||
+    activity.kind === "impact2" ||
+    activity.kind === "impact3"
+  ) {
+    const c = config as {
+      scales?: { name: string; anchorSet: string; allowNA: boolean }[];
+    };
+    payload.topic = activity.prompt;
+    payload.scales = c.scales ?? [];
+    payload.impactEntries = responseRows
+      .filter((r) => facilitatorView || !r.hidden)
+      .map((r) => {
+        let text = "";
+        let ratings: (number | null)[] = [];
+        try {
+          const v = JSON.parse(r.value) as {
+            text?: string;
+            ratings?: (number | null)[];
+          };
+          text = typeof v.text === "string" ? v.text : "";
+          ratings = Array.isArray(v.ratings) ? v.ratings : [];
+        } catch {
+          /* skip malformed */
+        }
+        return {
+          id: r.id,
+          text,
+          ratings,
+          name: r.name ?? "Facilitator",
+          participantId: r.participant_id,
+          mine: !!viewerParticipantId && r.participant_id === viewerParticipantId,
+          highlighted: r.highlighted,
+        };
+      })
+      .filter((e) => e.text);
     return payload;
   }
 

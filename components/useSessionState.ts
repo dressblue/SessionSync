@@ -25,7 +25,10 @@ export type ActivityKind =
   | "video"
   | "timer"
   | "wordcloud"
-  | "sort";
+  | "sort"
+  | "impact1"
+  | "impact2"
+  | "impact3";
 
 export interface RichItem {
   title: string;
@@ -122,6 +125,17 @@ export interface ActivityState {
   mediaType?: "image" | "pdf" | "link";
   words?: string[];
   placements?: { id: string; word: string; col: number; mine: boolean }[];
+  topic?: string;
+  scales?: { name: string; anchorSet: string; allowNA: boolean }[];
+  impactEntries?: {
+    id: string;
+    text: string;
+    ratings: (number | null)[];
+    name: string;
+    participantId: string | null;
+    mine: boolean;
+    highlighted: boolean;
+  }[];
   video?: {
     provider: "youtube" | "video";
     ref: string;
@@ -154,6 +168,8 @@ export interface StepTool {
   columns?: string[];
   words?: string[];
   items?: string[];
+  topic?: string;
+  scales?: { name: string; anchorSet: string; allowNA: boolean }[];
   graph?: WorkflowGraph;
   sourcing?: "participants";
   anchorSet?: string;

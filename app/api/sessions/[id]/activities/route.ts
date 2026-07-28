@@ -360,6 +360,26 @@ export async function POST(
       );
     }
     config = { words, columns };
+  } else if (kind === "impact1" || kind === "impact2" || kind === "impact3") {
+    // A comment/word + 1–3 five-point scales per entry; N/A optional per scale.
+    const n = kind === "impact3" ? 3 : kind === "impact2" ? 2 : 1;
+    const raw = Array.isArray(body?.scales) ? body.scales : [];
+    const scales = Array.from({ length: n }, (_, i) => {
+      const s = (raw[i] ?? {}) as {
+        name?: unknown;
+        anchorSet?: unknown;
+        allowNA?: unknown;
+      };
+      return {
+        name:
+          typeof s.name === "string" && s.name.trim()
+            ? s.name.trim().slice(0, 60)
+            : `Scale ${i + 1}`,
+        anchorSet: typeof s.anchorSet === "string" ? s.anchorSet : "agreement",
+        allowNA: !!s.allowNA,
+      };
+    });
+    config = { scales };
   } else {
     return NextResponse.json({ error: "Unknown activity kind" }, { status: 400 });
   }

@@ -86,6 +86,7 @@ export async function POST(
     options?: string[];
     columns?: string[];
     words?: string[];
+    scales?: { name: string; anchorSet: string; allowNA: boolean }[];
     items?: string[];
     phase?: string;
     scale?: number;
@@ -313,6 +314,51 @@ export async function POST(
         [randomUUID(), activity.id, participantId, col, word.slice(0, 160)]
       );
     }
+    return NextResponse.json({ ok: true });
+  }
+
+  // Impact: add a row = a comment + 1–3 five-point ratings (null = N/A where
+  // the scale allows it). Anyone may add; entries are edited by delete + re-add.
+  if (
+    activity.kind === "impact1" ||
+    activity.kind === "impact2" ||
+    activity.kind === "impact3"
+  ) {
+    const scales = config.scales ?? [];
+    const text = typeof body?.text === "string" ? body.text.trim() : "";
+    const rawRatings = Array.isArray(body?.ratings) ? body.ratings : [];
+    if (!text) {
+      return NextResponse.json({ error: "Enter a comment" }, { status: 400 });
+    }
+    const ratings: (number | null)[] = [];
+    for (let i = 0; i < scales.length; i++) {
+      const r = rawRatings[i];
+      if (r === null || r === undefined || r === "") {
+        if (!scales[i].allowNA) {
+          return NextResponse.json(
+            { error: `Rate "${scales[i].name}"` },
+            { status: 400 }
+          );
+        }
+        ratings.push(null);
+      } else {
+        const n = Number(r);
+        if (!Number.isInteger(n) || n < 1 || n > 5) {
+          return NextResponse.json({ error: "Invalid rating" }, { status: 400 });
+        }
+        ratings.push(n);
+      }
+    }
+    await query(
+      `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+       VALUES ($1, $2, $3, 0, $4)`,
+      [
+        randomUUID(),
+        activity.id,
+        participantId,
+        JSON.stringify({ text: text.slice(0, 500), ratings }),
+      ]
+    );
     return NextResponse.json({ ok: true });
   }
 

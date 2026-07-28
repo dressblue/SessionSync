@@ -41,7 +41,10 @@ type Kind =
   | "video"
   | "timer"
   | "wordcloud"
-  | "sort";
+  | "sort"
+  | "impact1"
+  | "impact2"
+  | "impact3";
 type Sourcing = "facilitator" | "participants";
 
 const KIND_LABEL: Record<string, string> = {
@@ -58,6 +61,9 @@ const KIND_LABEL: Record<string, string> = {
   timer: "Timer",
   wordcloud: "Word cloud",
   sort: "Word sort",
+  impact1: "Impact 1",
+  impact2: "Impact 2",
+  impact3: "Impact 3",
 };
 
 // Facilitator's activity station: up to two activities run side by side
@@ -88,6 +94,15 @@ export function ActivityConsole({
   const [busy, setBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [anchorSet, setAnchorSet] = useState("agreement");
+  // Impact 1/2/3 scale config (name + anchor set + N/A); up to 3 rows used.
+  const [impactScales, setImpactScales] = useState<
+    { name: string; anchorSet: string; allowNA: boolean }[]
+  >([
+    { name: "", anchorSet: "agreement", allowNA: false },
+    { name: "", anchorSet: "agreement", allowNA: false },
+    { name: "", anchorSet: "agreement", allowNA: false },
+  ]);
+  const impactN = kind === "impact3" ? 3 : kind === "impact2" ? 2 : 1;
   const [exhibitType, setExhibitType] = useState<"file" | "url" | "text">("file");
   const [exhibitFileId, setExhibitFileId] = useState("");
   const [exhibitUrl, setExhibitUrl] = useState("");
@@ -167,6 +182,8 @@ export function ActivityConsole({
     } else if (kind === "sort") {
       body.words = list;
       body.columns = columns.map((c) => c.trim()).filter(Boolean);
+    } else if (kind === "impact1" || kind === "impact2" || kind === "impact3") {
+      body.scales = impactScales.slice(0, impactN);
     } else if (kind !== "whiteboard") {
       body.items = list;
     }
@@ -407,6 +424,9 @@ export function ActivityConsole({
                 ["timer", "Timer"],
                 ["wordcloud", "Word cloud"],
                 ["sort", "Word sort"],
+                ["impact1", "Impact 1"],
+                ["impact2", "Impact 2"],
+                ["impact3", "Impact 3"],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -484,13 +504,75 @@ export function ActivityConsole({
                                 ? "Label (optional), e.g. Small-group discussion"
                                 : kind === "wordcloud"
                                   ? "Question, e.g. One word for a great dad"
-                                  : "Prompt, e.g. Answer both questions below"
+                                  : kind === "impact1" ||
+                                      kind === "impact2" ||
+                                      kind === "impact3"
+                                    ? "Topic, e.g. Name a risk (what each row is about)"
+                                    : "Prompt, e.g. Answer both questions below"
               }
               maxLength={300}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
 
-            {kind === "sort" ? (
+            {kind === "impact1" || kind === "impact2" || kind === "impact3" ? (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs text-slate-500">
+                  Name each 1–5 scale participants rate their entry on:
+                </p>
+                {Array.from({ length: impactN }, (_, i) => (
+                  <div key={i} className="flex flex-wrap items-center gap-1.5">
+                    <input
+                      value={impactScales[i]?.name ?? ""}
+                      onChange={(e) =>
+                        setImpactScales((prev) =>
+                          prev.map((s, j) =>
+                            j === i ? { ...s, name: e.target.value } : s
+                          )
+                        )
+                      }
+                      placeholder={`Scale ${i + 1} name (e.g. Probability)`}
+                      maxLength={60}
+                      className="flex-1 min-w-[160px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <select
+                      value={impactScales[i]?.anchorSet ?? "agreement"}
+                      onChange={(e) =>
+                        setImpactScales((prev) =>
+                          prev.map((s, j) =>
+                            j === i ? { ...s, anchorSet: e.target.value } : s
+                          )
+                        )
+                      }
+                      className="rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white"
+                    >
+                      {Object.entries(LIKERT_ANCHOR_LABELS).map(([k, lab]) => (
+                        <option key={k} value={k}>
+                          {lab}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="flex items-center gap-1 text-xs text-slate-500">
+                      <input
+                        type="checkbox"
+                        checked={impactScales[i]?.allowNA ?? false}
+                        onChange={(e) =>
+                          setImpactScales((prev) =>
+                            prev.map((s, j) =>
+                              j === i ? { ...s, allowNA: e.target.checked } : s
+                            )
+                          )
+                        }
+                      />
+                      allow N/A
+                    </label>
+                  </div>
+                ))}
+                <p className="text-[11px] text-slate-400">
+                  Participants add one or more rows — a comment on the topic,
+                  rated on {impactN === 1 ? "this scale" : "these scales"}.
+                </p>
+              </div>
+            ) : kind === "sort" ? (
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-semibold text-slate-500">
                   Words to sort (one per line)
