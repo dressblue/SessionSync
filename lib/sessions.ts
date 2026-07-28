@@ -40,7 +40,8 @@ export type ActivityKind =
   | "sort"
   | "impact1"
   | "impact2"
-  | "impact3";
+  | "impact3"
+  | "impact4";
 
 export interface ActivityRow {
   id: string;
@@ -868,7 +869,8 @@ export function buildActivityPayload(
   if (
     activity.kind === "impact1" ||
     activity.kind === "impact2" ||
-    activity.kind === "impact3"
+    activity.kind === "impact3" ||
+    activity.kind === "impact4"
   ) {
     const c = config as {
       scales?: { name: string; anchorSet: string; allowNA: boolean }[];

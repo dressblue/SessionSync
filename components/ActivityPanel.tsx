@@ -1020,7 +1020,8 @@ export function ActivityPanel({
   if (
     activity.kind === "impact1" ||
     activity.kind === "impact2" ||
-    activity.kind === "impact3"
+    activity.kind === "impact3" ||
+    activity.kind === "impact4"
   ) {
     return (
       <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">

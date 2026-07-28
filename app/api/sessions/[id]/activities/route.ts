@@ -360,9 +360,21 @@ export async function POST(
       );
     }
     config = { words, columns };
-  } else if (kind === "impact1" || kind === "impact2" || kind === "impact3") {
+  } else if (
+    kind === "impact1" ||
+    kind === "impact2" ||
+    kind === "impact3" ||
+    kind === "impact4"
+  ) {
     // A comment/word + 1–3 five-point scales per entry; N/A optional per scale.
-    const n = kind === "impact3" ? 3 : kind === "impact2" ? 2 : 1;
+    const n =
+      kind === "impact4"
+        ? 4
+        : kind === "impact3"
+          ? 3
+          : kind === "impact2"
+            ? 2
+            : 1;
     const raw = Array.isArray(body?.scales) ? body.scales : [];
     const scales = Array.from({ length: n }, (_, i) => {
       const s = (raw[i] ?? {}) as {

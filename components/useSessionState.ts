@@ -28,7 +28,8 @@ export type ActivityKind =
   | "sort"
   | "impact1"
   | "impact2"
-  | "impact3";
+  | "impact3"
+  | "impact4";
 
 export interface RichItem {
   title: string;

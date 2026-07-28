@@ -322,7 +322,8 @@ export async function POST(
   if (
     activity.kind === "impact1" ||
     activity.kind === "impact2" ||
-    activity.kind === "impact3"
+    activity.kind === "impact3" ||
+    activity.kind === "impact4"
   ) {
     const scales = config.scales ?? [];
     const text = typeof body?.text === "string" ? body.text.trim() : "";

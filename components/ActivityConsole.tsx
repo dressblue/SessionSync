@@ -44,7 +44,8 @@ type Kind =
   | "sort"
   | "impact1"
   | "impact2"
-  | "impact3";
+  | "impact3"
+  | "impact4";
 type Sourcing = "facilitator" | "participants";
 
 const KIND_LABEL: Record<string, string> = {
@@ -64,6 +65,7 @@ const KIND_LABEL: Record<string, string> = {
   impact1: "Impact 1",
   impact2: "Impact 2",
   impact3: "Impact 3",
+  impact4: "Impact 4",
 };
 
 // Facilitator's activity station: up to two activities run side by side
@@ -94,15 +96,23 @@ export function ActivityConsole({
   const [busy, setBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [anchorSet, setAnchorSet] = useState("agreement");
-  // Impact 1/2/3 scale config (name + anchor set + N/A); up to 3 rows used.
+  // Impact 1/2/3/4 scale config (name + anchor set + N/A); up to 4 rows used.
   const [impactScales, setImpactScales] = useState<
     { name: string; anchorSet: string; allowNA: boolean }[]
   >([
     { name: "", anchorSet: "agreement", allowNA: false },
     { name: "", anchorSet: "agreement", allowNA: false },
     { name: "", anchorSet: "agreement", allowNA: false },
+    { name: "", anchorSet: "agreement", allowNA: false },
   ]);
-  const impactN = kind === "impact3" ? 3 : kind === "impact2" ? 2 : 1;
+  const impactN =
+    kind === "impact4"
+      ? 4
+      : kind === "impact3"
+        ? 3
+        : kind === "impact2"
+          ? 2
+          : 1;
   const [exhibitType, setExhibitType] = useState<"file" | "url" | "text">("file");
   const [exhibitFileId, setExhibitFileId] = useState("");
   const [exhibitUrl, setExhibitUrl] = useState("");
@@ -182,7 +192,12 @@ export function ActivityConsole({
     } else if (kind === "sort") {
       body.words = list;
       body.columns = columns.map((c) => c.trim()).filter(Boolean);
-    } else if (kind === "impact1" || kind === "impact2" || kind === "impact3") {
+    } else if (
+      kind === "impact1" ||
+      kind === "impact2" ||
+      kind === "impact3" ||
+      kind === "impact4"
+    ) {
       body.scales = impactScales.slice(0, impactN);
     } else if (kind !== "whiteboard") {
       body.items = list;
@@ -427,6 +442,7 @@ export function ActivityConsole({
                 ["impact1", "Impact 1"],
                 ["impact2", "Impact 2"],
                 ["impact3", "Impact 3"],
+                ["impact4", "Impact 4"],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -506,7 +522,8 @@ export function ActivityConsole({
                                   ? "Question, e.g. One word for a great dad"
                                   : kind === "impact1" ||
                                       kind === "impact2" ||
-                                      kind === "impact3"
+                                      kind === "impact3" ||
+                                      kind === "impact4"
                                     ? "Topic, e.g. Name a risk (what each row is about)"
                                     : "Prompt, e.g. Answer both questions below"
               }
@@ -514,7 +531,10 @@ export function ActivityConsole({
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
 
-            {kind === "impact1" || kind === "impact2" || kind === "impact3" ? (
+            {kind === "impact1" ||
+            kind === "impact2" ||
+            kind === "impact3" ||
+            kind === "impact4" ? (
               <div className="flex flex-col gap-2">
                 <p className="text-xs text-slate-500">
                   Name each 1–5 scale participants rate their entry on:

@@ -35,6 +35,7 @@ const KIND_LABEL: Record<string, string> = {
   impact1: "Impact 1",
   impact2: "Impact 2",
   impact3: "Impact 3",
+  impact4: "Impact 4",
 };
 
 function strokesToDataUrl(strokes: Stroke[]): string {
@@ -125,7 +126,12 @@ function activityLines(a: ActivityState): string[] {
       ...placements.filter((p) => p.col === ci).map((p) => `  ${p.word}`),
     ]);
   }
-  if (a.kind === "impact1" || a.kind === "impact2" || a.kind === "impact3") {
+  if (
+    a.kind === "impact1" ||
+    a.kind === "impact2" ||
+    a.kind === "impact3" ||
+    a.kind === "impact4"
+  ) {
     const scales = a.scales ?? [];
     return (a.impactEntries ?? []).flatMap((e) => [
       `${e.text} — ${e.name}`,
@@ -588,7 +594,8 @@ export default function ReportPage() {
                 </div>
               ) : (a.kind === "impact1" ||
                   a.kind === "impact2" ||
-                  a.kind === "impact3") &&
+                  a.kind === "impact3" ||
+                  a.kind === "impact4") &&
                 (a.impactEntries?.length ?? 0) > 0 ? (
                 <div className="mt-2">
                   <ImpactBoard

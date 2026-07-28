@@ -32,6 +32,7 @@ const TOOL_BADGES: Record<string, string> = {
   impact1: "Impact 1",
   impact2: "Impact 2",
   impact3: "Impact 3",
+  impact4: "Impact 4",
 };
 
 // Compact delete affordance (replaces the word "Delete" to save row space).
@@ -87,15 +88,17 @@ function Console() {
     | "impact1"
     | "impact2"
     | "impact3"
+    | "impact4"
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
   // Word-sort columns (comma- or newline-separated); the word list uses toolList.
   const [toolSortColumns, setToolSortColumns] = useState("");
-  // Impact 1/2/3 scale config for the step-tool authoring form.
+  // Impact 1/2/3/4 scale config for the step-tool authoring form.
   const [toolImpactScales, setToolImpactScales] = useState<
     { name: string; anchorSet: string; allowNA: boolean }[]
   >([
+    { name: "", anchorSet: "agreement", allowNA: false },
     { name: "", anchorSet: "agreement", allowNA: false },
     { name: "", anchorSet: "agreement", allowNA: false },
     { name: "", anchorSet: "agreement", allowNA: false },
@@ -304,6 +307,7 @@ function Console() {
       { name: "", anchorSet: "agreement", allowNA: false },
       { name: "", anchorSet: "agreement", allowNA: false },
       { name: "", anchorSet: "agreement", allowNA: false },
+      { name: "", anchorSet: "agreement", allowNA: false },
     ]);
   }
 
@@ -347,9 +351,17 @@ function Console() {
     } else if (
       toolKind === "impact1" ||
       toolKind === "impact2" ||
-      toolKind === "impact3"
+      toolKind === "impact3" ||
+      toolKind === "impact4"
     ) {
-      const n = toolKind === "impact3" ? 3 : toolKind === "impact2" ? 2 : 1;
+      const n =
+        toolKind === "impact4"
+          ? 4
+          : toolKind === "impact3"
+            ? 3
+            : toolKind === "impact2"
+              ? 2
+              : 1;
       body.scales = toolImpactScales.slice(0, n);
     } else if (toolKind !== "whiteboard") body.items = list;
     if (toolKind === "likert") body.anchorSet = toolAnchorSet;
@@ -386,7 +398,7 @@ function Console() {
     );
     setToolSortColumns((t.columns ?? []).join(", "));
     setToolImpactScales(
-      [0, 1, 2].map(
+      [0, 1, 2, 3].map(
         (i) =>
           t.scales?.[i] ?? { name: "", anchorSet: "agreement", allowNA: false }
       )
@@ -762,6 +774,7 @@ function Console() {
                             <option value="impact1">Impact 1 (comment + 1 scale)</option>
                             <option value="impact2">Impact 2 (comment + 2 scales)</option>
                             <option value="impact3">Impact 3 (comment + 3 scales)</option>
+                            <option value="impact4">Impact 4 (comment + 4 scales)</option>
                           </select>
                           <button
                             type="button"
@@ -897,16 +910,19 @@ function Console() {
                         )}
                         {(toolKind === "impact1" ||
                           toolKind === "impact2" ||
-                          toolKind === "impact3") && (
+                          toolKind === "impact3" ||
+                          toolKind === "impact4") && (
                           <div className="flex flex-col gap-1.5">
                             {Array.from(
                               {
                                 length:
-                                  toolKind === "impact3"
-                                    ? 3
-                                    : toolKind === "impact2"
-                                      ? 2
-                                      : 1,
+                                  toolKind === "impact4"
+                                    ? 4
+                                    : toolKind === "impact3"
+                                      ? 3
+                                      : toolKind === "impact2"
+                                        ? 2
+                                        : 1,
                               },
                               (_, i) => (
                                 <div
@@ -983,6 +999,7 @@ function Console() {
                           toolKind !== "impact1" &&
                           toolKind !== "impact2" &&
                           toolKind !== "impact3" &&
+                          toolKind !== "impact4" &&
                           !(
                             (toolKind === "vote" || toolKind === "likert") &&
                             toolSourced
