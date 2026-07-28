@@ -171,6 +171,7 @@ export function ActivityConsole({
       body.items = list;
     }
     if (kind === "likert") body.anchorSet = anchorSet;
+    if (kind === "wordcloud" && seedWords.length) body.seedWords = seedWords;
     return body;
   }
 
@@ -217,37 +218,13 @@ export function ActivityConsole({
 
   async function push(e: React.FormEvent) {
     e.preventDefault();
-    const body = buildBody();
-    // Word cloud carried over from another activity: create it, then seed it.
-    if (kind === "wordcloud" && seedWords.length) {
-      setError(null);
-      setBusy(true);
-      try {
-        const res = await fetch(`/api/sessions/${sessionId}/activities`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders },
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) {
-          const d = await res.json().catch(() => null);
-          throw new Error(d?.error ?? `Request failed (${res.status})`);
-        }
-        const { id: newId } = (await res.json()) as { id: string };
-        await fetch(`/api/sessions/${sessionId}/respond`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders },
-          body: JSON.stringify({ activityId: newId, words: seedWords }),
-        });
-        onChanged();
-        resetForm();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Action failed");
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-    const ok = await call(`/api/sessions/${sessionId}/activities`, "POST", body);
+    // Carried-over word-cloud words ride along in buildBody().seedWords and are
+    // seeded server-side in the same create request.
+    const ok = await call(
+      `/api/sessions/${sessionId}/activities`,
+      "POST",
+      buildBody()
+    );
     if (ok) resetForm();
   }
 
