@@ -218,7 +218,7 @@ export interface ActivityPayload {
   }[];
   // survey (several questions, each single- or multi-select + a comment)
   surveyMode?: "single" | "multi";
-  questions?: { text: string; options: string[] }[];
+  questions?: { text: string; options: string[]; mode?: "single" | "multi"; commentLabel?: string }[];
   surveyResponses?: {
     id: string;
     q: number; // question index
@@ -922,10 +922,13 @@ export function buildActivityPayload(
   }
   if (activity.kind === "survey") {
     const c = config as {
-      mode?: "single" | "multi";
-      questions?: { text: string; options: string[] }[];
+      questions?: {
+        text: string;
+        options: string[];
+        mode?: "single" | "multi";
+        commentLabel?: string;
+      }[];
     };
-    payload.surveyMode = c.mode === "multi" ? "multi" : "single";
     payload.questions = c.questions ?? [];
     // Participants see only their own rows; facilitators/report see all.
     payload.surveyResponses = responseRows

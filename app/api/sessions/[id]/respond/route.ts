@@ -87,8 +87,11 @@ export async function POST(
     columns?: string[];
     words?: string[];
     scales?: { name: string; anchorSet: string; allowNA: boolean }[];
-    mode?: "single" | "multi";
-    questions?: { text: string; options: string[] }[];
+    questions?: {
+      text: string;
+      options: string[];
+      mode?: "single" | "multi";
+    }[];
     items?: string[];
     phase?: string;
     scale?: number;
@@ -381,7 +384,7 @@ export async function POST(
           .filter((n) => Number.isInteger(n) && n >= 0 && n < optCount)
       : [];
     selected = Array.from(new Set(selected));
-    if (config.mode !== "multi") selected = selected.slice(0, 1);
+    if (questions[qi].mode !== "multi") selected = selected.slice(0, 1);
     const comment =
       typeof body?.comment === "string" ? body.comment.trim().slice(0, 500) : "";
     await query(

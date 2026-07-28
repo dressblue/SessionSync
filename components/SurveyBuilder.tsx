@@ -1,18 +1,30 @@
 "use client";
 
-export type SurveyQ = { text: string; options: string[] };
+export type SurveyQ = {
+  text: string;
+  options: string[];
+  mode: "single" | "multi";
+  commentLabel: string;
+};
 
-// Authoring UI for the survey tool — a single/multi toggle (applies to the
-// whole tool) plus a list of questions, each with 1–4 answers. Used by both the
-// live "Push an activity" console and the saved step-tool form.
+export const DEFAULT_COMMENT_LABEL = "Explain your response (optional)…";
+
+export function newSurveyQuestion(): SurveyQ {
+  return {
+    text: "",
+    options: ["", ""],
+    mode: "single",
+    commentLabel: DEFAULT_COMMENT_LABEL,
+  };
+}
+
+// Authoring UI for the survey tool. Each question sets its own single/multi
+// answer mode and its own comment-box prompt. Used by both the live "Push an
+// activity" console and the saved step-tool form.
 export function SurveyBuilder({
-  mode,
-  onModeChange,
   questions,
   onChange,
 }: {
-  mode: "single" | "multi";
-  onModeChange: (m: "single" | "multi") => void;
   questions: SurveyQ[];
   onChange: (q: SurveyQ[]) => void;
 }) {
@@ -21,27 +33,6 @@ export function SurveyBuilder({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-1.5 text-xs flex-wrap">
-        <span className="text-slate-500 mr-1">Answers:</span>
-        {(["single", "multi"] as const).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => onModeChange(m)}
-            className={`rounded-md border px-2 py-1 font-medium ${
-              mode === m
-                ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                : "border-slate-300 text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            {m === "single" ? "Single-select" : "Multi-select"}
-          </button>
-        ))}
-        <span className="text-[11px] text-slate-400">
-          (applies to every question)
-        </span>
-      </div>
-
       {questions.map((q, qi) => (
         <div
           key={qi}
@@ -65,6 +56,23 @@ export function SurveyBuilder({
                 ✕
               </button>
             )}
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] pl-3">
+            <span className="text-slate-500 mr-1">Answers:</span>
+            {(["single", "multi"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => patch(qi, (x) => ({ ...x, mode: m }))}
+                className={`rounded-md border px-2 py-0.5 font-medium ${
+                  q.mode === m
+                    ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                    : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {m === "single" ? "Single-select" : "Multi-select"}
+              </button>
+            ))}
           </div>
           {q.options.map((o, oi) => (
             <div key={oi} className="flex items-center gap-1.5 pl-3">
@@ -106,20 +114,26 @@ export function SurveyBuilder({
               + Add answer
             </button>
           )}
+          <input
+            value={q.commentLabel}
+            onChange={(e) =>
+              patch(qi, (x) => ({ ...x, commentLabel: e.target.value }))
+            }
+            placeholder="Comment box prompt"
+            maxLength={120}
+            className="mt-1 mx-3 rounded-md border border-dashed border-slate-300 px-2.5 py-1 text-xs text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
         </div>
       ))}
       {questions.length < 20 && (
         <button
           type="button"
-          onClick={() => onChange([...questions, { text: "", options: ["", ""] }])}
+          onClick={() => onChange([...questions, newSurveyQuestion()])}
           className="self-start text-xs font-medium text-indigo-600 hover:text-indigo-800"
         >
           + Add question
         </button>
       )}
-      <p className="text-[11px] text-slate-400">
-        Each question shows a comment box so participants can explain their pick.
-      </p>
     </div>
   );
 }

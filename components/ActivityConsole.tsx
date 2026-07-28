@@ -9,7 +9,7 @@ import type {
 } from "./useSessionState";
 import { ActivityPanel } from "./ActivityPanel";
 import { WorkflowBuilder } from "./WorkflowBuilder";
-import { SurveyBuilder } from "./SurveyBuilder";
+import { SurveyBuilder, newSurveyQuestion, type SurveyQ } from "./SurveyBuilder";
 import { LIKERT_ANCHOR_LABELS } from "@/lib/likert";
 
 interface Props {
@@ -118,11 +118,10 @@ export function ActivityConsole({
         : kind === "impact2"
           ? 2
           : 1;
-  // Survey: single/multi for the whole tool + a list of questions (1–4 options).
-  const [surveyMode, setSurveyMode] = useState<"single" | "multi">("single");
-  const [surveyQuestions, setSurveyQuestions] = useState<
-    { text: string; options: string[] }[]
-  >([{ text: "", options: ["", ""] }]);
+  // Survey: a list of questions, each with its own single/multi mode + comment.
+  const [surveyQuestions, setSurveyQuestions] = useState<SurveyQ[]>([
+    newSurveyQuestion(),
+  ]);
   const [exhibitType, setExhibitType] = useState<"file" | "url" | "text">("file");
   const [exhibitFileId, setExhibitFileId] = useState("");
   const [exhibitUrl, setExhibitUrl] = useState("");
@@ -210,11 +209,12 @@ export function ActivityConsole({
     ) {
       body.scales = impactScales.slice(0, impactN);
     } else if (kind === "survey") {
-      body.mode = surveyMode;
       body.questions = surveyQuestions
         .map((q) => ({
           text: q.text.trim(),
           options: q.options.map((o) => o.trim()).filter(Boolean),
+          mode: q.mode,
+          commentLabel: q.commentLabel.trim(),
         }))
         .filter((q) => q.text && q.options.length >= 1);
     } else if (kind !== "whiteboard") {
@@ -241,8 +241,7 @@ export function ActivityConsole({
     setVideoUrl("");
     setCorrectIndex(0);
     setSeedText("");
-    setSurveyMode("single");
-    setSurveyQuestions([{ text: "", options: ["", ""] }]);
+    setSurveyQuestions([newSurveyQuestion()]);
   }
 
   // Carry a source activity's word list into the Push-an-activity form for a new
@@ -560,8 +559,6 @@ export function ActivityConsole({
 
             {kind === "survey" ? (
               <SurveyBuilder
-                mode={surveyMode}
-                onModeChange={setSurveyMode}
                 questions={surveyQuestions}
                 onChange={setSurveyQuestions}
               />

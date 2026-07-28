@@ -1072,10 +1072,10 @@ export function ActivityPanel({
       <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
         {header("Survey")}
         <SurveyBoard
-          mode={activity.surveyMode ?? "single"}
           questions={activity.questions ?? []}
           responses={activity.surveyResponses ?? []}
-          canAnswer={!!participantId && !canModerate}
+          canAnswer={!!participantId}
+          showResults={canModerate || !participantId}
           onAnswer={(q, selected, comment) =>
             send({ questionIndex: q, selected, comment }, "POST", false)
           }

@@ -395,20 +395,34 @@ export async function POST(
   } else if (kind === "survey") {
     // Several questions, each with 1–4 answers; single- or multi-select for the
     // whole tool, plus a per-question comment participants fill in.
-    const mode = body?.mode === "multi" ? "multi" : "single";
     const rawQ = Array.isArray(body?.questions) ? body.questions : [];
     const questions = rawQ
       .map((q: unknown) => {
-        const qq = (q ?? {}) as { text?: unknown; options?: unknown };
+        const qq = (q ?? {}) as {
+          text?: unknown;
+          options?: unknown;
+          mode?: unknown;
+          commentLabel?: unknown;
+        };
         const text =
           typeof qq.text === "string" ? qq.text.trim().slice(0, 200) : "";
         const options = (Array.isArray(qq.options) ? qq.options : [])
           .map((o) => (typeof o === "string" ? o.trim().slice(0, 120) : ""))
           .filter(Boolean)
           .slice(0, 4);
-        return { text, options };
+        return {
+          text,
+          options,
+          mode: qq.mode === "multi" ? "multi" : "single",
+          commentLabel:
+            typeof qq.commentLabel === "string"
+              ? qq.commentLabel.trim().slice(0, 120)
+              : "",
+        };
       })
-      .filter((q: { text: string; options: string[] }) => q.text && q.options.length >= 1)
+      .filter(
+        (q: { text: string; options: string[] }) => q.text && q.options.length >= 1
+      )
       .slice(0, 20);
     if (!questions.length) {
       return NextResponse.json(
@@ -416,7 +430,7 @@ export async function POST(
         { status: 400 }
       );
     }
-    config = { mode, questions };
+    config = { questions };
   } else {
     return NextResponse.json({ error: "Unknown activity kind" }, { status: 400 });
   }

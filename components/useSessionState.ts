@@ -141,7 +141,7 @@ export interface ActivityState {
     highlighted: boolean;
   }[];
   surveyMode?: "single" | "multi";
-  questions?: { text: string; options: string[] }[];
+  questions?: { text: string; options: string[]; mode?: "single" | "multi"; commentLabel?: string }[];
   surveyResponses?: {
     id: string;
     q: number;
@@ -186,7 +186,7 @@ export interface StepTool {
   topic?: string;
   scales?: { name: string; anchorSet: string; allowNA: boolean }[];
   mode?: "single" | "multi";
-  questions?: { text: string; options: string[] }[];
+  questions?: { text: string; options: string[]; mode?: "single" | "multi"; commentLabel?: string }[];
   graph?: WorkflowGraph;
   sourcing?: "participants";
   anchorSet?: string;

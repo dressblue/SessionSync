@@ -687,10 +687,10 @@ export default function ReportPage() {
               ) : a.kind === "survey" ? (
                 <div className="mt-2">
                   <SurveyBoard
-                    mode={a.surveyMode ?? "single"}
                     questions={a.questions ?? []}
                     responses={a.surveyResponses ?? []}
                     canAnswer={false}
+                    showResults
                     onAnswer={() => {}}
                   />
                 </div>

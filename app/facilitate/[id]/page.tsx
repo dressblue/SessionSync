@@ -9,7 +9,11 @@ import {
   type WorkflowGraph,
 } from "@/components/useSessionState";
 import { WorkflowBuilder } from "@/components/WorkflowBuilder";
-import { SurveyBuilder } from "@/components/SurveyBuilder";
+import {
+  SurveyBuilder,
+  newSurveyQuestion,
+  type SurveyQ,
+} from "@/components/SurveyBuilder";
 import { Markdown } from "@/components/Markdown";
 import { ActivityConsole } from "@/components/ActivityConsole";
 import { Chat } from "@/components/Chat";
@@ -119,13 +123,10 @@ function Console() {
     { name: "", anchorSet: "agreement", allowNA: false },
     { name: "", anchorSet: "agreement", allowNA: false },
   ]);
-  // Survey step-tool config.
-  const [toolSurveyMode, setToolSurveyMode] = useState<"single" | "multi">(
-    "single"
-  );
-  const [toolSurveyQuestions, setToolSurveyQuestions] = useState<
-    { text: string; options: string[] }[]
-  >([{ text: "", options: ["", ""] }]);
+  // Survey step-tool config — each question carries its own mode + comment.
+  const [toolSurveyQuestions, setToolSurveyQuestions] = useState<SurveyQ[]>([
+    newSurveyQuestion(),
+  ]);
   const [toolGraph, setToolGraph] = useState<WorkflowGraph | null>(null);
   const [toolSourced, setToolSourced] = useState(false);
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
@@ -332,8 +333,7 @@ function Console() {
       { name: "", anchorSet: "agreement", allowNA: false },
       { name: "", anchorSet: "agreement", allowNA: false },
     ]);
-    setToolSurveyMode("single");
-    setToolSurveyQuestions([{ text: "", options: ["", ""] }]);
+    setToolSurveyQuestions([newSurveyQuestion()]);
   }
 
   async function saveTool(stepId: string) {
@@ -390,11 +390,12 @@ function Console() {
               : 1;
       body.scales = toolImpactScales.slice(0, n);
     } else if (toolKind === "survey") {
-      body.mode = toolSurveyMode;
       body.questions = toolSurveyQuestions
         .map((q) => ({
           text: q.text.trim(),
           options: q.options.map((o) => o.trim()).filter(Boolean),
+          mode: q.mode,
+          commentLabel: q.commentLabel.trim(),
         }))
         .filter((q) => q.text && q.options.length >= 1);
     } else if (toolKind !== "whiteboard") body.items = list;
@@ -437,11 +438,15 @@ function Console() {
           t.scales?.[i] ?? { name: "", anchorSet: "agreement", allowNA: false }
       )
     );
-    setToolSurveyMode(t.mode === "multi" ? "multi" : "single");
     setToolSurveyQuestions(
       t.questions && t.questions.length
-        ? t.questions.map((q) => ({ text: q.text, options: [...q.options] }))
-        : [{ text: "", options: ["", ""] }]
+        ? t.questions.map((q) => ({
+            text: q.text,
+            options: [...q.options],
+            mode: q.mode === "multi" ? "multi" : "single",
+            commentLabel: q.commentLabel ?? "",
+          }))
+        : [newSurveyQuestion()]
     );
     setToolGraph(t.graph ?? null);
   }
@@ -1022,8 +1027,6 @@ function Console() {
                         )}
                         {toolKind === "survey" && (
                           <SurveyBuilder
-                            mode={toolSurveyMode}
-                            onModeChange={setToolSurveyMode}
                             questions={toolSurveyQuestions}
                             onChange={setToolSurveyQuestions}
                           />
