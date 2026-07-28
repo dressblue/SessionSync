@@ -541,6 +541,38 @@ export function ActivityConsole({
                 </p>
                 {Array.from({ length: impactN }, (_, i) => (
                   <div key={i} className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex flex-col leading-none">
+                      <button
+                        type="button"
+                        disabled={i === 0}
+                        title="Move scale up"
+                        onClick={() =>
+                          setImpactScales((prev) => {
+                            const a = [...prev];
+                            [a[i - 1], a[i]] = [a[i], a[i - 1]];
+                            return a;
+                          })
+                        }
+                        className="text-slate-400 hover:text-slate-600 disabled:opacity-30 text-xs"
+                      >
+                        ▲
+                      </button>
+                      <button
+                        type="button"
+                        disabled={i === impactN - 1}
+                        title="Move scale down"
+                        onClick={() =>
+                          setImpactScales((prev) => {
+                            const a = [...prev];
+                            [a[i + 1], a[i]] = [a[i], a[i + 1]];
+                            return a;
+                          })
+                        }
+                        className="text-slate-400 hover:text-slate-600 disabled:opacity-30 text-xs"
+                      >
+                        ▼
+                      </button>
+                    </div>
                     <input
                       value={impactScales[i]?.name ?? ""}
                       onChange={(e) =>

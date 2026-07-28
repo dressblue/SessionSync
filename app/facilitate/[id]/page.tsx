@@ -929,6 +929,48 @@ function Console() {
                                   key={i}
                                   className="flex flex-wrap items-center gap-1.5"
                                 >
+                                  <div className="flex flex-col leading-none">
+                                    <button
+                                      type="button"
+                                      disabled={i === 0}
+                                      title="Move scale up"
+                                      onClick={() =>
+                                        setToolImpactScales((prev) => {
+                                          const a = [...prev];
+                                          [a[i - 1], a[i]] = [a[i], a[i - 1]];
+                                          return a;
+                                        })
+                                      }
+                                      className="text-slate-400 hover:text-slate-600 disabled:opacity-30 text-[11px]"
+                                    >
+                                      ▲
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={
+                                        i ===
+                                        (toolKind === "impact4"
+                                          ? 4
+                                          : toolKind === "impact3"
+                                            ? 3
+                                            : toolKind === "impact2"
+                                              ? 2
+                                              : 1) -
+                                          1
+                                      }
+                                      title="Move scale down"
+                                      onClick={() =>
+                                        setToolImpactScales((prev) => {
+                                          const a = [...prev];
+                                          [a[i + 1], a[i]] = [a[i], a[i + 1]];
+                                          return a;
+                                        })
+                                      }
+                                      className="text-slate-400 hover:text-slate-600 disabled:opacity-30 text-[11px]"
+                                    >
+                                      ▼
+                                    </button>
+                                  </div>
                                   <input
                                     value={toolImpactScales[i]?.name ?? ""}
                                     onChange={(e) =>
