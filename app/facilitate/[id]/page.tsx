@@ -667,6 +667,12 @@ function Console() {
                                 {TOOL_BADGES[t.kind] ?? t.kind}
                               </span>
                               <span className="min-w-0 truncate">{t.prompt}</span>
+                              {t.kind === "wordcloud" &&
+                                (t.words?.length ?? 0) > 0 && (
+                                  <span className="shrink-0 rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 text-[10px] font-semibold">
+                                    ★ seeded ({t.words!.length})
+                                  </span>
+                                )}
                               {t.sourcing === "participants" && (
                                 <span className="text-slate-400 shrink-0">
                                   (participant-sourced)
