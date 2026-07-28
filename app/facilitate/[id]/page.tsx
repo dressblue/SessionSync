@@ -539,16 +539,26 @@ function Console() {
   const { session, steps, participants, activities, pastActivities, spotlight } =
     state;
   const isCourseSession = !!session.courseId;
-  // Move/Copy targets: every step across the course's sessions (labelled
-  // <session>.<step>), or just this session's steps until the course loads.
-  const moveTargets: { id: string; label: string }[] = courseSteps.length
-    ? courseSteps.flatMap((sess) =>
-        sess.steps.map((st) => ({
-          id: st.id,
-          label: `${sess.sessionPos + 1}.${st.pos + 1} ${st.title}`,
+  // Move/Copy targets, grouped by session (a step's own title carries whatever
+  // numbering the facilitator gave it). Falls back to just this session's steps
+  // until the course-wide list loads.
+  const moveGroups: { title: string; steps: { id: string; title: string }[] }[] =
+    courseSteps.length
+      ? courseSteps.map((sess) => ({
+          title: sess.sessionTitle,
+          steps: sess.steps.map((st) => ({ id: st.id, title: st.title })),
         }))
-      )
-    : steps.map((st, i) => ({ id: st.id, label: `${i + 1}. ${st.title}` }));
+      : [
+          {
+            title: session.title,
+            steps: steps.map((st) => ({ id: st.id, title: st.title })),
+          },
+        ];
+  const moveTargetCount = (excludeId: string) =>
+    moveGroups.reduce(
+      (n, g) => n + g.steps.filter((st) => st.id !== excludeId).length,
+      0
+    );
   const keyActive =
     !!session.joinKey &&
     !!session.joinKeyExpires &&
@@ -820,40 +830,46 @@ function Console() {
                               >
                                 ↓
                               </button>
-                              {moveTargets.filter((x) => x.id !== s.id).length >
-                                0 && (
-                                <select
-                                  value=""
-                                  title="Move or copy this tool to another step"
-                                  aria-label="Move or copy tool to another step"
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    e.target.value = "";
-                                    if (v) relocateTool(s.id, t.id, v);
-                                  }}
-                                  className="shrink-0 rounded-md border border-slate-300 px-1 py-1 text-[11px] text-slate-600 bg-white max-w-[76px]"
-                                >
-                                  <option value="">🚚 …</option>
-                                  <optgroup label="Move to step">
-                                    {moveTargets.map((x) =>
-                                      x.id === s.id ? null : (
-                                        <option key={`m${x.id}`} value={`move:${x.id}`}>
-                                          {x.label}
-                                        </option>
-                                      )
-                                    )}
-                                  </optgroup>
-                                  <optgroup label="Copy to step">
-                                    {moveTargets.map((x) =>
-                                      x.id === s.id ? null : (
-                                        <option key={`c${x.id}`} value={`clone:${x.id}`}>
-                                          {x.label}
-                                        </option>
-                                      )
-                                    )}
-                                  </optgroup>
-                                </select>
-                              )}
+                              {moveTargetCount(s.id) > 0 &&
+                                (
+                                  [
+                                    ["move", "🚚", "Move this tool to another step"],
+                                    ["clone", "⎘", "Copy this tool to another step"],
+                                  ] as const
+                                ).map(([action, icon, tip]) => (
+                                  <select
+                                    key={action}
+                                    value=""
+                                    title={tip}
+                                    aria-label={tip}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      e.target.value = "";
+                                      if (v) relocateTool(s.id, t.id, v);
+                                    }}
+                                    className="shrink-0 rounded-md border border-slate-300 px-1 py-1 text-[11px] text-slate-600 bg-white max-w-[64px]"
+                                  >
+                                    <option value="">{icon} …</option>
+                                    {moveGroups.map((g, gi) => {
+                                      const opts = g.steps.filter(
+                                        (st) => st.id !== s.id
+                                      );
+                                      if (opts.length === 0) return null;
+                                      return (
+                                        <optgroup key={gi} label={g.title}>
+                                          {opts.map((st) => (
+                                            <option
+                                              key={st.id}
+                                              value={`${action}:${st.id}`}
+                                            >
+                                              {st.title}
+                                            </option>
+                                          ))}
+                                        </optgroup>
+                                      );
+                                    })}
+                                  </select>
+                                ))}
                               <button
                                 onClick={() => beginToolEdit(s.id, t)}
                                 title="Edit tool"
