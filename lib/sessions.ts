@@ -930,12 +930,15 @@ export function buildActivityPayload(
       }[];
     };
     payload.questions = c.questions ?? [];
-    // Participants see only their own rows; facilitators/report see all.
+    // A participant sees only their own rows (they answer, not spectate);
+    // the facilitator, the public projector (no participant id), and the
+    // report all see the full set so the results grid populates.
     payload.surveyResponses = responseRows
       .filter(
         (r) =>
           facilitatorView ||
-          (!!viewerParticipantId && r.participant_id === viewerParticipantId)
+          !viewerParticipantId ||
+          r.participant_id === viewerParticipantId
       )
       .map((r) => {
         let selected: number[] = [];
