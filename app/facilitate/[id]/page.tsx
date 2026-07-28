@@ -53,6 +53,19 @@ function TrashIcon() {
   );
 }
 
+function PencilIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className="w-4 h-4"
+      aria-hidden="true"
+    >
+      <path d="M13.586 3.586a2 2 0 1 1 2.828 2.828l-.793.793-2.828-2.828.793-.793ZM11.379 5.793 3 14.172V17h2.828l8.38-8.379-2.83-2.828Z" />
+    </svg>
+  );
+}
+
 function Console() {
   const { id } = useParams<{ id: string }>();
   const { user } = useUser();
@@ -688,8 +701,11 @@ function Console() {
                               <span className="min-w-0 truncate">{t.prompt}</span>
                               {t.kind === "wordcloud" &&
                                 (t.words?.length ?? 0) > 0 && (
-                                  <span className="shrink-0 rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 text-[10px] font-semibold">
-                                    ★ seeded ({t.words!.length})
+                                  <span
+                                    title={`${t.words!.length} seeded word${t.words!.length === 1 ? "" : "s"}`}
+                                    className="shrink-0 rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 text-[10px] font-semibold"
+                                  >
+                                    ★ {t.words!.length}
                                   </span>
                                 )}
                               {t.sourcing === "participants" && (
@@ -774,17 +790,20 @@ function Console() {
                               )}
                               <button
                                 onClick={() => beginToolEdit(s.id, t)}
-                                className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
+                                title="Edit tool"
+                                aria-label="Edit tool"
+                                className="shrink-0 rounded-md border border-slate-300 px-1.5 py-1 text-slate-600 hover:bg-slate-100"
                               >
-                                Edit
+                                <PencilIcon />
                               </button>
                               {viewerAdmin && (
                                 <button
                                   onClick={() => promoteToLibrary(t)}
                                   title="Save this tool to the shared library"
-                                  className="shrink-0 rounded-md border border-violet-300 px-2 py-1 text-[11px] font-medium text-violet-700 hover:bg-violet-50"
+                                  aria-label="Save this tool to the shared library"
+                                  className="shrink-0 rounded-md border border-violet-300 px-1.5 py-1 text-[13px] leading-none text-violet-700 hover:bg-violet-50"
                                 >
-                                  ⭐ To library
+                                  📚
                                 </button>
                               )}
                               <button
