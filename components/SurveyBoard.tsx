@@ -251,23 +251,41 @@ export function SurveyBoard({
                     return (
                       <div
                         key={oi}
-                        className={`rounded-lg border p-2 text-center ${
+                        className={`rounded-lg border p-2 ${
                           lead
                             ? "border-indigo-400 bg-indigo-50"
                             : "border-slate-200 bg-white"
                         }`}
                       >
-                        <p className="text-xs text-slate-600 leading-tight break-words min-h-[2.4em]">
+                        <p className="text-xs text-slate-600 leading-tight break-words text-center min-h-[2.4em]">
                           {opt}
                         </p>
-                        <p
-                          className={`font-bold text-indigo-600 ${
-                            presentation ? "text-3xl" : "text-2xl"
-                          }`}
-                        >
-                          {c}
-                        </p>
-                        <p className="text-[11px] text-slate-500">{pct}%</p>
+                        <div className="mt-1 grid grid-cols-2 divide-x divide-slate-200">
+                          <div className="text-center px-1">
+                            <p
+                              className={`font-bold text-indigo-600 leading-none ${
+                                presentation ? "text-3xl" : "text-2xl"
+                              }`}
+                            >
+                              {c}
+                            </p>
+                            <p className="text-[9px] uppercase tracking-wide text-slate-400 mt-0.5">
+                              {c === 1 ? "response" : "responses"}
+                            </p>
+                          </div>
+                          <div className="text-center px-1">
+                            <p
+                              className={`font-bold text-slate-700 leading-none ${
+                                presentation ? "text-3xl" : "text-2xl"
+                              }`}
+                            >
+                              {pct}%
+                            </p>
+                            <p className="text-[9px] uppercase tracking-wide text-slate-400 mt-0.5">
+                              of total
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     );
                   })}
