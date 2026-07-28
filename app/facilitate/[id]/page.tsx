@@ -716,9 +716,11 @@ function Console() {
                               {session.status === "live" ? (
                                 <button
                                   onClick={() => launchTool(t)}
-                                  className="ml-auto shrink-0 rounded-md bg-indigo-600 text-white px-2.5 py-1 text-[11px] font-semibold hover:bg-indigo-700"
+                                  title="Launch"
+                                  aria-label="Launch"
+                                  className="ml-auto shrink-0 rounded-md bg-indigo-600 text-white px-2 py-1 text-[13px] leading-none hover:bg-indigo-700"
                                 >
-                                  Launch
+                                  🚀
                                 </button>
                               ) : (
                                 <span className="ml-auto shrink-0 text-[10px] text-slate-400">
