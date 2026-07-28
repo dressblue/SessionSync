@@ -139,11 +139,19 @@ function activityLines(a: ActivityState): string[] {
     const header = scales.map(
       (s, i) => `Scale ${i + 1}: ${s.name}${s.allowNA ? " (N/A allowed)" : ""}`
     );
-    const rows = (a.impactEntries ?? []).flatMap((e) => [
-      `${e.text} — ${e.name}`,
-      ...scales.map(
-        (s, i) => `  ${s.name}: ${e.ratings[i] == null ? "N/A" : e.ratings[i]}`
-      ),
+    // Value as "3 · Average" using the scale's anchor set; N/A stays plain.
+    const valueText = (si: number, val: number | null) => {
+      if (val == null) return "N/A";
+      const labels = anchorLabels(scales[si]?.anchorSet);
+      return labels[val - 1] ? `${val} · ${labels[val - 1]}` : String(val);
+    };
+    const entries = a.impactEntries ?? [];
+    const rows = entries.flatMap((e, idx) => [
+      // A blank spacer between entries so blocks read separately; ★ marks the
+      // entry the facilitator highlighted for discussion.
+      ...(idx > 0 ? [""] : []),
+      `${e.highlighted ? "★ " : ""}${e.text} — ${e.name}`,
+      ...scales.map((s, i) => `  ${s.name}: ${valueText(i, e.ratings[i] ?? null)}`),
     ]);
     return [...header, ...(rows.length ? rows : ["No entries yet."])];
   }
@@ -405,17 +413,24 @@ export default function ReportPage() {
           drawLikertSlide(slide, a);
         } else {
           slide.addText(
-            activityLines(a).map((line) => ({
-              text: line,
-              options: {
-                bullet: !line.startsWith("  "),
-                fontSize: 14,
-                color: "334155",
-                breakLine: true,
-                indentLevel: line.startsWith("  ") ? 1 : 0,
-              },
-            })),
-            { x: 0.8, y: 1.4, w: 11.5, h: 5.5 }
+            activityLines(a).map((line) => {
+              const indented = line.startsWith("  ");
+              const isEntry = !indented && line.includes(" — ");
+              return {
+                text: line,
+                options: {
+                  // Empty spacer lines and indented rating lines carry no
+                  // bullet; entry/scale headers do.
+                  bullet: line.trim().length > 0 && !indented,
+                  bold: isEntry,
+                  fontSize: 14,
+                  color: line.startsWith("★") ? "b45309" : "334155",
+                  breakLine: true,
+                  indentLevel: indented ? 1 : 0,
+                },
+              };
+            }),
+            { x: 0.8, y: 1.4, w: 11.5, h: 5.5, valign: "top" }
           );
         }
       }
