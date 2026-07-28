@@ -56,8 +56,15 @@ export async function PATCH(
   ) {
     const isClone = typeof body?.cloneToStepId === "string";
     const targetStepId = (isClone ? body.cloneToStepId : body.moveToStepId) as string;
+    // The target step may be in another session — as long as it belongs to the
+    // same course (the facilitator's authorization covers the whole course
+    // team). IS NOT DISTINCT FROM keeps standalone (null-course) sessions
+    // matching themselves.
     const target = await query<{ id: string }>(
-      `SELECT id FROM steps WHERE id = $1 AND session_id = $2`,
+      `SELECT st.id FROM steps st
+       JOIN sessions ts ON ts.id = st.session_id
+       JOIN sessions ss ON ss.id = $2
+       WHERE st.id = $1 AND ts.course_id IS NOT DISTINCT FROM ss.course_id`,
       [targetStepId, id]
     );
     if (!target.rows[0]) {

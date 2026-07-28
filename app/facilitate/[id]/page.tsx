@@ -141,6 +141,16 @@ function Console() {
     { id: string; name: string; description: string; category: string; kind: string }[] | null
   >(null);
   const [libQ, setLibQ] = useState("");
+  // Every session's steps in this course, so a tool can be moved/copied to a
+  // step in another session (e.g. 4.5 → 5.5).
+  const [courseSteps, setCourseSteps] = useState<
+    {
+      sessionId: string;
+      sessionTitle: string;
+      sessionPos: number;
+      steps: { id: string; title: string; pos: number }[];
+    }[]
+  >([]);
 
   useEffect(() => {
     setChecked(true);
@@ -228,6 +238,16 @@ function Console() {
       .then((d) => setViewerAdmin(!!d?.isAdmin))
       .catch(() => {});
   }, []);
+
+  // Load every session's steps in this course for the Move/Copy picker.
+  const courseId = state?.session.courseId;
+  useEffect(() => {
+    if (!courseId) return;
+    fetch(`/api/courses/${courseId}/steps`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d?.sessions && setCourseSteps(d.sessions))
+      .catch(() => {});
+  }, [courseId]);
 
   // Scope the picker to this course's library (global items + course-scoped).
   function libScopeParam() {
@@ -519,6 +539,16 @@ function Console() {
   const { session, steps, participants, activities, pastActivities, spotlight } =
     state;
   const isCourseSession = !!session.courseId;
+  // Move/Copy targets: every step across the course's sessions (labelled
+  // <session>.<step>), or just this session's steps until the course loads.
+  const moveTargets: { id: string; label: string }[] = courseSteps.length
+    ? courseSteps.flatMap((sess) =>
+        sess.steps.map((st) => ({
+          id: st.id,
+          label: `${sess.sessionPos + 1}.${st.pos + 1} ${st.title}`,
+        }))
+      )
+    : steps.map((st, i) => ({ id: st.id, label: `${i + 1}. ${st.title}` }));
   const keyActive =
     !!session.joinKey &&
     !!session.joinKeyExpires &&
@@ -790,7 +820,8 @@ function Console() {
                               >
                                 ↓
                               </button>
-                              {steps.length > 1 && (
+                              {moveTargets.filter((x) => x.id !== s.id).length >
+                                0 && (
                                 <select
                                   value=""
                                   title="Move or copy this tool to another step"
@@ -804,19 +835,19 @@ function Console() {
                                 >
                                   <option value="">🚚 …</option>
                                   <optgroup label="Move to step">
-                                    {steps.map((x, xi) =>
+                                    {moveTargets.map((x) =>
                                       x.id === s.id ? null : (
                                         <option key={`m${x.id}`} value={`move:${x.id}`}>
-                                          {xi + 1}. {x.title}
+                                          {x.label}
                                         </option>
                                       )
                                     )}
                                   </optgroup>
                                   <optgroup label="Copy to step">
-                                    {steps.map((x, xi) =>
+                                    {moveTargets.map((x) =>
                                       x.id === s.id ? null : (
                                         <option key={`c${x.id}`} value={`clone:${x.id}`}>
-                                          {xi + 1}. {x.title}
+                                          {x.label}
                                         </option>
                                       )
                                     )}
