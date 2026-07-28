@@ -47,6 +47,10 @@ export function SurveyBoard({
     return init;
   });
   const [submitted, setSubmitted] = useState(false);
+  // When a viewer can both answer and see results (participant on a phone, or
+  // the facilitator), the two live in tabs; submitting flips to the summary.
+  const both = canAnswer && showResults;
+  const [tab, setTab] = useState<"form" | "results">("form");
 
   const ans = (q: number) => answers[q] ?? { selected: [], comment: "" };
 
@@ -75,6 +79,7 @@ export function SurveyBoard({
       onAnswer(qi, a.selected, a.comment);
     });
     setSubmitted(true);
+    if (both) setTab("results");
   };
 
   const answeredCount = questions.filter(
@@ -83,8 +88,33 @@ export function SurveyBoard({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Tab bar — only when the viewer can both answer and see the summary. */}
+      {both && (
+        <div className="flex gap-1 rounded-lg bg-slate-100 p-1 self-start">
+          {(
+            [
+              ["form", "Your response"],
+              ["results", "Summary"],
+            ] as const
+          ).map(([t, label]) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`rounded-md px-3 py-1 text-sm font-medium transition ${
+                tab === t
+                  ? "bg-white text-indigo-700 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ---- Answer form (participant, or facilitator with a seat) ---- */}
-      {canAnswer && (
+      {canAnswer && (!both || tab === "form") && (
         <div className="flex flex-col gap-3">
           {questions.map((question, qi) => {
             const mode = question.mode === "multi" ? "multi" : "single";
@@ -100,7 +130,15 @@ export function SurveyBoard({
                     {mode === "multi" ? "(select all that apply)" : "(pick one)"}
                   </span>
                 </p>
-                <div className="flex flex-col gap-1.5">
+                <div
+                  className="grid gap-2"
+                  style={{
+                    gridTemplateColumns: `repeat(${Math.min(
+                      Math.max(question.options.length, 1),
+                      4
+                    )}, minmax(0, 1fr))`,
+                  }}
+                >
                   {question.options.map((opt, oi) => {
                     const on = a.selected.includes(oi);
                     return (
@@ -108,7 +146,7 @@ export function SurveyBoard({
                         key={oi}
                         type="button"
                         onClick={() => toggle(qi, oi, mode)}
-                        className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition ${
+                        className={`flex flex-col items-center gap-1.5 rounded-lg border px-2 py-3 text-center text-sm transition ${
                           on
                             ? "border-indigo-500 bg-indigo-50 text-indigo-900"
                             : "border-slate-300 bg-white hover:bg-slate-100"
@@ -169,14 +207,9 @@ export function SurveyBoard({
         </div>
       )}
 
-      {/* ---- Results grid (facilitator / presenter / report) ---- */}
-      {showResults && (
+      {/* ---- Results grid (facilitator / presenter / report / participant summary) ---- */}
+      {showResults && (!both || tab === "results") && (
         <div className="flex flex-col">
-          {canAnswer && (
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
-              Group results
-            </p>
-          )}
           {questions.map((question, qi) => {
             const forQ = responses.filter((r) => r.q === qi);
             const respondents = forQ.length;
@@ -200,42 +233,57 @@ export function SurveyBoard({
                 <p className="text-[11px] text-slate-400 mb-2">
                   {respondents} response{respondents === 1 ? "" : "s"}
                 </p>
-                <div className="flex flex-col gap-1.5">
+                <div
+                  className="grid gap-2"
+                  style={{
+                    gridTemplateColumns: `repeat(${Math.min(
+                      Math.max(question.options.length, 1),
+                      4
+                    )}, minmax(0, 1fr))`,
+                  }}
+                >
                   {question.options.map((opt, oi) => {
                     const c = counts[oi];
                     const pct = respondents
                       ? Math.round((c / respondents) * 100)
                       : 0;
+                    const lead = c > 0 && c === max;
                     return (
-                      <div key={oi} className="flex items-center gap-2 text-sm">
-                        <span className="w-40 shrink-0 truncate text-slate-700">
+                      <div
+                        key={oi}
+                        className={`rounded-lg border p-2 text-center ${
+                          lead
+                            ? "border-indigo-400 bg-indigo-50"
+                            : "border-slate-200 bg-white"
+                        }`}
+                      >
+                        <p className="text-xs text-slate-600 leading-tight break-words min-h-[2.4em]">
                           {opt}
-                        </span>
-                        <div className="flex-1 h-4 rounded bg-slate-100 overflow-hidden">
-                          <div
-                            className="h-full bg-indigo-500"
-                            style={{ width: `${(c / max) * 100}%` }}
-                          />
-                        </div>
-                        <span className="w-16 shrink-0 text-right text-xs text-slate-500">
-                          {c} · {pct}%
-                        </span>
+                        </p>
+                        <p
+                          className={`font-bold text-indigo-600 ${
+                            presentation ? "text-3xl" : "text-2xl"
+                          }`}
+                        >
+                          {c}
+                        </p>
+                        <p className="text-[11px] text-slate-500">{pct}%</p>
                       </div>
                     );
                   })}
                 </div>
                 {comments.length > 0 && (
-                  <ul className="mt-2 flex flex-col gap-1">
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {comments.map((r) => (
-                      <li
+                      <div
                         key={r.id}
-                        className="text-xs text-slate-600 bg-slate-50 rounded-md px-2 py-1"
+                        className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
                       >
                         “{r.comment}”{" "}
                         <span className="text-slate-400">— {r.name}</span>
-                      </li>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 )}
               </div>
             );

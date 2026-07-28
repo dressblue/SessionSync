@@ -930,16 +930,10 @@ export function buildActivityPayload(
       }[];
     };
     payload.questions = c.questions ?? [];
-    // A participant sees only their own rows (they answer, not spectate);
-    // the facilitator, the public projector (no participant id), and the
-    // report all see the full set so the results grid populates.
+    // Everyone gets the full response set — the summary tab is visible to
+    // participants (after they submit), the facilitator, the public projector,
+    // and the report. `mine` still flags the viewer's own rows for the form.
     payload.surveyResponses = responseRows
-      .filter(
-        (r) =>
-          facilitatorView ||
-          !viewerParticipantId ||
-          r.participant_id === viewerParticipantId
-      )
       .map((r) => {
         let selected: number[] = [];
         let comment = "";

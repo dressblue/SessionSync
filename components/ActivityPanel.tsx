@@ -1075,7 +1075,7 @@ export function ActivityPanel({
           questions={activity.questions ?? []}
           responses={activity.surveyResponses ?? []}
           canAnswer={!!participantId}
-          showResults={canModerate || !participantId}
+          showResults
           onAnswer={(q, selected, comment) =>
             send({ questionIndex: q, selected, comment }, "POST", false)
           }
