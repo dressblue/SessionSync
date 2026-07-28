@@ -767,9 +767,9 @@ function Console() {
                                     e.target.value = "";
                                     if (v) relocateTool(s.id, t.id, v);
                                   }}
-                                  className="shrink-0 rounded-md border border-slate-300 px-1 py-1 text-[11px] text-slate-600 bg-white max-w-[104px]"
+                                  className="shrink-0 rounded-md border border-slate-300 px-1 py-1 text-[11px] text-slate-600 bg-white max-w-[76px]"
                                 >
-                                  <option value="">Move/Copy…</option>
+                                  <option value="">🚚 …</option>
                                   <optgroup label="Move to step">
                                     {steps.map((x, xi) =>
                                       x.id === s.id ? null : (

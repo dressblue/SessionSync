@@ -89,6 +89,8 @@ export interface ActivityState {
     hidden: boolean;
     ids: string[];
   }[];
+  seedTotal?: number;
+  seedHidden?: number;
   scale?: number;
   items?: string[];
   ratings?: {

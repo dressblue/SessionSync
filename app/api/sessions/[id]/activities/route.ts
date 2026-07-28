@@ -415,9 +415,10 @@ export async function POST(
     [activityId, id, kind, prompt.slice(0, 300), JSON.stringify(config)]
   );
 
-  // Word cloud carried over from another activity: seed it with those words in
-  // the same request (atomic — no fragile second call). Stored as submissions
-  // (column 0), with a NULL participant like a facilitator seed.
+  // Seed a word cloud with facilitator words in the same request (atomic — no
+  // fragile second call). Stored as submissions (column 0) with a NULL
+  // participant, and HIDDEN so the cloud launches with "no words" — the
+  // facilitator reveals them on cue (PATCH { revealSeeds: true }).
   if (kind === "wordcloud" && Array.isArray(body?.seedWords)) {
     const seed = (body.seedWords as unknown[])
       .map((w) => (typeof w === "string" ? w.trim() : ""))
@@ -425,8 +426,8 @@ export async function POST(
       .slice(0, 80);
     for (const w of seed) {
       await query(
-        `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
-         VALUES ($1, $2, NULL, 0, $3)`,
+        `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value, hidden)
+         VALUES ($1, $2, NULL, 0, $3, TRUE)`,
         [randomUUID(), activityId, w.slice(0, 60)]
       );
     }

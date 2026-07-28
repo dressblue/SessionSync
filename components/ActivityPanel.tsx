@@ -779,6 +779,28 @@ export function ActivityPanel({
           onHide={toggleWord}
           onClearDownvotes={(word) => send({ value: word, action: "clearDownvotes" })}
         />
+        {canModerate && (activity.seedTotal ?? 0) > 0 && (
+          <div className="mt-3">
+            {(activity.seedHidden ?? 0) > 0 ? (
+              <button
+                onClick={() => manage({ revealSeeds: true })}
+                disabled={busy}
+                className="rounded-lg bg-amber-500 text-white px-3 py-1.5 text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
+              >
+                🌱 Reveal {activity.seedHidden} seeded word
+                {activity.seedHidden === 1 ? "" : "s"}
+              </button>
+            ) : (
+              <button
+                onClick={() => manage({ revealSeeds: false })}
+                disabled={busy}
+                className="rounded-lg border border-slate-300 text-slate-600 px-3 py-1.5 text-sm font-medium hover:bg-slate-100 disabled:opacity-50"
+              >
+                Hide seeded words ({activity.seedTotal})
+              </button>
+            )}
+          </div>
+        )}
         {participantId && !canModerate && (
           <form
             className="mt-4 flex gap-1.5"

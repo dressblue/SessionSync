@@ -155,6 +155,8 @@ export interface ActivityPayload {
     hidden: boolean; // facilitator-hidden, or shrunk to nothing
     ids: string[]; // submission response ids (for facilitator hide/restore)
   }[];
+  seedTotal?: number; // facilitator seed words on this cloud
+  seedHidden?: number; // …of which still hidden (awaiting reveal)
   // likert
   phase?: "collect" | "rate";
   scale?: number;
@@ -1072,6 +1074,11 @@ export function buildActivityPayload(
         ids: g.ids,
       };
     });
+    // Facilitator seed words (NULL participant). Surface how many are still
+    // hidden so the facilitator can reveal them on cue.
+    const seedRows = subs.filter((r) => r.participant_id == null);
+    payload.seedTotal = seedRows.length;
+    payload.seedHidden = seedRows.filter((r) => r.hidden).length;
     // Keep entries (visible submissions) for the close-out report.
     payload.entries = entriesFrom(subs);
     payload.responders = respondersFrom(subs);

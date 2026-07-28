@@ -41,6 +41,17 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ ok: true });
   }
 
+  // Reveal (or re-hide) a seeded word cloud's facilitator words. Seeds are the
+  // NULL-participant column-0 rows; revealing un-hides them all at once.
+  if (typeof body?.revealSeeds === "boolean") {
+    await query(
+      `UPDATE activity_responses SET hidden = $1
+       WHERE activity_id = $2 AND participant_id IS NULL AND column_index = 0`,
+      [!body.revealSeeds, aid]
+    );
+    return NextResponse.json({ ok: true });
+  }
+
   // Timer transport: start/pause/reset/add against the countdown anchor.
   if (body?.timer && typeof body.timer === "object") {
     const res = await query<ActivityRow>(
