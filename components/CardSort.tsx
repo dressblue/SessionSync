@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 
-export type Placement = { id: string; word: string; col: number; mine: boolean };
+export type Placement = {
+  id: string;
+  word: string;
+  col: number;
+  mine: boolean;
+  highlighted?: boolean;
+};
 
 // Distinct accent per column (up to 4).
 const COL_ACCENT = [
@@ -19,6 +25,8 @@ export function CardSort({
   onPlace,
   onUnplace,
   onAddWord,
+  onHighlight,
+  canModerate = false,
   readOnly = false,
   presentation = false,
 }: {
@@ -28,6 +36,8 @@ export function CardSort({
   onPlace: (word: string, col: number) => void;
   onUnplace: (word: string, col: number) => void;
   onAddWord?: (word: string) => void;
+  onHighlight?: (placementId: string, highlighted: boolean) => void;
+  canModerate?: boolean;
   readOnly?: boolean;
   presentation?: boolean;
 }) {
@@ -54,7 +64,10 @@ export function CardSort({
     setLocal((l) =>
       l.some((p) => p.word === word && p.col === col)
         ? l
-        : [...l, { id: `tmp-${word}-${col}`, word, col, mine: true }]
+        : [
+            ...l,
+            { id: `tmp-${word}-${col}`, word, col, mine: true, highlighted: false },
+          ]
     );
     onPlace(word, col);
   };
@@ -217,8 +230,30 @@ export function CardSort({
                 {inCol.map((p) => (
                   <span
                     key={p.id}
-                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 ${chipText} ${accent.chip}`}
+                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 ${chipText} ${
+                      p.highlighted
+                        ? "border-amber-400 bg-amber-50 text-amber-900 ring-1 ring-amber-300"
+                        : accent.chip
+                    }`}
                   >
+                    {canModerate && onHighlight && !p.id.startsWith("tmp-") && (
+                      <button
+                        onClick={() => onHighlight(p.id, !p.highlighted)}
+                        title={
+                          p.highlighted
+                            ? "Un-highlight"
+                            : "Highlight for discussion"
+                        }
+                        aria-label="Highlight answer for discussion"
+                        className={`leading-none ${
+                          p.highlighted
+                            ? "text-amber-500"
+                            : "text-current/40 hover:text-amber-500"
+                        }`}
+                      >
+                        ★
+                      </button>
+                    )}
                     {p.word}
                     {!readOnly && (
                       <button

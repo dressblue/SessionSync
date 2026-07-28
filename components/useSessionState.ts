@@ -128,7 +128,7 @@ export interface ActivityState {
   text?: string;
   mediaType?: "image" | "pdf" | "link";
   words?: string[];
-  placements?: { id: string; word: string; col: number; mine: boolean }[];
+  placements?: { id: string; word: string; col: number; mine: boolean; highlighted: boolean }[];
   topic?: string;
   scales?: { name: string; anchorSet: string; allowNA: boolean }[];
   impactEntries?: {

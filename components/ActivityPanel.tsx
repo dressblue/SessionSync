@@ -1032,6 +1032,10 @@ export function ActivityPanel({
             send({ action: "unplace", word, col }, "POST", false)
           }
           onAddWord={(word) => send({ action: "addword", word }, "POST", false)}
+          canModerate={canModerate}
+          onHighlight={(placementId, highlighted) =>
+            moderate(placementId, { highlighted })
+          }
           readOnly={!participantId && !canModerate}
           presentation={presentation}
         />

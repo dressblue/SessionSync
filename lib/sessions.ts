@@ -203,7 +203,7 @@ export interface ActivityPayload {
   // sort (drag words into facilitator-defined columns; a word may go in many).
   // `columns` reuses the existing comment-board field above.
   words?: string[];
-  placements?: { id: string; word: string; col: number; mine: boolean }[];
+  placements?: { id: string; word: string; col: number; mine: boolean; highlighted: boolean }[];
   // impact (a comment + 1–3 five-point scales per entry; N/A optional per scale)
   topic?: string;
   scales?: { name: string; anchorSet: string; allowNA: boolean }[];
@@ -878,6 +878,7 @@ export function buildActivityPayload(
         mine:
           (!!viewerParticipantId && r.participant_id === viewerParticipantId) ||
           (facilitatorView && r.participant_id === null),
+        highlighted: r.highlighted,
       }));
     return payload;
   }
