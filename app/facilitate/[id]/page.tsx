@@ -342,6 +342,7 @@ function Console() {
     } else if ((toolKind === "vote" || toolKind === "likert") && toolSourced)
       body.sourcing = "participants";
     else if (toolKind === "vote") body.options = list;
+    else if (toolKind === "wordcloud") body.words = list;
     else if (toolKind === "sort") {
       body.words = list;
       body.columns = toolSortColumns
@@ -413,6 +414,9 @@ function Console() {
       options: tool.options,
       columns: tool.columns,
       words: tool.words,
+      // A saved word cloud carries its facilitator seed list in `words`; the
+      // activities route seeds the cloud from `seedWords`.
+      seedWords: tool.kind === "wordcloud" ? tool.words : undefined,
       scales: tool.scales,
       items: tool.items,
       graph: tool.graph,
@@ -1036,7 +1040,6 @@ function Console() {
                           toolKind !== "exhibit" &&
                           toolKind !== "video" &&
                           toolKind !== "timer" &&
-                          toolKind !== "wordcloud" &&
                           toolKind !== "workflow" &&
                           toolKind !== "impact1" &&
                           toolKind !== "impact2" &&
@@ -1053,13 +1056,15 @@ function Console() {
                               placeholder={
                                 toolKind === "sort"
                                   ? "Words to sort, one per line"
-                                  : toolKind === "columns"
-                                  ? "Column titles, one per line (1–4) — e.g. each question"
-                                  : toolKind === "vote"
-                                    ? "Options, one per line (2–8)"
-                                    : toolKind === "reveal" || toolKind === "wheel"
-                                      ? "One item per line — note after a |\nSelf-Awareness | How well do I know myself?"
-                                      : "Items to score, one per line (1–12)"
+                                  : toolKind === "wordcloud"
+                                    ? "Seed words/phrases (optional), one per line — participants can add more"
+                                    : toolKind === "columns"
+                                      ? "Column titles, one per line (1–4) — e.g. each question"
+                                      : toolKind === "vote"
+                                        ? "Options, one per line (2–8)"
+                                        : toolKind === "reveal" || toolKind === "wheel"
+                                          ? "One item per line — note after a |\nSelf-Awareness | How well do I know myself?"
+                                          : "Items to score, one per line (1–12)"
                               }
                               className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             />

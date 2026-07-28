@@ -91,7 +91,9 @@ export function ActivityConsole({
   const [graph, setGraph] = useState<WorkflowGraph | null>(null);
   const [columns, setColumns] = useState<string[]>(["", ""]);
   // Words carried over to seed a NEW word cloud (applied after it's created).
-  const [seedWords, setSeedWords] = useState<string[]>([]);
+  // Word-cloud seed words/phrases (one per line), typed by the facilitator or
+  // carried over from a reused activity.
+  const [seedText, setSeedText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -203,7 +205,13 @@ export function ActivityConsole({
       body.items = list;
     }
     if (kind === "likert") body.anchorSet = anchorSet;
-    if (kind === "wordcloud" && seedWords.length) body.seedWords = seedWords;
+    if (kind === "wordcloud") {
+      const seeds = seedText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (seeds.length) body.seedWords = seeds;
+    }
     return body;
   }
 
@@ -216,7 +224,7 @@ export function ActivityConsole({
     setExhibitText("");
     setVideoUrl("");
     setCorrectIndex(0);
-    setSeedWords([]);
+    setSeedText("");
   }
 
   // Carry a source activity's word list into the Push-an-activity form for a new
@@ -232,7 +240,7 @@ export function ActivityConsole({
     setKind(target);
     setPrompt(activity.prompt ?? "");
     if (target === "wordcloud") {
-      setSeedWords(words);
+      setSeedText(words.join("\n"));
     } else if (target === "columns") {
       const cols = words.slice(0, 4);
       setColumns(cols.length >= 2 ? cols : [...cols, ...Array(2 - cols.length).fill("")]);
@@ -908,10 +916,22 @@ export function ActivityConsole({
                 )}
               </div>
             ) : kind === "wordcloud" ? (
-              <p className="text-[11px] text-slate-400">
-                Participants submit words; each renders sized by how often
-                it&apos;s submitted. Click a word to hide it.
-              </p>
+              <div className="flex flex-col gap-1.5">
+                <textarea
+                  value={seedText}
+                  onChange={(e) => setSeedText(e.target.value)}
+                  rows={4}
+                  placeholder={
+                    "Seed words/phrases (optional), one per line\nRaise your voice or talk over others\nGet defensive and justify yourself"
+                  }
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <p className="text-[11px] text-slate-400">
+                  Optional starter words appear in the cloud immediately;
+                  participants add more (and each renders sized by how often
+                  it&apos;s submitted). Click a word to hide it.
+                </p>
+              </div>
             ) : kind === "workflow" ? (
               <WorkflowBuilder value={graph} onChange={setGraph} height={360} />
             ) : kind === "whiteboard" ? null : (kind === "vote" ||
