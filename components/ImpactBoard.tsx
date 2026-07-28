@@ -63,7 +63,12 @@ export function ImpactBoard({
   const valueCell = (si: number, val: number | null) => {
     if (val == null) {
       return (
-        <span className="inline-flex items-center justify-center rounded px-2 h-6 text-[11px] font-semibold text-slate-400 bg-slate-100 border border-slate-200">
+        <span
+          className="inline-flex items-center justify-center rounded px-2 h-6 text-[11px] font-semibold text-slate-400 bg-slate-100 border border-slate-200"
+          // Inline copies so the chip survives HTML exports (Word) that don't
+          // load the Tailwind stylesheet.
+          style={{ backgroundColor: "#f1f5f9", color: "#94a3b8" }}
+        >
           N/A
         </span>
       );
@@ -74,7 +79,7 @@ export function ImpactBoard({
       <span className="inline-flex items-center gap-1.5">
         <span
           className="w-6 h-6 rounded text-white text-[11px] font-bold flex items-center justify-center shrink-0"
-          style={{ backgroundColor: color }}
+          style={{ backgroundColor: color, color: "#ffffff" }}
         >
           {val}
         </span>
@@ -261,12 +266,28 @@ export function ImpactBoard({
                       className={`border-b border-slate-100 ${
                         e.highlighted ? "bg-amber-50" : ""
                       }`}
+                      // Inline amber so the highlight survives HTML exports
+                      // (Word) that don't load the Tailwind stylesheet.
+                      style={
+                        e.highlighted
+                          ? { backgroundColor: "#fffbeb" }
+                          : undefined
+                      }
                     >
                       <td
                         className={`py-2 pr-3 font-medium break-words align-top ${
                           presentation ? "text-base" : "text-sm"
                         }`}
                       >
+                        {e.highlighted && (
+                          <span
+                            className="text-amber-500 mr-1"
+                            style={{ color: "#f59e0b" }}
+                            title="Highlighted for discussion"
+                          >
+                            ★
+                          </span>
+                        )}
                         {e.text}
                       </td>
                       {scales.map((s, si) => (
