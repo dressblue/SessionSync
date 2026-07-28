@@ -314,6 +314,23 @@ export default function ReportPage() {
     load();
   }, [load]);
 
+  const removeActivity = useCallback(
+    async (aid: string) => {
+      if (
+        !confirm(
+          "Remove this activity from the report? Its responses are deleted permanently."
+        )
+      )
+        return;
+      const res = await fetch(`/api/sessions/${id}/activities/${aid}`, {
+        method: "DELETE",
+      });
+      if (res.ok) load();
+      else alert("Could not remove the activity.");
+    },
+    [id, load]
+  );
+
   function exportWord() {
     if (!reportRef.current || !report) return;
     const html = `<html xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${report.session.title}</title></head><body>${reportRef.current.innerHTML}</body></html>`;
@@ -513,12 +530,28 @@ export default function ReportPage() {
         <div className="flex flex-col gap-6">
           {report.activities.map((a) => (
             <div key={a.id} className="break-inside-avoid">
-              <p className="text-sm font-semibold">
-                <span className="text-[10px] font-bold uppercase text-indigo-500 mr-2">
-                  {KIND_LABEL[a.kind] ?? a.kind}
-                </span>
-                {a.prompt}
-              </p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-semibold">
+                  <span className="text-[10px] font-bold uppercase text-indigo-500 mr-2">
+                    {KIND_LABEL[a.kind] ?? a.kind}
+                  </span>
+                  {a.prompt}
+                </p>
+                <button
+                  onClick={() => removeActivity(a.id)}
+                  title="Remove this activity from the report"
+                  aria-label="Remove activity"
+                  className="print:hidden shrink-0 rounded-md px-1.5 py-1 text-slate-300 hover:text-rose-500"
+                >
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                    <path
+                      fillRule="evenodd"
+                      d="M8.75 1a1 1 0 0 0-.95.68L7.32 3H4a1 1 0 0 0 0 2h.11l.86 11.14A2 2 0 0 0 6.96 18h6.08a2 2 0 0 0 1.99-1.86L15.89 5H16a1 1 0 1 0 0-2h-3.32l-.48-1.32A1 1 0 0 0 11.25 1h-2.5ZM9 7.25a.75.75 0 0 0-1.5 0v6a.75.75 0 0 0 1.5 0v-6Zm3.5 0a.75.75 0 0 0-1.5 0v6a.75.75 0 0 0 1.5 0v-6Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+              </div>
               {a.kind === "whiteboard" && a.strokes && a.strokes.length > 0 ? (
                 <svg
                   viewBox="0 0 800 600"

@@ -334,3 +334,23 @@ export async function PATCH(req: Request, ctx: Ctx) {
   );
   return NextResponse.json({ ok: true });
 }
+
+// Permanently remove an activity and its responses — used to prune a stale or
+// duplicate launch from the session report. Clears the pointer if it was live.
+export async function DELETE(req: Request, ctx: Ctx) {
+  const { id, aid } = await ctx.params;
+  const session = await authorizeSession(req, id);
+  if (!session) {
+    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  }
+  await query(
+    `UPDATE sessions SET active_activity = NULL WHERE id = $1 AND active_activity = $2`,
+    [id, aid]
+  );
+  await query(`DELETE FROM activity_responses WHERE activity_id = $1`, [aid]);
+  await query(`DELETE FROM activities WHERE id = $1 AND session_id = $2`, [
+    aid,
+    id,
+  ]);
+  return NextResponse.json({ ok: true });
+}
