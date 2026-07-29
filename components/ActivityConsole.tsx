@@ -247,12 +247,17 @@ export function ActivityConsole({
   // Carry a source activity's word list into the Push-an-activity form for a new
   // activity of `target`, pre-filled so the facilitator can adjust and launch.
   function reuseWords(activity: ActivityState, target: Kind) {
-    const words =
+    const raw =
       activity.kind === "sort"
         ? (activity.words ?? [])
         : activity.kind === "wordcloud"
-          ? (activity.cloud ?? []).map((c) => c.text)
-          : (activity.options ?? activity.items ?? []);
+          ? (activity.cloud ?? []).filter((c) => !c.hidden).map((c) => c.text)
+          : activity.kind === "columns"
+            ? (activity.entries ?? [])
+                .filter((e) => !e.hidden)
+                .map((e) => e.value)
+            : (activity.options ?? activity.items ?? []);
+    const words = [...new Set(raw.map((w) => w.trim()).filter(Boolean))];
     resetForm();
     setKind(target);
     setPrompt(activity.prompt ?? "");
@@ -268,7 +273,9 @@ export function ActivityConsole({
     }
     setError(
       words.length
-        ? `Loaded ${words.length} word${words.length === 1 ? "" : "s"} — adjust below, then push.`
+        ? target === "sort"
+          ? `Loaded ${words.length} word${words.length === 1 ? "" : "s"} — name the columns below, then push.`
+          : `Loaded ${words.length} word${words.length === 1 ? "" : "s"} — adjust below, then push.`
         : "That activity has no words yet."
     );
   }
@@ -316,7 +323,9 @@ export function ActivityConsole({
           </span>
         </h2>
         <div className="flex flex-wrap items-center gap-2">
-          {(activity.kind === "sort" || activity.kind === "wordcloud") && (
+          {(activity.kind === "sort" ||
+            activity.kind === "wordcloud" ||
+            activity.kind === "columns") && (
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[11px] text-slate-500">Reuse words →</span>
               {(
