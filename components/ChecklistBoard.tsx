@@ -67,11 +67,10 @@ export function ChecklistBoard({
           const counts = showResults ? tally(si) : null;
           return (
             <li key={si} className="border-b border-slate-100 pb-3 last:border-0">
-              <div className="flex gap-2">
+              <div className="flex items-start gap-3">
                 <span className="text-slate-400 shrink-0">{si + 1}.</span>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium">{st.text}</p>
-                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5">
+                <p className="flex-1 min-w-0 font-medium">{st.text}</p>
+                <div className="flex flex-wrap justify-end gap-x-4 gap-y-1.5 shrink-0">
                     {columns.map((col, ci) => {
                       const on = mine.includes(ci);
                       const Tag = interactive ? "button" : "span";
@@ -113,7 +112,6 @@ export function ChecklistBoard({
                       );
                     })}
                   </div>
-                </div>
               </div>
             </li>
           );
