@@ -49,6 +49,37 @@ export async function POST(
     return NextResponse.json({ id: toolId });
   }
 
+  // Save a live (or past) activity straight to this step — the facilitator has
+  // already seen how it renders, so its stored spec (kind + prompt + config) is
+  // copied verbatim into a launch-ready step tool.
+  if (typeof body?.fromActivityId === "string" && body.fromActivityId) {
+    const step = await query<{ id: string }>(
+      `SELECT id FROM steps WHERE id = $1 AND session_id = $2`,
+      [stepId, id]
+    );
+    if (!step.rows[0]) {
+      return NextResponse.json({ error: "Step not found" }, { status: 404 });
+    }
+    const a = await query<{ kind: string; prompt: string; config: string }>(
+      `SELECT kind, prompt, config FROM activities WHERE id = $1 AND session_id = $2`,
+      [body.fromActivityId, id]
+    );
+    if (!a.rows[0]) {
+      return NextResponse.json({ error: "Activity not found" }, { status: 404 });
+    }
+    const pos = await query<{ next: number }>(
+      `SELECT COALESCE(MAX(position), -1) + 1 AS next FROM step_tools WHERE step_id = $1`,
+      [stepId]
+    );
+    const toolId = randomUUID();
+    await query(
+      `INSERT INTO step_tools (id, step_id, kind, prompt, config, position)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [toolId, stepId, a.rows[0].kind, a.rows[0].prompt, a.rows[0].config, pos.rows[0].next]
+    );
+    return NextResponse.json({ id: toolId });
+  }
+
   const kind = body?.kind;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   if (

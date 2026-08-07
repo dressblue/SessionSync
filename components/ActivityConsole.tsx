@@ -106,6 +106,9 @@ export function ActivityConsole({
   const [seedText, setSeedText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Activity ids the facilitator has already saved to the active step this
+  // render (so the live-card button can confirm and avoid accidental dupes).
+  const [savedToStepIds, setSavedToStepIds] = useState<Set<string>>(new Set());
   const [historyOpen, setHistoryOpen] = useState(false);
   const [anchorSet, setAnchorSet] = useState("agreement");
   // Impact 1/2/3/4 scale config (name + anchor set + N/A); up to 4 rows used.
@@ -322,6 +325,18 @@ export function ActivityConsole({
     if (ok) resetForm();
   }
 
+  // Save an already-live activity to the active step — the facilitator has seen
+  // how it renders, so we copy its stored spec verbatim (server fromActivityId).
+  async function saveLiveToStep(activityId: string) {
+    if (!activeStepId) return;
+    const ok = await call(
+      `/api/sessions/${sessionId}/steps/${activeStepId}/tools`,
+      "POST",
+      { fromActivityId: activityId }
+    );
+    if (ok) setSavedToStepIds((s) => new Set(s).add(activityId));
+  }
+
   const segBtn = (active: boolean) =>
     `rounded-md px-3 py-1.5 text-xs font-semibold transition ${
       active
@@ -427,6 +442,32 @@ export function ActivityConsole({
               {activity.kind === "vote" ? "Open the vote" : "Start scoring"}
             </button>
           )}
+          {activeStepId &&
+            (savedToStepIds.has(activity.id) ? (
+              <span
+                title={
+                  activeStepTitle
+                    ? `Saved as a reusable tool on “${activeStepTitle}”`
+                    : "Saved as a reusable tool on the active step"
+                }
+                className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 px-3 py-1.5 text-xs font-medium"
+              >
+                ✓ Saved to step
+              </span>
+            ) : (
+              <button
+                onClick={() => saveLiveToStep(activity.id)}
+                disabled={busy}
+                title={
+                  activeStepTitle
+                    ? `Save this live tool to “${activeStepTitle}” so you can re-launch it later`
+                    : "Save this live tool to the active step"
+                }
+                className="rounded-lg border border-slate-300 text-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-50 disabled:opacity-40"
+              >
+                ★ Save to step
+              </button>
+            ))}
           <button
             onClick={() =>
               call(
@@ -462,8 +503,9 @@ export function ActivityConsole({
         <p className="text-xs text-slate-400 -my-3 px-1">
           You participate like a student — vote, comment, rate, draw. ★ chips
           feature words large in the header; − hides an entry; ↻ converts
-          content into a new vote or scoring survey. Save & close keeps
-          everything for the session report.
+          content into a new vote or scoring survey. ★ Save to step pins this
+          tool to the current step so you can re-launch it later. Save & close
+          keeps everything for the session report.
         </p>
       )}
 
