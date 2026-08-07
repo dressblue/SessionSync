@@ -135,6 +135,10 @@ export interface Stroke {
   t?: string;
   fs?: number;
   ch?: string;
+  rows?: number;
+  cols?: number;
+  cells?: string[];
+  z?: number;
   arrow?: boolean;
   dash?: boolean;
   a?: WBAnchor;

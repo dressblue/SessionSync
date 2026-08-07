@@ -8,17 +8,24 @@ import {
   boxOf,
   elementToSvg,
   elementIndex,
+  sortByZ,
 } from "@/lib/whiteboard";
 
 const COLORS = ["#0f172a", "#e11d48", "#4f46e5", "#059669", "#d97706", "#ffffff"];
 const FILLS = [null, "#dbeafe", "#dcfce7", "#fee2e2", "#fef9c3", "#e5e7eb", "#0f172a"] as const;
 const WIDTHS = [2, 4, 7];
-const STAMPS = [
-  "🙂", "🧍", "👥", "👨‍👩‍👧", "🏠", "🏢", "🏫", "🏥", "🏪", "⛪", "🏭",
-  "🌳", "🌲", "🌴", "🌵", "🌸", "🌊", "⛰️", "☀️", "☁️", "⭐",
-  "🚗", "🚕", "🚌", "🚚", "🚲", "✈️", "⛵", "🛣️", "🚦", "🅿️",
-  "❤️", "✅", "❌", "⚠️", "❓", "🔒", "💡", "📌", "🚩", "🔑",
+const STAMP_GROUPS: { label: string; items: string[] }[] = [
+  { label: "People", items: ["🙂", "😀", "🧍", "🧍‍♀️", "👥", "👨‍👩‍👧", "🧑‍🏫", "🧑‍💼", "👷", "👮", "🧑‍⚕️", "🙋", "👶", "🧑‍🍳", "🕺", "🧑‍🌾"] },
+  { label: "Buildings", items: ["🏠", "🏡", "🏢", "🏫", "🏥", "🏪", "🏦", "⛪", "🕌", "🏭", "🏛️", "🏗️", "🏨", "🏰", "🗼", "⛺", "🚪", "🪑"] },
+  { label: "Nature", items: ["🌳", "🌲", "🌴", "🌵", "🌱", "🌿", "🍀", "🌸", "🌷", "🌻", "🌊", "⛰️", "🏔️", "🌋", "🏞️", "🪨", "🔥", "💧", "❄️", "🍂"] },
+  { label: "Weather", items: ["☀️", "🌤️", "⛅", "☁️", "🌧️", "⛈️", "🌩️", "🌈", "⭐", "🌙", "💨", "🌪️"] },
+  { label: "Transport", items: ["🚗", "🚕", "🚙", "🚌", "🚚", "🚛", "🚓", "🚑", "🚒", "🚲", "🛵", "🏍️", "✈️", "🚀", "⛵", "🚢", "🚂", "🚦", "🛣️", "🅿️", "⚓", "🛑"] },
+  { label: "Animals", items: ["🐶", "🐱", "🐴", "🐄", "🐖", "🐑", "🐔", "🐟", "🐝", "🦋", "🐢", "🦉", "🐕", "🐈", "🐰", "🦆"] },
+  { label: "Objects", items: ["💻", "📱", "🖥️", "⌨️", "🖨️", "📷", "☎️", "📞", "✉️", "📧", "📅", "🕐", "🔔", "🔑", "🔒", "💡", "🔦", "🧰", "🔧", "📦", "🎁", "🛒", "💰", "💵", "📈", "📉", "📊", "📋", "📌", "📎", "✏️", "🖊️", "📖", "🎓", "🏆", "⚙️"] },
+  { label: "Symbols", items: ["❤️", "⭐", "✅", "❌", "⚠️", "❓", "❗", "➕", "➖", "🚩", "🏁", "🎯", "💬", "💭", "🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "⚫", "⚪", "⬆️", "⬇️", "⬅️", "➡️", "🔁", "♻️", "🆗", "🚫"] },
+  { label: "Food", items: ["🍎", "🍞", "🍕", "🍔", "🍟", "☕", "🍺", "🥗", "🍰", "🍦", "🍩", "🥤", "🍌", "🥕"] },
 ];
+const STAMPS_FLAT = STAMP_GROUPS.flatMap((g) => g.items);
 
 type Tool =
   | "select"
@@ -34,7 +41,8 @@ type Tool =
   | "diamond"
   | "cloud"
   | "sticky"
-  | "stamp";
+  | "stamp"
+  | "table";
 
 // Tools that create an element by dragging a bounding box / segment.
 type DrawKind =
@@ -45,7 +53,8 @@ type DrawKind =
   | "ellipse"
   | "triangle"
   | "diamond"
-  | "cloud";
+  | "cloud"
+  | "table";
 
 const SHAPE_TOOLS: Tool[] = ["rect", "rrect", "ellipse", "triangle", "diamond", "cloud"];
 const SHAPE_ICON: Record<string, string> = {
@@ -92,9 +101,11 @@ export function Whiteboard({
   const [color, setColor] = useState(COLORS[0]);
   const [fill, setFill] = useState<string | null>(null);
   const [width, setWidth] = useState(WIDTHS[1]);
-  const [stamp, setStamp] = useState(STAMPS[0]);
+  const [stamp, setStamp] = useState(STAMPS_FLAT[0]);
   const [stampOpen, setStampOpen] = useState(false);
   const [shapeMenu, setShapeMenu] = useState(false);
+  const [tableRows, setTableRows] = useState(3);
+  const [tableCols, setTableCols] = useState(3);
 
   const [drawing, setDrawing] = useState<[number, number][] | null>(null); // pen
   const [draft, setDraft] = useState<
@@ -104,8 +115,16 @@ export function Whiteboard({
     { a: WBAnchor; x: number; y: number } | null
   >(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; value: string; isNew?: boolean; cell?: number } | null>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
+
+  // Focus the label editor once it mounts (autoFocus races with the pointer
+  // interaction that opened it, so focus explicitly a tick later).
+  useEffect(() => {
+    if (!editing) return;
+    const t = window.setTimeout(() => editRef.current?.focus(), 30);
+    return () => window.clearTimeout(t);
+  }, [editing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Optimistic: own newly-created elements (client id) + pending move/resize/edit
   // overrides, both applied on top of the polled `strokes` until they sync.
@@ -118,13 +137,14 @@ export function Whiteboard({
   >(null);
 
   const syncedIds = new Set(strokes.map((s) => s.id));
-  // Merge: polled elements (with any pending override) + own not-yet-synced.
-  const elements: Stroke[] = [
+  // Merge: polled elements (with any pending override) + own not-yet-synced,
+  // then order back-to-front by layer (z).
+  const elements: Stroke[] = sortByZ([
     ...strokes.map((s) => (pending[s.id] ? { ...s, ...pending[s.id] } : s)),
     ...localEls.filter((e) => !syncedIds.has(e.id)),
-  ];
+  ]);
   const byId = elementIndex(elements);
-  const objects = elements.filter((e) => e.k && e.k !== "conn"); // hit-testable
+  const objects = elements.filter((e) => e.k && e.k !== "conn"); // hit-testable (z-ordered)
   const selected = selectedId ? byId.get(selectedId) : undefined;
   const interactive = canDraw;
 
@@ -181,10 +201,13 @@ export function Whiteboard({
 
   function pointerDown(e: React.PointerEvent) {
     if (!interactive || editing) return;
-    (e.target as Element).setPointerCapture?.(e.pointerId);
     const pt = toPoint(e);
+    // Click-to-place tools (text/sticky/stamp) must NOT capture the pointer —
+    // capture keeps focus on the SVG and blurs the label editor instantly.
+    const capture = () => (e.target as Element).setPointerCapture?.(e.pointerId);
 
     if (tool === "pen") {
+      capture();
       setDrawing([pt]);
       return;
     }
@@ -192,12 +215,14 @@ export function Whiteboard({
       const hit = hitObject(pt);
       setSelectedId(hit?.id ?? null);
       if (hit) {
+        capture();
         const b = boxOf(hit);
         drag.current = { mode: "move", id: hit.id, ox: b.x, oy: b.y, sx: pt[0], sy: pt[1] };
       }
       return;
     }
     if (tool === "conn") {
+      capture();
       const hit = hitObject(pt);
       setConnDraft({ a: hit ? { id: hit.id } : { x: pt[0], y: pt[1] }, x: pt[0], y: pt[1] });
       return;
@@ -208,15 +233,16 @@ export function Whiteboard({
         create({ id, mine: true, k: "stamp", x: pt[0] - 0.03, y: pt[1] - 0.04, bw: 0.06, bh: 0.08, ch: stamp });
       } else if (tool === "text") {
         create({ id, mine: true, k: "text", x: pt[0], y: pt[1], bw: 0.3, bh: 0.06, c: color, fs: 24, t: "" });
-        setEditing({ id, value: "" });
+        setEditing({ id, value: "", isNew: true });
       } else {
         create({ id, mine: true, k: "sticky", x: pt[0] - 0.07, y: pt[1] - 0.05, bw: 0.14, bh: 0.11, f: fill ?? "#fde68a", t: "" });
-        setEditing({ id, value: "" });
+        setEditing({ id, value: "", isNew: true });
       }
       setTool("select");
       return;
     }
     // shapes + line/arrow: rubber-band
+    capture();
     setDraft({ k: tool as DrawKind, x0: pt[0], y0: pt[1], x1: pt[0], y1: pt[1] });
   }
 
@@ -270,6 +296,8 @@ export function Whiteboard({
       const id = uid();
       if (d.k === "line" || d.k === "arrow") {
         await create({ id, mine: true, k: d.k, x: d.x0, y: d.y0, bw: dx, bh: dy, c: color, sw: width });
+      } else if (d.k === "table") {
+        await create({ id, mine: true, k: "table", x: Math.min(d.x0, d.x1), y: Math.min(d.y0, d.y1), bw: Math.abs(dx), bh: Math.abs(dy), rows: tableRows, cols: tableCols, cells: [], c: color, f: fill, sw: width });
       } else {
         const x = Math.min(d.x0, d.x1);
         const y = Math.min(d.y0, d.y1);
@@ -298,8 +326,25 @@ export function Whiteboard({
 
   function commitEdit() {
     if (!editing) return;
-    const { id, value } = editing;
+    const { id, value, isNew, cell } = editing;
     setEditing(null);
+    // Editing a table cell → patch that cell of the cells array.
+    if (cell !== undefined) {
+      const el = byId.get(id);
+      const n = (el?.rows ?? 3) * (el?.cols ?? 3);
+      const cells = Array.from({ length: n }, (_, i) => (el?.cells ?? [])[i] ?? "");
+      cells[cell] = value;
+      setPending((p) => ({ ...p, [id]: { ...p[id], cells } }));
+      onElementUpdate({ id, cells });
+      return;
+    }
+    // A brand-new text/sticky left empty is discarded, not littered.
+    if (isNew && !value.trim()) {
+      onUndo(id);
+      setLocalEls((prev) => prev.filter((e) => e.id !== id));
+      setSelectedId(null);
+      return;
+    }
     setPending((p) => ({ ...p, [id]: { ...p[id], t: value } }));
     onElementUpdate({ id, t: value });
   }
@@ -309,6 +354,21 @@ export function Whiteboard({
     onUndo(selected.id);
     setLocalEls((prev) => prev.filter((e) => e.id !== selected.id));
     setSelectedId(null);
+  }
+
+  // Layer order: bring the selected element to the front / send to the back.
+  function relayer(dir: "front" | "back") {
+    if (!selected) return;
+    let mn = 0;
+    let mx = 0;
+    for (const e of elements) {
+      const z = e.z ?? 0;
+      if (z < mn) mn = z;
+      if (z > mx) mx = z;
+    }
+    const z = dir === "front" ? mx + 1 : mn - 1;
+    setPending((p) => ({ ...p, [selected.id]: { ...p[selected.id], z } }));
+    onElementUpdate({ id: selected.id, z });
   }
 
   // Selection box (in %), for handles + editor overlay positioning.
@@ -379,6 +439,32 @@ export function Whiteboard({
               )}
             </div>
             {toolBtn("sticky", "▤", "Sticky note")}
+            {toolBtn("table", "▦", "Table — drag to place")}
+            {tool === "table" && (
+              <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                <select
+                  value={tableRows}
+                  onChange={(e) => setTableRows(Number(e.target.value))}
+                  className="rounded border border-slate-200 px-1 py-0.5"
+                  title="Rows"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+                ×
+                <select
+                  value={tableCols}
+                  onChange={(e) => setTableCols(Number(e.target.value))}
+                  className="rounded border border-slate-200 px-1 py-0.5"
+                  title="Columns"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </span>
+            )}
             {/* stamp dropdown */}
             <div className="relative">
               <button
@@ -396,20 +482,29 @@ export function Whiteboard({
                 {stamp} ▾
               </button>
               {stampOpen && (
-                <div className="absolute z-10 mt-1 grid w-56 grid-cols-8 gap-0.5 rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
-                  {STAMPS.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => {
-                        setStamp(s);
-                        setTool("stamp");
-                        setStampOpen(false);
-                      }}
-                      className="rounded p-1 text-lg hover:bg-slate-100"
-                    >
-                      {s}
-                    </button>
+                <div className="absolute z-10 mt-1 max-h-72 w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
+                  {STAMP_GROUPS.map((g) => (
+                    <div key={g.label} className="mb-1">
+                      <p className="px-1 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        {g.label}
+                      </p>
+                      <div className="grid grid-cols-8 gap-0.5">
+                        {g.items.map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => {
+                              setStamp(s);
+                              setTool("stamp");
+                              setStampOpen(false);
+                            }}
+                            className="rounded p-1 text-lg hover:bg-slate-100"
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
@@ -462,12 +557,28 @@ export function Whiteboard({
             </div>
             <div className="ml-auto flex items-center gap-1.5">
               {selected && (
-                <button
-                  onClick={removeSelected}
-                  className="rounded-lg border border-rose-300 px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50"
-                >
-                  Delete
-                </button>
+                <>
+                  <button
+                    onClick={() => relayer("front")}
+                    title="Bring to front"
+                    className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    ⬆ Front
+                  </button>
+                  <button
+                    onClick={() => relayer("back")}
+                    title="Send to back"
+                    className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    ⬇ Back
+                  </button>
+                  <button
+                    onClick={removeSelected}
+                    className="rounded-lg border border-rose-300 px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                  >
+                    Delete
+                  </button>
+                </>
               )}
               {canModerate && (
                 <button
@@ -519,7 +630,7 @@ export function Whiteboard({
               const el: Stroke =
                 draft.k === "line" || draft.k === "arrow"
                   ? { id: "draft", mine: true, k: draft.k, x: draft.x0, y: draft.y0, bw: draft.x1 - draft.x0, bh: draft.y1 - draft.y0, c: color, sw: width }
-                  : { id: "draft", mine: true, k: draft.k, x: Math.min(draft.x0, draft.x1), y: Math.min(draft.y0, draft.y1), bw: Math.abs(draft.x1 - draft.x0), bh: Math.abs(draft.y1 - draft.y0), c: color, f: fill, sw: width };
+                  : { id: "draft", mine: true, k: draft.k, x: Math.min(draft.x0, draft.x1), y: Math.min(draft.y0, draft.y1), bw: Math.abs(draft.x1 - draft.x0), bh: Math.abs(draft.y1 - draft.y0), c: color, f: fill, sw: width, ...(draft.k === "table" ? { rows: tableRows, cols: tableCols } : {}) };
               return <g opacity={0.85} dangerouslySetInnerHTML={{ __html: elementToSvg(el, byId) }} />;
             })()}
           {/* Connector draft */}
@@ -592,7 +703,19 @@ export function Whiteboard({
         {editing && (
           (() => {
             const el = byId.get(editing.id);
-            const b = el ? boxOf(el) : { x: 0.4, y: 0.4, bw: 0.2, bh: 0.08 };
+            let b = el ? boxOf(el) : { x: 0.4, y: 0.4, bw: 0.2, bh: 0.08 };
+            if (editing.cell !== undefined && el?.k === "table") {
+              const cols = el.cols ?? 3;
+              const rows = el.rows ?? 3;
+              const cw = b.bw / cols;
+              const rh = b.bh / rows;
+              b = {
+                x: b.x + (editing.cell % cols) * cw,
+                y: b.y + Math.floor(editing.cell / cols) * rh,
+                bw: cw,
+                bh: rh,
+              };
+            }
             return (
               <textarea
                 ref={editRef}
@@ -628,9 +751,19 @@ export function Whiteboard({
         svgRef={svgRef}
         enabled={interactive && tool === "select"}
         hit={hitObject}
-        onEdit={(el) => {
+        onEdit={(el, pt) => {
           setSelectedId(el.id);
           if (el.k === "conn" || el.k === "stamp") return;
+          if (el.k === "table") {
+            const b = boxOf(el);
+            const cols = el.cols ?? 3;
+            const rows = el.rows ?? 3;
+            const cc = Math.min(cols - 1, Math.max(0, Math.floor(((pt[0] - b.x) / (b.bw || 1)) * cols)));
+            const rr = Math.min(rows - 1, Math.max(0, Math.floor(((pt[1] - b.y) / (b.bh || 1)) * rows)));
+            const idx = rr * cols + cc;
+            setEditing({ id: el.id, value: (el.cells ?? [])[idx] ?? "", cell: idx });
+            return;
+          }
           setEditing({ id: el.id, value: el.t ?? "" });
         }}
       />
@@ -653,7 +786,7 @@ function DblClickCatcher({
   svgRef: React.RefObject<SVGSVGElement | null>;
   enabled: boolean;
   hit: (pt: [number, number]) => Stroke | null;
-  onEdit: (el: Stroke) => void;
+  onEdit: (el: Stroke, pt: [number, number]) => void;
 }) {
   useEffect(() => {
     const svg = svgRef.current;
@@ -665,7 +798,7 @@ function DblClickCatcher({
         (e.clientY - rect.top) / rect.height,
       ];
       const el = hit(pt);
-      if (el) onEdit(el);
+      if (el) onEdit(el, pt);
     };
     svg.addEventListener("dblclick", handler);
     return () => svg.removeEventListener("dblclick", handler);

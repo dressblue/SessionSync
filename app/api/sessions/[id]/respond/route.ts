@@ -221,8 +221,12 @@ export async function POST(
       typeof v === "string" ? v.slice(0, cap) : undefined;
     const ELEMENT_KINDS = [
       "rect", "rrect", "ellipse", "triangle", "diamond", "cloud",
-      "line", "arrow", "text", "sticky", "stamp", "conn",
+      "line", "arrow", "text", "sticky", "stamp", "table", "conn",
     ];
+    const cellArray = (v: unknown) =>
+      Array.isArray(v)
+        ? (v as unknown[]).slice(0, 64).map((c) => (typeof c === "string" ? c.slice(0, 120) : ""))
+        : [];
     const anchor = (v: unknown) => {
       if (!v || typeof v !== "object") return {};
       const o = v as Record<string, unknown>;
@@ -269,7 +273,13 @@ export async function POST(
         if (t !== undefined) el.t = t;
         if (k === "text") el.fs = num(e.fs, 8, 200, 24);
         if (k === "stamp") el.ch = str(e.ch, 8) ?? "⭐";
+        if (k === "table") {
+          el.rows = Math.round(num(e.rows, 1, 8, 3));
+          el.cols = Math.round(num(e.cols, 1, 8, 3));
+          el.cells = cellArray(e.cells);
+        }
       }
+      if (typeof e.z === "number" && isFinite(e.z)) el.z = e.z;
       const value = JSON.stringify(el);
       if (value.length > 4000) {
         return NextResponse.json({ error: "Element too large" }, { status: 400 });
@@ -316,6 +326,8 @@ export async function POST(
       if ("t" in u) patch.t = str(u.t, 500) ?? "";
       if ("c" in u) patch.c = str(u.c, 20) ?? cur.c;
       if ("f" in u) patch.f = str(u.f, 20) ?? null;
+      if ("z" in u && typeof u.z === "number" && isFinite(u.z)) patch.z = u.z;
+      if ("cells" in u) patch.cells = cellArray(u.cells);
       const value = JSON.stringify({ ...cur, ...patch });
       if (value.length > 4000) {
         return NextResponse.json({ error: "Element too large" }, { status: 400 });

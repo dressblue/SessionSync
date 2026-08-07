@@ -203,6 +203,25 @@ export function elementToSvg(el: Stroke, byId: Map<string, Stroke>): string {
     }
     case "stamp":
       return `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="${Math.min(BW, BH).toFixed(1)}">${esc(el.ch ?? "⭐")}</text>`;
+    case "table": {
+      const rows = Math.max(1, el.rows ?? 3);
+      const cols = Math.max(1, el.cols ?? 3);
+      const cw = BW / cols;
+      const rh = BH / rows;
+      const gw = Math.max(0.75, sw * 0.6);
+      let s = `<rect x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${BW.toFixed(1)}" height="${BH.toFixed(1)}" fill="${fill === "none" ? "#ffffff" : fill}" stroke="${esc(stroke)}" stroke-width="${sw}"/>`;
+      for (let c = 1; c < cols; c++)
+        s += `<line x1="${(X + c * cw).toFixed(1)}" y1="${Y.toFixed(1)}" x2="${(X + c * cw).toFixed(1)}" y2="${(Y + BH).toFixed(1)}" stroke="${esc(stroke)}" stroke-width="${gw}"/>`;
+      for (let r = 1; r < rows; r++)
+        s += `<line x1="${X.toFixed(1)}" y1="${(Y + r * rh).toFixed(1)}" x2="${(X + BW).toFixed(1)}" y2="${(Y + r * rh).toFixed(1)}" stroke="${esc(stroke)}" stroke-width="${gw}"/>`;
+      const cells = el.cells ?? [];
+      for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++) {
+          const txt = cells[r * cols + c];
+          if (txt) s += multiText(X + c * cw + cw / 2, Y + r * rh + rh / 2, txt, stroke, 12, cw * 0.9);
+        }
+      return s;
+    }
     case "conn": {
       const A = resolveEnd(el.a, el.b, byId);
       const Bp = resolveEnd(el.b, el.a, byId);
@@ -225,8 +244,18 @@ export function elementIndex(els: Stroke[]): Map<string, Stroke> {
   return m;
 }
 
+// Stable layer order: lower z renders first (behind), equal z keeps insertion.
+export function sortByZ(els: Stroke[]): Stroke[] {
+  return els
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => (a.e.z ?? 0) - (b.e.z ?? 0) || a.i - b.i)
+    .map((x) => x.e);
+}
+
 // The full board as one SVG string (used by the report's data-URL export).
 export function boardToSvg(els: Stroke[]): string {
   const byId = elementIndex(els);
-  return els.map((e) => elementToSvg(e, byId)).join("");
+  return sortByZ(els)
+    .map((e) => elementToSvg(e, byId))
+    .join("");
 }

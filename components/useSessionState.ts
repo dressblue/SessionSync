@@ -81,6 +81,7 @@ export interface Stroke {
     | "text"
     | "sticky"
     | "stamp"
+    | "table"
     | "conn";
   x?: number;
   y?: number;
@@ -91,6 +92,10 @@ export interface Stroke {
   t?: string; // text / label
   fs?: number; // font size (text)
   ch?: string; // stamp emoji
+  rows?: number; // table rows
+  cols?: number; // table columns
+  cells?: string[]; // table cell text, row-major
+  z?: number; // layer order (higher = front)
   arrow?: boolean; // connector arrowhead
   dash?: boolean; // connector dashed line
   a?: WBAnchor; // connector endpoints (anchored to {id} or free {x,y})
