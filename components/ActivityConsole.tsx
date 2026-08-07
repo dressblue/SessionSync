@@ -582,7 +582,9 @@ export function ActivityConsole({
                                       kind === "impact3" ||
                                       kind === "impact4"
                                     ? "Topic, e.g. Name a risk (what each row is about)"
-                                    : "Prompt, e.g. Answer both questions below"
+                                    : kind === "checklist"
+                                      ? "Please enter the topic of the checklist"
+                                      : "Prompt, e.g. Answer both questions below"
               }
               maxLength={300}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"

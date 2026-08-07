@@ -647,6 +647,11 @@ function Console() {
   })();
   const current = steps[session.currentStep];
   const online = participants.filter((p) => p.online);
+  // When the session is live and no tool/activity is open, the current step's own
+  // content is exactly what participants see — so the step itself is "broadcasting".
+  // The moment any tool goes live, participants see the tool instead, so we suppress
+  // the step's broadcast highlight and let the tool's own live indicators carry it.
+  const broadcasting = session.status === "live" && activities.length === 0;
 
   const statusBadge = {
     lobby: "bg-slate-100 text-slate-600",
@@ -716,7 +721,9 @@ function Console() {
                   key={s.id}
                   className={`rounded-lg border transition-opacity ${
                     session.status === "live" && i === session.currentStep
-                      ? "border-indigo-500 border-l-4 ring-2 ring-indigo-200 bg-indigo-50"
+                      ? broadcasting
+                        ? "border-rose-400 border-l-4 ring-2 ring-rose-200 bg-rose-50"
+                        : "border-indigo-500 border-l-4 ring-2 ring-indigo-200 bg-indigo-50"
                       : session.status === "live" && toolsOpenFor !== s.id
                         ? "border-slate-200 opacity-60"
                         : "border-slate-200"
@@ -775,6 +782,14 @@ function Console() {
                               Show
                             </button>
                           ))}
+                        {broadcasting && i === session.currentStep && (
+                          <span
+                            title="This step's content is on participants' screens right now"
+                            className="shrink-0 inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-700 px-1.5 py-0.5 text-[10px] font-semibold"
+                          >
+                            <span className="animate-pulse">●</span> On screen
+                          </span>
+                        )}
                         <button
                           onClick={() =>
                             api(`/api/sessions/${id}/steps/${s.id}`, "PATCH", {
@@ -1111,7 +1126,11 @@ function Console() {
                           <input
                             value={toolPrompt}
                             onChange={(e) => setToolPrompt(e.target.value)}
-                            placeholder="Prompt / question shown to participants"
+                            placeholder={
+                              toolKind === "checklist"
+                                ? "Please enter the topic of the checklist"
+                                : "Prompt / question shown to participants"
+                            }
                             maxLength={300}
                             className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           />
@@ -1425,6 +1444,8 @@ function Console() {
                           toolKind !== "impact3" &&
                           toolKind !== "impact4" &&
                           toolKind !== "survey" &&
+                          toolKind !== "checklist" &&
+                          toolKind !== "slides" &&
                           !(
                             (toolKind === "vote" || toolKind === "likert") &&
                             toolSourced
@@ -1786,9 +1807,24 @@ function Console() {
             </div>
 
             {session.status === "live" && current && (
-              <div className="mt-4 border-t border-slate-100 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+              <div
+                className={
+                  broadcasting
+                    ? "mt-4 rounded-lg border border-rose-300 ring-2 ring-rose-200 bg-rose-50 p-4"
+                    : "mt-4 border-t border-slate-100 pt-4"
+                }
+              >
+                <p
+                  className={`text-xs font-semibold uppercase tracking-wide mb-1 flex items-center gap-2 ${
+                    broadcasting ? "text-rose-700" : "text-slate-400"
+                  }`}
+                >
                   Now showing — step {session.currentStep + 1} of {steps.length}
+                  {broadcasting && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-700 px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal">
+                      <span className="animate-pulse">●</span> On screen
+                    </span>
+                  )}
                 </p>
                 <h3 className="font-semibold">{current.title}</h3>
                 {current.tools.length > 0 && (

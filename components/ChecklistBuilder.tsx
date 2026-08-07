@@ -31,10 +31,13 @@ export function ChecklistBuilder({
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Columns (shared options) */}
+      {/* Answer options — shared across every question */}
       <div className="rounded-lg border border-slate-200 p-2 flex flex-col gap-1.5">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          Options (columns, 2–5)
+          Answer options (2–5)
+        </span>
+        <span className="text-[11px] text-slate-500 -mt-0.5">
+          The choices offered for every question below (e.g. Father, Partner).
         </span>
         {columns.map((c, ci) => (
           <div key={ci} className="flex items-center gap-1.5">
@@ -70,7 +73,10 @@ export function ChecklistBuilder({
         )}
       </div>
 
-      {/* Statement rows */}
+      {/* Question rows */}
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mt-1">
+        Questions
+      </span>
       {statements.map((s, si) => (
         <div
           key={si}
@@ -85,14 +91,14 @@ export function ChecklistBuilder({
               onChange={(e) =>
                 patchStatement(si, (x) => ({ ...x, text: e.target.value }))
               }
-              placeholder={`Statement ${si + 1}`}
+              placeholder={`Question ${si + 1}`}
               maxLength={300}
               className="flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             {statements.length > 1 && (
               <button
                 type="button"
-                title="Remove statement"
+                title="Remove question"
                 onClick={() =>
                   onStatements(statements.filter((_, j) => j !== si))
                 }
@@ -126,7 +132,7 @@ export function ChecklistBuilder({
         onClick={() => onStatements([...statements, newChecklistStatement()])}
         className="self-start text-xs font-medium text-indigo-600 hover:text-indigo-800"
       >
-        + Add statement
+        + Add question
       </button>
 
       <label className="flex items-center gap-2 text-xs text-slate-600">
