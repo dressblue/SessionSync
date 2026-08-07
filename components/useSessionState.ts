@@ -96,6 +96,7 @@ export interface Stroke {
   cols?: number; // table columns
   cells?: string[]; // table cell text, row-major
   z?: number; // layer order (higher = front)
+  g?: string; // group id — elements sharing a `g` select/move/delete together
   arrow?: boolean; // connector arrowhead
   dash?: boolean; // connector dashed line
   a?: WBAnchor; // connector endpoints (anchored to {id} or free {x,y})

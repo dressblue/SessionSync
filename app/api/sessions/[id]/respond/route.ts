@@ -280,6 +280,8 @@ export async function POST(
         }
       }
       if (typeof e.z === "number" && isFinite(e.z)) el.z = e.z;
+      const g = str(e.g, 40);
+      if (g) el.g = g;
       const value = JSON.stringify(el);
       if (value.length > 4000) {
         return NextResponse.json({ error: "Element too large" }, { status: 400 });
@@ -328,6 +330,7 @@ export async function POST(
       if ("f" in u) patch.f = str(u.f, 20) ?? null;
       if ("fs" in u) patch.fs = num(u.fs, 8, 200, 24);
       if ("z" in u && typeof u.z === "number" && isFinite(u.z)) patch.z = u.z;
+      if ("g" in u) patch.g = str(u.g, 40) || null; // "" / null clears the group
       if ("cells" in u) patch.cells = cellArray(u.cells);
       const value = JSON.stringify({ ...cur, ...patch });
       if (value.length > 4000) {

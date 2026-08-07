@@ -117,7 +117,7 @@ export function Whiteboard({
   const [connDraft, setConnDraft] = useState<
     { a: WBAnchor; x: number; y: number } | null
   >(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [dragRowId, setDragRowId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; value: string; isNew?: boolean; cell?: number } | null>(null);
@@ -136,7 +136,7 @@ export function Whiteboard({
   const [localEls, setLocalEls] = useState<Stroke[]>([]);
   const [pending, setPending] = useState<Record<string, Partial<Stroke>>>({});
   const drag = useRef<
-    | { mode: "move"; id: string; ox: number; oy: number; sx: number; sy: number }
+    | { mode: "move"; ids: { id: string; ox: number; oy: number }[]; sx: number; sy: number }
     | { mode: "resize"; id: string; ax: number; ay: number } // box corner: opposite corner fixed
     | { mode: "endpoint"; id: string; fx: number; fy: number; moving: "a" | "b" } // line endpoint
     | null
@@ -152,8 +152,27 @@ export function Whiteboard({
   ]);
   const byId = elementIndex(elements);
   const objects = elements.filter((e) => e.k && e.k !== "conn"); // hit-testable (z-ordered)
-  const selected = selectedId ? byId.get(selectedId) : undefined;
+  const isSel = (id: string) => selectedIds.has(id);
+  // The single selected element (only when exactly one) — drives handles/font.
+  const selected = selectedIds.size === 1 ? byId.get([...selectedIds][0]) : undefined;
   const interactive = canDraw;
+
+  // Selecting an element selects its whole group; shift toggles it in/out.
+  function selectEl(id: string | null, additive = false) {
+    if (id === null) {
+      if (!additive) setSelectedIds(new Set());
+      return;
+    }
+    const el = byId.get(id);
+    const grp = el?.g ? elements.filter((e) => e.g === el.g).map((e) => e.id) : [id];
+    setSelectedIds((prev) => {
+      if (!additive) return new Set(grp);
+      const next = new Set(prev);
+      if (grp.every((g) => next.has(g))) grp.forEach((g) => next.delete(g));
+      else grp.forEach((g) => next.add(g));
+      return next;
+    });
+  }
 
   // Drop optimistic copies / overrides once the poll reflects them.
   useEffect(() => {
@@ -256,9 +275,8 @@ export function Whiteboard({
     }
     if (tool === "select") {
       const hit = hitObject(pt);
-      // Second click on an already-selected table → edit the clicked cell
-      // directly (double-click also works, but this is far easier).
-      if (hit && hit.k === "table" && hit.id === selectedId) {
+      // Second click on an already-selected table → edit the clicked cell.
+      if (hit && hit.k === "table" && selectedIds.size === 1 && selectedIds.has(hit.id)) {
         const b = boxOf(hit);
         const cols = hit.cols ?? 3;
         const rows = hit.rows ?? 3;
@@ -268,12 +286,33 @@ export function Whiteboard({
         setEditing({ id: hit.id, value: (hit.cells ?? [])[idx] ?? "", cell: idx });
         return;
       }
-      setSelectedId(hit?.id ?? null);
-      if (hit) {
-        capture();
-        const b = boxOf(hit);
-        drag.current = { mode: "move", id: hit.id, ox: b.x, oy: b.y, sx: pt[0], sy: pt[1] };
+      if (!hit) {
+        if (!e.shiftKey) setSelectedIds(new Set());
+        return;
       }
+      const grp = hit.g ? elements.filter((x) => x.g === hit.g).map((x) => x.id) : [hit.id];
+      if (e.shiftKey) {
+        selectEl(hit.id, true); // shift-click toggles the (group) into the selection
+        return;
+      }
+      // Plain click: keep the current multi-selection if the hit is already in it
+      // (so you can drag the whole set), else select just this element's group.
+      const keep = selectedIds.has(hit.id);
+      const moveIds = keep ? [...selectedIds] : grp;
+      if (!keep) setSelectedIds(new Set(grp));
+      capture();
+      drag.current = {
+        mode: "move",
+        ids: moveIds
+          .map((id) => byId.get(id))
+          .filter((el): el is Stroke => !!el)
+          .map((el) => {
+            const b = boxOf(el);
+            return { id: el.id, ox: b.x, oy: b.y };
+          }),
+        sx: pt[0],
+        sy: pt[1],
+      };
       return;
     }
     if (tool === "conn") {
@@ -326,7 +365,13 @@ export function Whiteboard({
     if (drag.current?.mode === "move") {
       const pt = toPoint(e);
       const d = drag.current;
-      setPending((p) => ({ ...p, [d.id]: { ...p[d.id], x: d.ox + (pt[0] - d.sx), y: d.oy + (pt[1] - d.sy) } }));
+      const dx = pt[0] - d.sx;
+      const dy = pt[1] - d.sy;
+      setPending((p) => {
+        const next = { ...p };
+        for (const o of d.ids) next[o.id] = { ...next[o.id], x: o.ox + dx, y: o.oy + dy };
+        return next;
+      });
       return;
     }
     if (drag.current?.mode === "resize") {
@@ -389,7 +434,7 @@ export function Whiteboard({
         const y = Math.min(d.y0, d.y1);
         await create({ id, mine: true, k: d.k, x, y, bw: Math.abs(dx), bh: Math.abs(dy), c: color, f: fill, sw: width });
       }
-      setSelectedId(id);
+      setSelectedIds(new Set([id]));
       return;
     }
     if (connDraft) {
@@ -405,8 +450,11 @@ export function Whiteboard({
     if (drag.current) {
       const d = drag.current;
       drag.current = null;
-      const patch = pending[d.id];
-      if (patch) onElementUpdate({ id: d.id, ...patch });
+      const ids = d.mode === "move" ? d.ids.map((o) => o.id) : [d.id];
+      for (const id of ids) {
+        const patch = pending[id];
+        if (patch) onElementUpdate({ id, ...patch });
+      }
     }
   }
 
@@ -428,7 +476,7 @@ export function Whiteboard({
     if (isNew && !value.trim()) {
       onUndo(id);
       setLocalEls((prev) => prev.filter((e) => e.id !== id));
-      setSelectedId(null);
+      setSelectedIds(new Set());
       return;
     }
     setPending((p) => ({ ...p, [id]: { ...p[id], t: value } }));
@@ -438,7 +486,12 @@ export function Whiteboard({
   function removeId(id: string) {
     onUndo(id);
     setLocalEls((prev) => prev.filter((e) => e.id !== id));
-    if (selectedId === id) setSelectedId(null);
+    setSelectedIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const n = new Set(prev);
+      n.delete(id);
+      return n;
+    });
   }
 
   function startHandle(e: React.PointerEvent, d: NonNullable<typeof drag.current>) {
@@ -483,8 +536,23 @@ export function Whiteboard({
   }
 
   // Selection box (in %), for handles + editor overlay positioning.
-  const selBox = selected ? boxOf(selected) : null;
   const pct = (n: number) => `${(n * 100).toFixed(3)}%`;
+  const anySelectedGrouped = [...selectedIds].some((id) => byId.get(id)?.g);
+
+  // Group the selected elements under a fresh id (or ungroup them).
+  function groupSelected() {
+    const gid = uid().slice(0, 12);
+    for (const id of selectedIds) {
+      setPending((p) => ({ ...p, [id]: { ...p[id], g: gid } }));
+      onElementUpdate({ id, g: gid });
+    }
+  }
+  function ungroupSelected() {
+    for (const id of selectedIds) {
+      setPending((p) => ({ ...p, [id]: { ...p[id], g: undefined } }));
+      onElementUpdate({ id, g: "" });
+    }
+  }
 
   const toolBtn = (t: Tool, label: string, title: string) => (
     <button
@@ -688,27 +756,45 @@ export function Whiteboard({
               </select>
             </label>
             <div className="ml-auto flex items-center gap-1.5">
-              {selected && (
+              {selectedIds.size > 0 && (
                 <>
+                  {selectedIds.size >= 2 && (
+                    <button
+                      onClick={groupSelected}
+                      title="Group the selected objects"
+                      className="rounded-lg border border-indigo-300 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
+                    >
+                      ⧉ Group
+                    </button>
+                  )}
+                  {anySelectedGrouped && (
+                    <button
+                      onClick={ungroupSelected}
+                      title="Ungroup"
+                      className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                    >
+                      Ungroup
+                    </button>
+                  )}
                   <button
-                    onClick={() => relayerId(selected.id, "front")}
+                    onClick={() => selectedIds.forEach((id) => relayerId(id, "front"))}
                     title="Bring to front"
                     className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                   >
                     ⬆ Front
                   </button>
                   <button
-                    onClick={() => relayerId(selected.id, "back")}
+                    onClick={() => selectedIds.forEach((id) => relayerId(id, "back"))}
                     title="Send to back"
                     className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                   >
                     ⬇ Back
                   </button>
                   <button
-                    onClick={() => removeId(selected.id)}
+                    onClick={() => [...selectedIds].forEach((id) => removeId(id))}
                     className="rounded-lg border border-rose-300 px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50"
                   >
-                    Delete
+                    Delete{selectedIds.size > 1 ? ` (${selectedIds.size})` : ""}
                   </button>
                 </>
               )}
@@ -790,7 +876,7 @@ export function Whiteboard({
           {tool === "select" &&
             interactive &&
             objects.map((o) => {
-              if (o.id === selectedId) return null;
+              if (isSel(o.id)) return null;
               const b = boxOf(o);
               const hov = o.id === hoverId;
               return (
@@ -809,23 +895,31 @@ export function Whiteboard({
                 />
               );
             })}
-          {/* Selection outline */}
-          {selBox && tool === "select" && (
-            <rect
-              pointerEvents="none"
-              x={selBox.x * VIEW_W - 3}
-              y={selBox.y * VIEW_H - 3}
-              width={selBox.bw * VIEW_W + 6}
-              height={selBox.bh * VIEW_H + 6}
-              fill="none"
-              stroke="#6366f1"
-              strokeWidth={1.5}
-              strokeDasharray="5 4"
-            />
-          )}
-          {/* Transform handles — box corners (resize from opposite corner) or
-              line/arrow endpoints (drag either end). */}
+          {/* Selection outline(s) — one per selected element (multi-select). */}
+          {tool === "select" &&
+            [...selectedIds].map((sid) => {
+              const el = byId.get(sid);
+              if (!el) return null;
+              const b = boxOf(el);
+              return (
+                <rect
+                  key={`sel-${sid}`}
+                  pointerEvents="none"
+                  x={b.x * VIEW_W - 3}
+                  y={b.y * VIEW_H - 3}
+                  width={b.bw * VIEW_W + 6}
+                  height={b.bh * VIEW_H + 6}
+                  fill="none"
+                  stroke="#6366f1"
+                  strokeWidth={1.5}
+                  strokeDasharray="5 4"
+                />
+              );
+            })}
+          {/* Transform handles (single selection only) — box corners or
+              line/arrow endpoints. */}
           {selected &&
+            selectedIds.size === 1 &&
             tool === "select" &&
             interactive &&
             selected.k !== "conn" &&
@@ -938,9 +1032,9 @@ export function Whiteboard({
                   <li
                     key={e.id}
                     draggable
-                    onClick={() => {
+                    onClick={(ev) => {
                       setTool("select");
-                      setSelectedId(e.id);
+                      selectEl(e.id, ev.shiftKey);
                     }}
                     onMouseEnter={() => setHoverId(e.id)}
                     onMouseLeave={() => setHoverId(null)}
@@ -953,7 +1047,7 @@ export function Whiteboard({
                     onDragEnd={() => setDragRowId(null)}
                     title="Drag to reorder layers"
                     className={`flex cursor-grab items-center gap-1 rounded px-1.5 py-1 text-xs ${
-                      selectedId === e.id ? "bg-indigo-100 text-indigo-800" : "hover:bg-slate-100"
+                      isSel(e.id) ? "bg-indigo-100 text-indigo-800" : "hover:bg-slate-100"
                     }`}
                   >
                     <span className="w-4 shrink-0 text-center">{elIcon(e)}</span>
@@ -1013,7 +1107,7 @@ export function Whiteboard({
         enabled={interactive && tool === "select"}
         hit={hitObject}
         onEdit={(el, pt) => {
-          setSelectedId(el.id);
+          setSelectedIds(new Set([el.id]));
           if (el.k === "conn" || el.k === "stamp") return;
           if (el.k === "table") {
             const b = boxOf(el);
