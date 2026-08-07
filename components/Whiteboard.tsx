@@ -67,6 +67,21 @@ const SHAPE_ICON: Record<string, string> = {
   diamond: "◇",
   cloud: "☁",
 };
+// Objects offered by the Objects-panel "＋ Add" menu (a stamp entry, using the
+// currently-picked emoji, is appended at render time).
+const ADD_ITEMS: { kind: Tool; label: string; icon: string }[] = [
+  { kind: "text", label: "Text", icon: "T" },
+  { kind: "sticky", label: "Sticky note", icon: "▤" },
+  { kind: "rect", label: "Rectangle", icon: "▭" },
+  { kind: "rrect", label: "Rounded rect", icon: "▢" },
+  { kind: "ellipse", label: "Ellipse", icon: "◯" },
+  { kind: "triangle", label: "Triangle", icon: "△" },
+  { kind: "diamond", label: "Diamond", icon: "◇" },
+  { kind: "cloud", label: "Cloud", icon: "☁" },
+  { kind: "line", label: "Line", icon: "╱" },
+  { kind: "arrow", label: "Arrow", icon: "↗" },
+  { kind: "table", label: "Table", icon: "▦" },
+];
 
 interface Props {
   strokes: Stroke[];
@@ -106,6 +121,7 @@ export function Whiteboard({
   const [fontSize, setFontSize] = useState(24);
   const [stamp, setStamp] = useState(STAMPS_FLAT[0]);
   const [stampOpen, setStampOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false); // "＋ Add" object dropdown
   const [shapeMenu, setShapeMenu] = useState(false);
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
@@ -255,6 +271,41 @@ export function Whiteboard({
     else await onElement({ id, ...rest });
   }
 
+  // Supplemental "drop it on the board" path (the Objects-panel ＋ Add menu):
+  // place a ready-made object at a cascading centre position, select it, and
+  // register it in the layer list — no click-to-place aim required. Text and
+  // sticky open the label editor straight away.
+  function insertObject(kind: Tool) {
+    setAddOpen(false);
+    if (kind === "select" || kind === "pen" || kind === "eraser" || kind === "conn") return;
+    const id = uid();
+    const off = (elements.length % 6) * 0.025; // stagger repeats so they don't stack
+    const x = 0.34 + off;
+    const y = 0.3 + off;
+    let el: Stroke;
+    if (kind === "text") {
+      el = { id, mine: true, k: "text", x, y, bw: 0.3, bh: 0.07, c: color, fs: fontSize, t: "Text" };
+    } else if (kind === "sticky") {
+      el = { id, mine: true, k: "sticky", x, y, bw: 0.16, bh: 0.12, f: fill ?? "#fde68a", t: "" };
+    } else if (kind === "line" || kind === "arrow") {
+      el = { id, mine: true, k: kind, x, y: y + 0.06, bw: 0.22, bh: 0, c: color, sw: width };
+    } else if (kind === "table") {
+      el = { id, mine: true, k: "table", x, y, bw: 0.32, bh: 0.2, rows: tableRows, cols: tableCols, cells: [], c: color, f: fill, sw: width };
+    } else if (kind === "stamp") {
+      el = { id, mine: true, k: "stamp", x, y, bw: 0.07, bh: 0.09, ch: stamp };
+    } else {
+      el = { id, mine: true, k: kind, x, y, bw: 0.18, bh: 0.13, c: color, f: fill, sw: width };
+    }
+    create(el);
+    setTool("select");
+    setSelectedIds(new Set([id]));
+    // Open the editor for label-bearing kinds (persist even if left as-is —
+    // these come from an explicit insert, so nothing is auto-discarded).
+    if (kind === "text" || kind === "sticky") {
+      setEditing({ id, value: el.t ?? "" });
+    }
+  }
+
   function pointerDown(e: React.PointerEvent) {
     if (!interactive || editing) return;
     const pt = toPoint(e);
@@ -326,8 +377,10 @@ export function Whiteboard({
       if (tool === "stamp") {
         create({ id, mine: true, k: "stamp", x: pt[0] - 0.03, y: pt[1] - 0.04, bw: 0.06, bh: 0.08, ch: stamp });
       } else if (tool === "text") {
-        create({ id, mine: true, k: "text", x: pt[0], y: pt[1], bw: 0.3, bh: 0.06, c: color, fs: fontSize, t: "" });
-        setEditing({ id, value: "", isNew: true });
+        // Seed a visible label so a mis-aimed click never leaves an invisible,
+        // silently-discarded empty box; the editor selects it for replacement.
+        create({ id, mine: true, k: "text", x: pt[0], y: pt[1], bw: 0.3, bh: 0.06, c: color, fs: fontSize, t: "Text" });
+        setEditing({ id, value: "Text", isNew: true });
       } else {
         create({ id, mine: true, k: "sticky", x: pt[0] - 0.07, y: pt[1] - 0.05, bw: 0.14, bh: 0.11, f: fill ?? "#fde68a", t: "" });
         setEditing({ id, value: "", isNew: true });
@@ -989,6 +1042,7 @@ export function Whiteboard({
                 ref={editRef}
                 autoFocus
                 value={editing.value}
+                onFocus={(e) => e.currentTarget.select()}
                 onChange={(e) => setEditing({ id: editing.id, value: e.target.value })}
                 onBlur={commitEdit}
                 onKeyDown={(e) => {
@@ -1021,9 +1075,69 @@ export function Whiteboard({
         </div>
         {interactive && (
           <div className="w-full shrink-0 lg:w-44">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              Objects ({elements.length})
-            </p>
+            <div className="mb-1 flex items-center justify-between gap-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Objects ({elements.length})
+              </p>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setAddOpen((v) => !v)}
+                  title="Add an object to the board"
+                  className="rounded-md border border-indigo-300 bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700 hover:bg-indigo-100"
+                >
+                  ＋ Add ▾
+                </button>
+                {addOpen && (
+                  <div className="absolute right-0 z-30 mt-1 max-h-72 w-40 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                    {ADD_ITEMS.map((it) => (
+                      <button
+                        key={it.kind}
+                        type="button"
+                        onClick={() => insertObject(it.kind)}
+                        className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-slate-100"
+                      >
+                        <span className="w-4 text-center">{it.icon}</span>
+                        {it.label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => insertObject("stamp")}
+                      className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-slate-100"
+                    >
+                      <span className="w-4 text-center">{stamp}</span>
+                      Stamp
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* Grouping lives here, next to the list where you multi-select. */}
+            {selectedIds.size >= 2 ? (
+              <div className="mb-1 flex flex-wrap items-center gap-1">
+                <button
+                  type="button"
+                  onClick={groupSelected}
+                  className="rounded-md border border-indigo-300 bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700 hover:bg-indigo-100"
+                >
+                  ⧉ Group ({selectedIds.size})
+                </button>
+                {anySelectedGrouped && (
+                  <button
+                    type="button"
+                    onClick={ungroupSelected}
+                    className="rounded-md border border-slate-300 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    Ungroup
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="mb-1 text-[10px] leading-tight text-slate-400">
+                Shift-click rows to select several, then <span className="font-medium">Group</span>.
+              </p>
+            )}
             {elements.length === 0 ? (
               <p className="text-xs text-slate-400">Nothing yet.</p>
             ) : (
@@ -1095,7 +1209,8 @@ export function Whiteboard({
 
       {interactive && (
         <p className="text-[11px] text-slate-400">
-          Pick a tool, then draw on the board. Drag shapes with{" "}
+          Draw with a tool, or use <span className="font-medium">＋ Add</span>{" "}
+          (top-right) to drop an object straight onto the board. Drag shapes with{" "}
           <span className="font-medium">Select</span>; double-click a shape to
           label it; the <span className="font-medium">Connector</span> snaps to
           shapes and stays attached when you move them.
