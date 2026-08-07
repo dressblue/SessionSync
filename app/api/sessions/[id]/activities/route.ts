@@ -467,6 +467,36 @@ export async function POST(
       );
     }
     config = { questions };
+  } else if (kind === "checklist") {
+    // A matrix: many statement rows sharing 2–5 named columns. Each row is
+    // single- or multi-select. displayOnly = show read-only (no capture).
+    const columns = (Array.isArray(body?.columns) ? body.columns : [])
+      .map((c: unknown) => (typeof c === "string" ? c.trim().slice(0, 80) : ""))
+      .filter(Boolean)
+      .slice(0, 5);
+    if (columns.length < 2) {
+      return NextResponse.json(
+        { error: "Name at least two options (columns)" },
+        { status: 400 }
+      );
+    }
+    const statements = (Array.isArray(body?.statements) ? body.statements : [])
+      .map((s: unknown) => {
+        const ss = (s ?? {}) as { text?: unknown; mode?: unknown };
+        return {
+          text: typeof ss.text === "string" ? ss.text.trim().slice(0, 300) : "",
+          mode: ss.mode === "single" ? "single" : "multi",
+        };
+      })
+      .filter((s: { text: string }) => s.text)
+      .slice(0, 40);
+    if (!statements.length) {
+      return NextResponse.json(
+        { error: "Add at least one statement" },
+        { status: 400 }
+      );
+    }
+    config = { columns, statements, displayOnly: !!body?.displayOnly };
   } else {
     return NextResponse.json({ error: "Unknown activity kind" }, { status: 400 });
   }

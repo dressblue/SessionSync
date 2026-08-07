@@ -100,7 +100,7 @@ export async function PATCH(
   const kind = body?.kind;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   if (
-    !["vote", "likert", "columns", "reveal", "wheel", "workflow", "whiteboard", "exhibit", "video", "timer", "wordcloud", "sort", "impact1", "impact2", "impact3", "impact4", "survey", "slides"].includes(kind)
+    !["vote", "likert", "columns", "reveal", "wheel", "workflow", "whiteboard", "exhibit", "video", "timer", "wordcloud", "sort", "impact1", "impact2", "impact3", "impact4", "survey", "slides", "checklist"].includes(kind)
   ) {
     return NextResponse.json({ error: "Unknown tool kind" }, { status: 400 });
   }
@@ -127,6 +127,8 @@ export async function PATCH(
   if (typeof body?.deckId === "string") config.deckId = body.deckId;
   if (typeof body?.startPage === "number") config.startPage = body.startPage;
   if (typeof body?.endPage === "number") config.endPage = body.endPage;
+  if (Array.isArray(body?.statements)) config.statements = body.statements;
+  if (typeof body?.displayOnly === "boolean") config.displayOnly = body.displayOnly;
   await query(
     `UPDATE step_tools SET kind = $1, prompt = $2, config = $3
      WHERE id = $4

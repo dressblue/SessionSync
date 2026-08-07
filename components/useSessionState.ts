@@ -31,7 +31,8 @@ export type ActivityKind =
   | "impact3"
   | "impact4"
   | "survey"
-  | "slides";
+  | "slides"
+  | "checklist";
 
 export interface RichItem {
   title: string;
@@ -78,6 +79,17 @@ export interface ActivityState {
     endPage: number;
     currentPage: number;
   };
+  // checklist — statements × named columns (`columns` above holds the labels).
+  statements?: { text: string; mode: "single" | "multi" }[];
+  displayOnly?: boolean;
+  checklistResponses?: {
+    id: string;
+    s: number;
+    selected: number[];
+    name: string;
+    participantId: string | null;
+    mine: boolean;
+  }[];
   phase?: "collect" | "rate";
   options?: string[];
   columns?: string[];
@@ -209,6 +221,8 @@ export interface StepTool {
   deckId?: string;
   startPage?: number;
   endPage?: number;
+  statements?: { text: string; mode: "single" | "multi" }[];
+  displayOnly?: boolean;
 }
 
 export interface VideoState {

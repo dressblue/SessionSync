@@ -14,6 +14,11 @@ import {
   newSurveyQuestion,
   type SurveyQ,
 } from "@/components/SurveyBuilder";
+import {
+  ChecklistBuilder,
+  newChecklistStatement,
+  type ChecklistStatement,
+} from "@/components/ChecklistBuilder";
 import { Markdown } from "@/components/Markdown";
 import { ActivityConsole } from "@/components/ActivityConsole";
 import { Chat } from "@/components/Chat";
@@ -40,6 +45,7 @@ const TOOL_BADGES: Record<string, string> = {
   impact4: "Impact 4",
   survey: "Survey",
   slides: "Slides",
+  checklist: "Checklist",
 };
 
 // Compact delete affordance (replaces the word "Delete" to save row space).
@@ -111,6 +117,7 @@ function Console() {
     | "impact4"
     | "survey"
     | "slides"
+    | "checklist"
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
@@ -140,6 +147,15 @@ function Console() {
   const [toolDeckId, setToolDeckId] = useState("");
   const [toolStartPage, setToolStartPage] = useState(1);
   const [toolEndPage, setToolEndPage] = useState(1);
+  // Checklist step-tool config: shared columns + statement rows + display-only.
+  const [toolChecklistColumns, setToolChecklistColumns] = useState<string[]>([
+    "",
+    "",
+  ]);
+  const [toolChecklistStatements, setToolChecklistStatements] = useState<
+    ChecklistStatement[]
+  >([newChecklistStatement()]);
+  const [toolDisplayOnly, setToolDisplayOnly] = useState(false);
   const [decks, setDecks] = useState<
     { id: string; title: string; url: string; pageCount: number }[]
   >([]);
@@ -368,6 +384,9 @@ function Console() {
       { name: "", anchorSet: "agreement", allowNA: false },
     ]);
     setToolSurveyQuestions([newSurveyQuestion()]);
+    setToolChecklistColumns(["", ""]);
+    setToolChecklistStatements([newChecklistStatement()]);
+    setToolDisplayOnly(false);
   }
 
   async function saveTool(stepId: string) {
@@ -436,6 +455,12 @@ function Console() {
       body.deckId = toolDeckId;
       body.startPage = toolStartPage;
       body.endPage = toolEndPage;
+    } else if (toolKind === "checklist") {
+      body.columns = toolChecklistColumns.map((c) => c.trim()).filter(Boolean);
+      body.statements = toolChecklistStatements
+        .map((s) => ({ text: s.text.trim(), mode: s.mode }))
+        .filter((s) => s.text);
+      body.displayOnly = toolDisplayOnly;
     } else if (toolKind !== "whiteboard") body.items = list;
     if (toolKind === "likert") body.anchorSet = toolAnchorSet;
     const ok = await api(
@@ -490,6 +515,18 @@ function Console() {
     setToolDeckId(t.deckId ?? "");
     setToolStartPage(t.startPage ?? 1);
     setToolEndPage(t.endPage ?? 1);
+    setToolChecklistColumns(
+      t.columns && t.columns.length >= 2 ? [...t.columns] : ["", ""]
+    );
+    setToolChecklistStatements(
+      t.statements && t.statements.length
+        ? t.statements.map((s) => ({
+            text: s.text,
+            mode: s.mode === "single" ? "single" : "multi",
+          }))
+        : [newChecklistStatement()]
+    );
+    setToolDisplayOnly(!!t.displayOnly);
   }
 
   function launchTool(tool: StepTool) {
@@ -519,6 +556,8 @@ function Console() {
       deckId: tool.deckId,
       startPage: tool.startPage,
       endPage: tool.endPage,
+      statements: tool.statements,
+      displayOnly: tool.displayOnly,
     });
   }
 
@@ -1018,6 +1057,7 @@ function Console() {
                             <option value="impact4">Impact 4 (comment + 4 scales)</option>
                             <option value="survey">Survey (questions + comments)</option>
                             <option value="slides">Slides (play deck pages)</option>
+                            <option value="checklist">Checklist (statements × options)</option>
                           </select>
                           <button
                             type="button"
@@ -1241,6 +1281,16 @@ function Console() {
                             onChange={setToolSurveyQuestions}
                           />
                         )}
+                        {toolKind === "checklist" && (
+                          <ChecklistBuilder
+                            columns={toolChecklistColumns}
+                            statements={toolChecklistStatements}
+                            displayOnly={toolDisplayOnly}
+                            onColumns={setToolChecklistColumns}
+                            onStatements={setToolChecklistStatements}
+                            onDisplayOnly={setToolDisplayOnly}
+                          />
+                        )}
                         {(toolKind === "impact1" ||
                           toolKind === "impact2" ||
                           toolKind === "impact3" ||
@@ -1408,9 +1458,17 @@ function Console() {
                                   ? !toolExhibitRef.trim()
                                   : toolKind === "slides"
                                     ? !toolPrompt.trim() || !toolDeckId
-                                    : toolKind === "timer"
-                                      ? false
-                                      : !toolPrompt.trim()
+                                    : toolKind === "checklist"
+                                      ? !toolPrompt.trim() ||
+                                        toolChecklistColumns.filter((c) =>
+                                          c.trim()
+                                        ).length < 2 ||
+                                        !toolChecklistStatements.some((s) =>
+                                          s.text.trim()
+                                        )
+                                      : toolKind === "timer"
+                                        ? false
+                                        : !toolPrompt.trim()
                               }
                               className="rounded-md bg-slate-800 text-white px-3 py-1.5 text-xs font-medium hover:bg-slate-900 disabled:opacity-40"
                             >

@@ -98,6 +98,8 @@ export async function POST(
     richItems?: unknown[];
     revealed?: number;
     answerRevealed?: boolean;
+    statements?: { text: string; mode?: "single" | "multi" }[];
+    displayOnly?: boolean;
   } = {};
   try {
     config = JSON.parse(activity.config);
@@ -404,6 +406,42 @@ export async function POST(
           qi,
           JSON.stringify({ selected, comment }),
         ]
+      );
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  if (activity.kind === "checklist") {
+    if (config.displayOnly) {
+      return NextResponse.json(
+        { error: "This checklist is display-only" },
+        { status: 400 }
+      );
+    }
+    const statements = config.statements ?? [];
+    const columns = config.columns ?? [];
+    const si = Number(body?.statementIndex);
+    if (!Number.isInteger(si) || si < 0 || si >= statements.length) {
+      return NextResponse.json({ error: "Unknown statement" }, { status: 400 });
+    }
+    let selected = Array.isArray(body?.selected)
+      ? (body.selected as unknown[])
+          .map((n) => Number(n))
+          .filter((n) => Number.isInteger(n) && n >= 0 && n < columns.length)
+      : [];
+    selected = Array.from(new Set(selected));
+    if (statements[si].mode !== "multi") selected = selected.slice(0, 1);
+    // One row per (participant, statement); rewrite on each toggle.
+    await query(
+      `DELETE FROM activity_responses
+       WHERE activity_id = $1 AND participant_id = $2 AND column_index = $3`,
+      [activity.id, participantId, si]
+    );
+    if (selected.length) {
+      await query(
+        `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [randomUUID(), activity.id, participantId, si, JSON.stringify({ selected })]
       );
     }
     return NextResponse.json({ ok: true });

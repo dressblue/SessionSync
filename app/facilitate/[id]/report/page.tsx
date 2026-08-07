@@ -8,6 +8,7 @@ import { WordCloud } from "@/components/WordCloud";
 import { CardSort } from "@/components/CardSort";
 import { ImpactBoard } from "@/components/ImpactBoard";
 import { SurveyBoard } from "@/components/SurveyBoard";
+import { ChecklistBoard } from "@/components/ChecklistBoard";
 import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
 
 interface ReportData {
@@ -39,6 +40,7 @@ const KIND_LABEL: Record<string, string> = {
   impact4: "Impact 4",
   survey: "Survey",
   slides: "Slides",
+  checklist: "Checklist",
 };
 
 function strokesToDataUrl(strokes: Stroke[]): string {
@@ -175,6 +177,21 @@ function activityLines(a: ActivityState): string[] {
           .map((r) => `  “${r.comment}” — ${r.name}`),
       ];
       return lines;
+    });
+  }
+  if (a.kind === "checklist") {
+    const columns = a.columns ?? [];
+    const statements = a.statements ?? [];
+    const resp = a.checklistResponses ?? [];
+    return statements.flatMap((st, si) => {
+      const forS = resp.filter((r) => r.s === si);
+      const counts = columns.map(
+        (_, ci) => forS.filter((r) => r.selected.includes(ci)).length
+      );
+      return [
+        `${si + 1}. ${st.text}`,
+        `  ${columns.map((c, ci) => `${c}: ${counts[ci]}`).join(" · ")}`,
+      ];
     });
   }
   if (a.kind === "whiteboard") {
@@ -698,6 +715,18 @@ export default function ReportPage() {
                   <SurveyBoard
                     questions={a.questions ?? []}
                     responses={a.surveyResponses ?? []}
+                    canAnswer={false}
+                    showResults
+                    onAnswer={() => {}}
+                  />
+                </div>
+              ) : a.kind === "checklist" ? (
+                <div className="mt-2">
+                  <ChecklistBoard
+                    columns={a.columns ?? []}
+                    statements={a.statements ?? []}
+                    responses={a.checklistResponses ?? []}
+                    displayOnly={!!a.displayOnly}
                     canAnswer={false}
                     showResults
                     onAnswer={() => {}}

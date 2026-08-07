@@ -21,6 +21,7 @@ const VALID_KINDS = [
   "impact3",
   "impact4",
   "survey",
+  "checklist",
 ];
 
 const str = (v: unknown, max = 2000) =>

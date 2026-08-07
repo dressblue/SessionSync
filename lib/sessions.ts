@@ -43,7 +43,8 @@ export type ActivityKind =
   | "impact3"
   | "impact4"
   | "survey"
-  | "slides";
+  | "slides"
+  | "checklist";
 
 export interface ActivityRow {
   id: string;
@@ -238,6 +239,18 @@ export interface ActivityPayload {
     q: number; // question index
     selected: number[]; // chosen option indices
     comment: string;
+    name: string;
+    participantId: string | null;
+    mine: boolean;
+  }[];
+  // checklist — statements × named columns; each row single- or multi-select.
+  // `columns` (above) holds the shared option labels.
+  statements?: { text: string; mode: "single" | "multi" }[];
+  displayOnly?: boolean;
+  checklistResponses?: {
+    id: string;
+    s: number; // statement index
+    selected: number[]; // chosen column indices
     name: string;
     participantId: string | null;
     mine: boolean;
@@ -1044,6 +1057,42 @@ export function buildActivityPayload(
           mine: !!viewerParticipantId && r.participant_id === viewerParticipantId,
         };
       });
+    return payload;
+  }
+  if (activity.kind === "checklist") {
+    const c = config as {
+      columns?: string[];
+      statements?: { text: string; mode?: "single" | "multi" }[];
+      displayOnly?: boolean;
+    };
+    payload.columns = c.columns ?? [];
+    payload.statements = (c.statements ?? []).map((s) => ({
+      text: s.text,
+      mode: s.mode === "single" ? "single" : "multi",
+    }));
+    payload.displayOnly = !!c.displayOnly;
+    // Full response set to everyone so aggregate tallies render for the
+    // facilitator, participants, the public projector, and the report; `mine`
+    // flags the viewer's own marks.
+    payload.checklistResponses = responseRows.map((r) => {
+      let selected: number[] = [];
+      try {
+        const v = JSON.parse(r.value) as { selected?: number[] };
+        selected = Array.isArray(v.selected)
+          ? v.selected.filter((n) => Number.isInteger(n))
+          : [];
+      } catch {
+        /* skip malformed */
+      }
+      return {
+        id: r.id,
+        s: r.column_index ?? 0,
+        selected,
+        name: r.name ?? "Facilitator",
+        participantId: r.participant_id,
+        mine: !!viewerParticipantId && r.participant_id === viewerParticipantId,
+      };
+    });
     return payload;
   }
 

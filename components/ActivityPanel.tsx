@@ -13,6 +13,7 @@ import { VideoPlayer } from "./VideoPlayer";
 import { TimerDisplay } from "./TimerDisplay";
 import { WordCloud } from "./WordCloud";
 import { SurveyBoard } from "./SurveyBoard";
+import { ChecklistBoard } from "./ChecklistBoard";
 import { CardSort } from "./CardSort";
 import { ImpactBoard } from "./ImpactBoard";
 import { WorkflowBuilder } from "./WorkflowBuilder";
@@ -1137,6 +1138,26 @@ export function ActivityPanel({
           showResults
           onAnswer={(q, selected, comment) =>
             send({ questionIndex: q, selected, comment }, "POST", false)
+          }
+          presentation={presentation}
+        />
+      </div>
+    );
+  }
+
+  if (activity.kind === "checklist") {
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Checklist")}
+        <ChecklistBoard
+          columns={activity.columns ?? []}
+          statements={activity.statements ?? []}
+          responses={activity.checklistResponses ?? []}
+          displayOnly={!!activity.displayOnly}
+          canAnswer={!!participantId}
+          showResults={canModerate || !participantId}
+          onAnswer={(si, selected) =>
+            send({ statementIndex: si, selected }, "POST", false)
           }
           presentation={presentation}
         />

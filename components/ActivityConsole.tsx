@@ -10,6 +10,11 @@ import type {
 import { ActivityPanel } from "./ActivityPanel";
 import { WorkflowBuilder } from "./WorkflowBuilder";
 import { SurveyBuilder, newSurveyQuestion, type SurveyQ } from "./SurveyBuilder";
+import {
+  ChecklistBuilder,
+  newChecklistStatement,
+  type ChecklistStatement,
+} from "./ChecklistBuilder";
 import { LIKERT_ANCHOR_LABELS } from "@/lib/likert";
 
 interface Props {
@@ -47,7 +52,8 @@ type Kind =
   | "impact2"
   | "impact3"
   | "impact4"
-  | "survey";
+  | "survey"
+  | "checklist";
 type Sourcing = "facilitator" | "participants";
 
 const KIND_LABEL: Record<string, string> = {
@@ -69,6 +75,7 @@ const KIND_LABEL: Record<string, string> = {
   impact3: "Impact 3",
   impact4: "Impact 4",
   survey: "Survey",
+  checklist: "Checklist",
 };
 
 // Facilitator's activity station: up to two activities run side by side
@@ -122,6 +129,12 @@ export function ActivityConsole({
   const [surveyQuestions, setSurveyQuestions] = useState<SurveyQ[]>([
     newSurveyQuestion(),
   ]);
+  // Checklist: shared columns + statement rows (per-row single/multi) + display-only.
+  const [checklistColumns, setChecklistColumns] = useState<string[]>(["", ""]);
+  const [checklistStatements, setChecklistStatements] = useState<
+    ChecklistStatement[]
+  >([newChecklistStatement()]);
+  const [checklistDisplayOnly, setChecklistDisplayOnly] = useState(false);
   const [exhibitType, setExhibitType] = useState<"file" | "url" | "text">("file");
   const [exhibitFileId, setExhibitFileId] = useState("");
   const [exhibitUrl, setExhibitUrl] = useState("");
@@ -217,6 +230,12 @@ export function ActivityConsole({
           commentLabel: q.commentLabel.trim(),
         }))
         .filter((q) => q.text && q.options.length >= 1);
+    } else if (kind === "checklist") {
+      body.columns = checklistColumns.map((c) => c.trim()).filter(Boolean);
+      body.statements = checklistStatements
+        .map((s) => ({ text: s.text.trim(), mode: s.mode }))
+        .filter((s) => s.text);
+      body.displayOnly = checklistDisplayOnly;
     } else if (kind !== "whiteboard") {
       body.items = list;
     }
@@ -480,6 +499,7 @@ export function ActivityConsole({
                 ["impact3", "Impact 3"],
                 ["impact4", "Impact 4"],
                 ["survey", "Survey"],
+                ["checklist", "Checklist"],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -572,6 +592,15 @@ export function ActivityConsole({
               <SurveyBuilder
                 questions={surveyQuestions}
                 onChange={setSurveyQuestions}
+              />
+            ) : kind === "checklist" ? (
+              <ChecklistBuilder
+                columns={checklistColumns}
+                statements={checklistStatements}
+                displayOnly={checklistDisplayOnly}
+                onColumns={setChecklistColumns}
+                onStatements={setChecklistStatements}
+                onDisplayOnly={setChecklistDisplayOnly}
               />
             ) : kind === "impact1" ||
             kind === "impact2" ||
