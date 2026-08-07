@@ -334,8 +334,30 @@ function Console() {
     setActionError(res.ok ? "Saved to the tool library ✓" : "Could not save to library");
   }
 
-  const control = (action: string, step?: number) =>
-    api(`/api/sessions/${id}/control`, "POST", { action, step });
+  const control = (action: string, step?: number) => {
+    // Any step-navigation collapses an open Tools editor — UNLESS we're moving
+    // to the very step it belongs to (e.g. the amber "Show this step" jump).
+    // Otherwise the panel lingers against a step that's no longer showing.
+    const st = state?.steps ?? [];
+    const cur = state?.session.currentStep ?? -1;
+    const dest =
+      action === "goto"
+        ? st[step ?? -1]?.id
+        : action === "next"
+          ? st[cur + 1]?.id
+          : action === "prev"
+            ? st[cur - 1]?.id
+            : action === "start"
+              ? st[0]?.id
+              : action === "deselect"
+                ? null
+                : undefined; // refresh/end/etc. → don't touch the Tools panel
+    if (dest !== undefined && toolsOpenFor && toolsOpenFor !== dest) {
+      setToolsOpenFor(null);
+      resetToolForm();
+    }
+    return api(`/api/sessions/${id}/control`, "POST", { action, step });
+  };
 
   async function addStep(e: React.FormEvent) {
     e.preventDefault();
@@ -646,6 +668,8 @@ function Console() {
     return h > 0 ? `expires in ${h}h ${m}m` : `expires in ${m}m`;
   })();
   const current = steps[session.currentStep];
+  const prevStep = steps[session.currentStep - 1];
+  const nextStep = steps[session.currentStep + 1];
   const online = participants.filter((p) => p.online);
   // When the session is live and no tool/activity is open, the current step's own
   // content is exactly what participants see — so the step itself is "broadcasting".
@@ -768,15 +792,7 @@ function Console() {
                         {session.status === "live" &&
                           (i === session.currentStep ? (
                             <button
-                              onClick={() => {
-                                control("deselect");
-                                // Suspending the step also collapses its Tools
-                                // editor — nothing is "showing" to edit against.
-                                if (toolsOpenFor === s.id) {
-                                  setToolsOpenFor(null);
-                                  resetToolForm();
-                                }
-                              }}
+                              onClick={() => control("deselect")}
                               title="Close this step — session stays live; participants see a holding screen"
                               className="rounded-md bg-emerald-100 text-emerald-700 border border-emerald-300 px-2 py-1 text-xs font-medium hover:bg-emerald-200"
                             >
@@ -1789,16 +1805,29 @@ function Console() {
                   <button
                     onClick={() => control("prev")}
                     disabled={session.currentStep <= 0}
-                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100 disabled:opacity-40 transition"
+                    title={prevStep ? `Back to “${prevStep.title}”` : "Back"}
+                    className="inline-flex min-w-0 max-w-[45%] items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100 disabled:opacity-40 transition"
                   >
-                    ← Back
+                    <span className="shrink-0">←&nbsp;Back</span>
+                    {prevStep && (
+                      <span className="hidden truncate font-normal text-slate-400 sm:block">
+                        {prevStep.title}
+                      </span>
+                    )}
                   </button>
                   <button
                     onClick={() => control("next")}
                     disabled={session.currentStep >= steps.length - 1}
-                    className="rounded-lg bg-indigo-600 text-white px-5 py-2 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 transition"
+                    title={nextStep ? `Next: “${nextStep.title}”` : "Next step"}
+                    className="inline-flex min-w-0 max-w-[52%] items-center gap-1.5 rounded-lg bg-indigo-600 text-white px-5 py-2 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 transition"
                   >
-                    Next step →
+                    <span className="shrink-0">Next</span>
+                    {nextStep && (
+                      <span className="hidden truncate font-normal text-indigo-200 sm:block">
+                        {nextStep.title}
+                      </span>
+                    )}
+                    <span className="shrink-0">→</span>
                   </button>
                   <button
                     onClick={() => control("refresh")}
