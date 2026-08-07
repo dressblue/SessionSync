@@ -193,6 +193,12 @@ export function VideoPlayer({ video, canControl, onControl }: Props) {
             src={video.ref}
             controls={canControl}
             playsInline
+            // The facilitator's native controls must drive the shared anchor too
+            // — otherwise playing/scrubbing via the built-in bar never reaches
+            // participants or the presenter (only the custom buttons would).
+            onPlay={canControl ? () => onControl("play", getPos()) : undefined}
+            onPause={canControl ? () => onControl("pause", getPos()) : undefined}
+            onSeeked={canControl ? () => onControl("seek", getPos()) : undefined}
             className="w-full h-full"
           />
         )}
