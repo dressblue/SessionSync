@@ -94,6 +94,7 @@ export async function POST(
   const promptOptional =
     kind === "video" ||
     kind === "timer" ||
+    kind === "slides" ||
     (kind === "exhibit" && body?.exhibit === "file");
   if (!prompt && !promptOptional) {
     return NextResponse.json({ error: "A prompt is required" }, { status: 400 });
@@ -292,6 +293,41 @@ export async function POST(
         { status: 400 }
       );
     }
+  } else if (kind === "slides") {
+    // Resolve the course deck → its Blob URL + page count, then snapshot the URL
+    // and page range into config so the payload stays a pure read.
+    const deckId = typeof body?.deckId === "string" ? body.deckId : "";
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(deckId)) {
+      return NextResponse.json(
+        { error: "Pick a slide deck for this tool." },
+        { status: 400 }
+      );
+    }
+    const deck = await query<{ blob_url: string; page_count: number }>(
+      `SELECT blob_url, page_count FROM course_decks
+       WHERE id = $1 AND course_id = $2`,
+      [deckId, session.course_id]
+    );
+    if (!deck.rows[0]) {
+      return NextResponse.json(
+        { error: "That deck isn't available in this course." },
+        { status: 400 }
+      );
+    }
+    const total = deck.rows[0].page_count || 1;
+    const clamp = (n: unknown, fb: number) => {
+      const v = typeof n === "number" ? Math.floor(n) : fb;
+      return Math.min(Math.max(1, v), total);
+    };
+    let startPage = clamp(body?.startPage, 1);
+    let endPage = clamp(body?.endPage, total);
+    if (endPage < startPage) [startPage, endPage] = [endPage, startPage];
+    config = {
+      deckUrl: deck.rows[0].blob_url,
+      startPage,
+      endPage,
+      current: startPage,
+    };
   } else if (kind === "video") {
     const now = new Date().toISOString();
     const fileId = typeof body?.fileId === "string" ? body.fileId : "";
@@ -448,10 +484,14 @@ export async function POST(
     ]);
   }
   const activityId = randomUUID();
+  // When launched from a saved step tool, remember which one so the console can
+  // flag that tool live and close it in one click.
+  const stepToolId =
+    typeof body?.stepToolId === "string" ? body.stepToolId : null;
   await query(
-    `INSERT INTO activities (id, session_id, kind, prompt, config)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [activityId, id, kind, prompt.slice(0, 300), JSON.stringify(config)]
+    `INSERT INTO activities (id, session_id, kind, prompt, config, step_tool_id)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [activityId, id, kind, prompt.slice(0, 300), JSON.stringify(config), stepToolId]
   );
 
   // Seed a word cloud with facilitator words in the same request (atomic — no

@@ -42,7 +42,8 @@ export type ActivityKind =
   | "impact2"
   | "impact3"
   | "impact4"
-  | "survey";
+  | "survey"
+  | "slides";
 
 export interface ActivityRow {
   id: string;
@@ -51,6 +52,7 @@ export interface ActivityRow {
   prompt: string;
   config: string;
   status: "open" | "closed";
+  step_tool_id?: string | null;
 }
 
 export interface RichItem {
@@ -125,6 +127,18 @@ export interface ActivityPayload {
   id: string;
   kind: ActivityKind;
   prompt: string;
+  // The step_tool this activity was launched from (if any), so the console can
+  // mark that tool live and close it in one click.
+  stepToolId?: string;
+  // slides — a facilitator-driven PDF slide player over a course deck's page
+  // range. Participants receive only the current page; the facilitator gets the
+  // range to step through.
+  slides?: {
+    deckUrl: string;
+    startPage: number;
+    endPage: number;
+    currentPage: number;
+  };
   options?: string[];
   columns?: string[];
   votes?: { counts: number[]; total: number; myVote: number | null };
@@ -407,6 +421,47 @@ export async function deepCopyCourse(
     [newId, opts.ownerFacilitatorId]
   );
 
+  // course_decks first (copy each row by reference — the Blob-hosted PDF is
+  // shared), building an id map so `slides` step tools can be repointed to the
+  // clone's own deck rows below.
+  const deckIdMap = new Map<string, string>();
+  const decks = await query<{
+    id: string;
+    title: string;
+    blob_url: string;
+    page_count: number;
+    position: number;
+  }>(
+    `SELECT id, title, blob_url, page_count, position
+       FROM course_decks WHERE course_id = $1`,
+    [sourceId]
+  );
+  for (const d of decks.rows) {
+    const newDeckId = randomUUID();
+    deckIdMap.set(d.id, newDeckId);
+    await query(
+      `INSERT INTO course_decks
+         (id, course_id, title, blob_url, page_count, position)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [newDeckId, newId, d.title, d.blob_url, d.page_count, d.position]
+    );
+  }
+  // Repoint a slides tool's config.deckId to the cloned deck (leaves the id
+  // untouched if the deck wasn't found, e.g. legacy data).
+  const remapToolConfig = (kind: string, config: string): string => {
+    if (kind !== "slides") return config;
+    try {
+      const c = JSON.parse(config);
+      if (typeof c.deckId === "string" && deckIdMap.has(c.deckId)) {
+        c.deckId = deckIdMap.get(c.deckId);
+        return JSON.stringify(c);
+      }
+    } catch {
+      /* leave config as-is on parse failure */
+    }
+    return config;
+  };
+
   // sessions → steps → step_tools
   const sessions = await query<{ id: string; title: string; position: number }>(
     `SELECT id, title, position FROM sessions
@@ -449,7 +504,14 @@ export async function deepCopyCourse(
         await query(
           `INSERT INTO step_tools (id, step_id, kind, prompt, config, position)
            VALUES ($1,$2,$3,$4,$5,$6)`,
-          [randomUUID(), newStepId, t.kind, t.prompt, t.config, t.position]
+          [
+            randomUUID(),
+            newStepId,
+            t.kind,
+            t.prompt,
+            remapToolConfig(t.kind, t.config),
+            t.position,
+          ]
         );
       }
     }
@@ -678,6 +740,7 @@ export function buildActivityPayload(
     kind: activity.kind,
     prompt: activity.prompt,
   };
+  if (activity.step_tool_id) payload.stepToolId = activity.step_tool_id;
   if (config.phase) payload.phase = config.phase;
 
   // Hidden entries stay visible (flagged) to facilitators, disappear for
@@ -832,6 +895,27 @@ export function buildActivityPayload(
     payload.url = c.url;
     payload.text = c.text;
     payload.mediaType = c.mediaType;
+    return payload;
+  }
+  if (activity.kind === "slides") {
+    // Deck URL + range were snapshotted into config at launch; everyone sees
+    // the same current page (the facilitator drives it).
+    const c = config as ActivityConfig & {
+      deckUrl?: string;
+      startPage?: number;
+      endPage?: number;
+      current?: number;
+    };
+    const startPage = c.startPage ?? 1;
+    const endPage = c.endPage ?? startPage;
+    if (c.deckUrl) {
+      payload.slides = {
+        deckUrl: c.deckUrl,
+        startPage,
+        endPage,
+        currentPage: Math.min(Math.max(startPage, c.current ?? startPage), endPage),
+      };
+    }
     return payload;
   }
   if (activity.kind === "whiteboard") {

@@ -38,6 +38,7 @@ const KIND_LABEL: Record<string, string> = {
   impact3: "Impact 3",
   impact4: "Impact 4",
   survey: "Survey",
+  slides: "Slides",
 };
 
 function strokesToDataUrl(strokes: Stroke[]): string {
@@ -178,6 +179,14 @@ function activityLines(a: ActivityState): string[] {
   }
   if (a.kind === "whiteboard") {
     return [`Shared drawing with ${a.strokes?.length ?? 0} strokes`];
+  }
+  if (a.kind === "slides") {
+    const s = a.slides;
+    if (!s) return ["Slides"];
+    const n = s.endPage - s.startPage + 1;
+    return [
+      `Slide deck — ${n} slide${n === 1 ? "" : "s"} (pages ${s.startPage}–${s.endPage})`,
+    ];
   }
   if (a.kind === "exhibit") {
     if (a.exhibit === "file") return [`File: ${a.filename ?? "(document)"}`];

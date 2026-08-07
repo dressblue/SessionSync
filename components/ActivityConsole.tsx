@@ -313,13 +313,15 @@ export function ActivityConsole({
   const liveCard = (activity: ActivityState) => (
     <section
       key={activity.id}
-      className="bg-white rounded-xl border border-slate-200 shadow-sm p-5"
+      className="bg-white rounded-xl border-2 border-rose-300 ring-2 ring-rose-100 shadow-sm p-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-        <h2 className="font-semibold">
-          Live activity{" "}
+        <h2 className="font-semibold flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-full bg-rose-600 text-white px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide">
+            <span className="animate-pulse">●</span> Live
+          </span>
           <span className="text-xs font-normal text-slate-400">
-            — participants see this now
+            participants see this now
           </span>
         </h2>
         <div className="flex flex-wrap items-center gap-2">

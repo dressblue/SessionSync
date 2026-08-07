@@ -3,6 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { UserButton, useUser } from "@clerk/nextjs";
+import { upload } from "@vercel/blob/client";
+import { pdfPageCount } from "@/lib/pdf";
+
+interface Deck {
+  id: string;
+  title: string;
+  url: string;
+  pageCount: number;
+}
 
 interface CourseDetail {
   course: { id: string; title: string; description: string; code: string };
@@ -69,6 +78,11 @@ export default function CoursePage() {
   const [filesToUpload, setFilesToUpload] = useState<File[]>([]);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [decks, setDecks] = useState<Deck[]>([]);
+  const [deckFile, setDeckFile] = useState<File | null>(null);
+  const [deckTitle, setDeckTitle] = useState("");
+  const [deckInputKey, setDeckInputKey] = useState(0);
+  const [deckStatus, setDeckStatus] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/courses/${cid}`, {
@@ -82,9 +96,64 @@ export default function CoursePage() {
     setDetail(data);
   }, [cid]);
 
+  const loadDecks = useCallback(async () => {
+    const res = await fetch(`/api/courses/${cid}/decks`, { cache: "no-store" });
+    if (res.ok) setDecks((await res.json()).decks ?? []);
+  }, [cid]);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadDecks();
+  }, [load, loadDecks]);
+
+  // Upload a PDF deck: parse its page count client-side, push the bytes straight
+  // to Blob (bypasses the serverless body limit), then register the deck row.
+  async function uploadDeck(e: React.FormEvent) {
+    e.preventDefault();
+    if (!deckFile || deckStatus) return;
+    if (deckFile.type !== "application/pdf") {
+      setError("Slide decks must be PDFs — export your PowerPoint to PDF first.");
+      return;
+    }
+    setError(null);
+    try {
+      setDeckStatus("Reading…");
+      const pageCount = await pdfPageCount(await deckFile.arrayBuffer());
+      setDeckStatus("Uploading…");
+      const blob = await upload(deckFile.name, deckFile, {
+        access: "public",
+        handleUploadUrl: `/api/courses/${cid}/decks/upload`,
+        contentType: "application/pdf",
+      });
+      setDeckStatus("Saving…");
+      const res = await fetch(`/api/courses/${cid}/decks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: deckTitle.trim() || deckFile.name.replace(/\.pdf$/i, ""),
+          blobUrl: blob.url,
+          pageCount,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? "Could not save the deck");
+      }
+      setDeckFile(null);
+      setDeckTitle("");
+      setDeckInputKey((k) => k + 1);
+      await loadDecks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Deck upload failed");
+    } finally {
+      setDeckStatus(null);
+    }
+  }
+
+  async function removeDeck(deckId: string) {
+    await fetch(`/api/courses/${cid}/decks/${deckId}`, { method: "DELETE" });
+    await loadDecks();
+  }
 
   async function inviteMember(e: React.FormEvent) {
     e.preventDefault();
@@ -597,6 +666,73 @@ export default function CoursePage() {
               <p className="w-full text-[11px] text-slate-400">
                 PDFs, checklists, worksheets — up to 15 MB each. Select several at
                 once to upload them together.
+              </p>
+            </form>
+          </section>
+
+          <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <h2 className="font-semibold mb-1">Slide decks</h2>
+            <p className="text-xs text-slate-500 mb-3">
+              Load a presentation once per course, then drop a “Slides” tool on
+              any step to play a range of its slides in-session.
+            </p>
+            <ul className="flex flex-col gap-1.5 mb-3">
+              {decks.map((d) => (
+                <li
+                  key={d.id}
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <span className="font-medium truncate">{d.title}</span>
+                  <span className="text-xs text-slate-400 shrink-0">
+                    {d.pageCount} slide{d.pageCount === 1 ? "" : "s"}
+                  </span>
+                  <a
+                    href={d.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="ml-auto text-xs text-indigo-600 hover:underline shrink-0"
+                  >
+                    view
+                  </a>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Remove deck "${d.title}"?`)) removeDeck(d.id);
+                    }}
+                    className="text-slate-300 hover:text-rose-500 shrink-0"
+                    aria-label="Remove deck"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+              {decks.length === 0 && (
+                <li className="text-xs text-slate-400">No decks yet</li>
+              )}
+            </ul>
+            <form onSubmit={uploadDeck} className="flex flex-wrap gap-1.5 items-center">
+              <input
+                key={deckInputKey}
+                type="file"
+                accept="application/pdf,.pdf"
+                onChange={(e) => setDeckFile(e.target.files?.[0] ?? null)}
+                className="text-xs text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-medium file:text-slate-600 hover:file:bg-slate-200"
+              />
+              <input
+                value={deckTitle}
+                onChange={(e) => setDeckTitle(e.target.value)}
+                placeholder="Deck title (optional)"
+                maxLength={200}
+                className="flex-1 min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <button
+                type="submit"
+                disabled={!!deckStatus || !deckFile}
+                className="rounded-lg bg-indigo-600 text-white px-3 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40"
+              >
+                {deckStatus ?? "Add deck"}
+              </button>
+              <p className="w-full text-[11px] text-slate-400">
+                PDF only — export your PowerPoint/Keynote to PDF first. Up to 100 MB.
               </p>
             </form>
           </section>

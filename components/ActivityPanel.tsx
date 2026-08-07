@@ -16,7 +16,11 @@ import { SurveyBoard } from "./SurveyBoard";
 import { CardSort } from "./CardSort";
 import { ImpactBoard } from "./ImpactBoard";
 import { WorkflowBuilder } from "./WorkflowBuilder";
+import dynamic from "next/dynamic";
 import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
+
+// pdf.js is heavy — load the slide renderer only when a slides activity shows.
+const SlidePlayer = dynamic(() => import("./SlidePlayer"), { ssr: false });
 
 interface Props {
   activity: ActivityState;
@@ -898,6 +902,57 @@ export function ActivityPanel({
           canControl={canModerate}
           onControl={(action, pos) => manage({ video: { action, pos } })}
         />
+      </div>
+    );
+  }
+
+  // ---- Slides: facilitator-driven PDF slide player over a deck's page range ----
+  if (activity.kind === "slides") {
+    const s = activity.slides;
+    if (!s) {
+      return (
+        <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+          {header("Slides")}
+          <p className="text-sm text-slate-400">Preparing the deck…</p>
+        </div>
+      );
+    }
+    const total = s.endPage - s.startPage + 1;
+    const idx = s.currentPage - s.startPage + 1;
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Slides — presented by your facilitator")}
+        <SlidePlayer
+          url={s.deckUrl}
+          page={s.currentPage}
+          presentation={presentation}
+        />
+        {canModerate ? (
+          <div className="mt-3 flex items-center justify-center gap-3">
+            <button
+              onClick={() => manage({ slides: { action: "prev" } })}
+              disabled={busy || s.currentPage <= s.startPage}
+              className="rounded-lg border border-slate-300 px-4 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-40"
+            >
+              ← Prev
+            </button>
+            <span className="text-xs text-slate-500 tabular-nums">
+              Slide {idx} of {total}{" "}
+              <span className="text-slate-400">(p. {s.currentPage})</span>
+            </span>
+            <button
+              onClick={() => manage({ slides: { action: "next" } })}
+              disabled={busy || s.currentPage >= s.endPage}
+              className="rounded-lg border border-slate-300 px-4 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-40"
+            >
+              Next →
+            </button>
+          </div>
+        ) : (
+          <p className="mt-2 text-center text-xs text-slate-400">
+            Your facilitator is guiding these slides.
+          </p>
+        )}
       </div>
     );
   }

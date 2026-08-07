@@ -244,6 +244,48 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ ok: true });
   }
 
+  // Slide player: the facilitator advances through the deck's page range and
+  // every screen follows on the next poll.
+  //   goto {page} | next | prev  — move within [startPage, endPage]
+  if (body?.slides && typeof body.slides === "object") {
+    const res = await query<ActivityRow>(
+      `SELECT * FROM activities WHERE id = $1 AND session_id = $2 AND status = 'open'`,
+      [aid, id]
+    );
+    const activity = res.rows[0];
+    if (!activity || activity.kind !== "slides") {
+      return NextResponse.json({ error: "Slides not open" }, { status: 404 });
+    }
+    let config: Record<string, unknown> = {};
+    try {
+      config = JSON.parse(activity.config);
+    } catch {
+      /* nothing to move */
+    }
+    const startPage = typeof config.startPage === "number" ? config.startPage : 1;
+    const endPage =
+      typeof config.endPage === "number" ? config.endPage : startPage;
+    const cur =
+      typeof config.current === "number" ? config.current : startPage;
+    const s = body.slides as { action?: string; page?: number };
+    let next = cur;
+    if (s.action === "goto" && typeof s.page === "number") next = s.page;
+    else if (s.action === "next") next = cur + 1;
+    else if (s.action === "prev") next = cur - 1;
+    else {
+      return NextResponse.json(
+        { error: "Unknown slides action" },
+        { status: 400 }
+      );
+    }
+    config.current = Math.min(Math.max(startPage, Math.floor(next)), endPage);
+    await query(`UPDATE activities SET config = $1 WHERE id = $2`, [
+      JSON.stringify(config),
+      aid,
+    ]);
+    return NextResponse.json({ ok: true });
+  }
+
   // Presentation controls: reveal count, wheel spotlight, whiteboard clear.
   if (
     typeof body?.reveal === "number" ||

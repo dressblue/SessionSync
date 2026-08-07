@@ -127,6 +127,11 @@ async function ensureSchema(
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // Links a launched activity back to the step_tool it came from, so the
+  // console can flag that tool as live and offer a one-click close.
+  await run(
+    `ALTER TABLE activities ADD COLUMN IF NOT EXISTS step_tool_id UUID;`
+  );
   await run(`
     CREATE TABLE IF NOT EXISTS activity_responses (
       id UUID PRIMARY KEY,
@@ -234,6 +239,24 @@ async function ensureSchema(
   );
   await run(
     `CREATE INDEX IF NOT EXISTS idx_files_course ON course_files(course_id);`
+  );
+  // Slide decks: a PDF loaded once per course (stored in Vercel Blob, not in
+  // the DB — decks exceed the 15MB course_files cap), referenced by many
+  // `slides` step tools that each play a page range. Cloned by reference.
+  await run(`
+    CREATE TABLE IF NOT EXISTS course_decks (
+      id UUID PRIMARY KEY,
+      course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      blob_url TEXT NOT NULL,
+      page_count INTEGER NOT NULL DEFAULT 0,
+      uploaded_by_email TEXT,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await run(
+    `CREATE INDEX IF NOT EXISTS idx_decks_course ON course_decks(course_id);`
   );
   // Phase 6: facilitator-authored whiteboard strokes have no participant.
   await run(

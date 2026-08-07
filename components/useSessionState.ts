@@ -30,7 +30,8 @@ export type ActivityKind =
   | "impact2"
   | "impact3"
   | "impact4"
-  | "survey";
+  | "survey"
+  | "slides";
 
 export interface RichItem {
   title: string;
@@ -68,6 +69,15 @@ export interface ActivityState {
   id: string;
   kind: ActivityKind;
   prompt: string;
+  // The step_tool this activity was launched from (if any).
+  stepToolId?: string;
+  // slides — facilitator-driven PDF slide player over a course deck's range.
+  slides?: {
+    deckUrl: string;
+    startPage: number;
+    endPage: number;
+    currentPage: number;
+  };
   phase?: "collect" | "rate";
   options?: string[];
   columns?: string[];
@@ -196,6 +206,9 @@ export interface StepTool {
   text?: string;
   minutes?: number;
   mediaType?: "image" | "pdf" | "link";
+  deckId?: string;
+  startPage?: number;
+  endPage?: number;
 }
 
 export interface VideoState {

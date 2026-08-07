@@ -39,6 +39,7 @@ const TOOL_BADGES: Record<string, string> = {
   impact3: "Impact 3",
   impact4: "Impact 4",
   survey: "Survey",
+  slides: "Slides",
 };
 
 // Compact delete affordance (replaces the word "Delete" to save row space).
@@ -109,6 +110,7 @@ function Console() {
     | "impact3"
     | "impact4"
     | "survey"
+    | "slides"
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
@@ -134,6 +136,13 @@ function Console() {
   const [toolExhibitRef, setToolExhibitRef] = useState("");
   const [toolAnchorSet, setToolAnchorSet] = useState("agreement");
   const [toolTimerMin, setToolTimerMin] = useState(5);
+  // Slides step-tool config: which course deck + the page range to play.
+  const [toolDeckId, setToolDeckId] = useState("");
+  const [toolStartPage, setToolStartPage] = useState(1);
+  const [toolEndPage, setToolEndPage] = useState(1);
+  const [decks, setDecks] = useState<
+    { id: string; title: string; url: string; pageCount: number }[]
+  >([]);
   // Tool library
   const [viewerAdmin, setViewerAdmin] = useState(false);
   const [libPickFor, setLibPickFor] = useState<string | null>(null);
@@ -246,6 +255,11 @@ function Console() {
     fetch(`/api/courses/${courseId}/steps`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d?.sessions && setCourseSteps(d.sessions))
+      .catch(() => {});
+    // The course's slide decks feed the Slides tool's deck picker.
+    fetch(`/api/courses/${courseId}/decks`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d?.decks && setDecks(d.decks))
       .catch(() => {});
   }, [courseId]);
 
@@ -418,6 +432,10 @@ function Console() {
           commentLabel: q.commentLabel.trim(),
         }))
         .filter((q) => q.text && q.options.length >= 1);
+    } else if (toolKind === "slides") {
+      body.deckId = toolDeckId;
+      body.startPage = toolStartPage;
+      body.endPage = toolEndPage;
     } else if (toolKind !== "whiteboard") body.items = list;
     if (toolKind === "likert") body.anchorSet = toolAnchorSet;
     const ok = await api(
@@ -469,10 +487,14 @@ function Console() {
         : [newSurveyQuestion()]
     );
     setToolGraph(t.graph ?? null);
+    setToolDeckId(t.deckId ?? "");
+    setToolStartPage(t.startPage ?? 1);
+    setToolEndPage(t.endPage ?? 1);
   }
 
   function launchTool(tool: StepTool) {
     api(`/api/sessions/${id}/activities`, "POST", {
+      stepToolId: tool.id,
       kind: tool.kind,
       prompt: tool.prompt,
       options: tool.options,
@@ -494,6 +516,9 @@ function Console() {
       text: tool.text,
       minutes: tool.minutes,
       mediaType: tool.mediaType,
+      deckId: tool.deckId,
+      startPage: tool.startPage,
+      endPage: tool.endPage,
     });
   }
 
@@ -539,6 +564,14 @@ function Console() {
   const { session, steps, participants, activities, pastActivities, spotlight } =
     state;
   const isCourseSession = !!session.courseId;
+  // Which step tools are live right now → the id of the open activity each one
+  // launched, so a tool row can show a "live" state and close it in one click.
+  const liveActivityByTool = new Map<string, string>();
+  for (const a of activities) {
+    if (a.stepToolId) liveActivityByTool.set(a.stepToolId, a.id);
+  }
+  const stepHasLiveTool = (s: (typeof steps)[number]) =>
+    s.tools.some((t) => liveActivityByTool.has(t.id));
   // Move/Copy targets, grouped by session (a step's own title carries whatever
   // numbering the facilitator gave it). Falls back to just this session's steps
   // until the course-wide list loads.
@@ -642,10 +675,12 @@ function Console() {
               {steps.map((s, i) => (
                 <li
                   key={s.id}
-                  className={`rounded-lg border ${
+                  className={`rounded-lg border transition-opacity ${
                     session.status === "live" && i === session.currentStep
-                      ? "border-indigo-400 bg-indigo-50"
-                      : "border-slate-200"
+                      ? "border-indigo-500 border-l-4 ring-2 ring-indigo-200 bg-indigo-50"
+                      : session.status === "live" && toolsOpenFor !== s.id
+                        ? "border-slate-200 opacity-60"
+                        : "border-slate-200"
                   }`}
                 >
                   {editingId === s.id ? (
@@ -738,6 +773,14 @@ function Console() {
                         >
                           Tools{s.tools.length > 0 ? ` (${s.tools.length})` : ""}
                         </button>
+                        {stepHasLiveTool(s) && (
+                          <span
+                            title="A tool in this step is live for participants"
+                            className="shrink-0 inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-700 px-1.5 py-0.5 text-[10px] font-semibold"
+                          >
+                            <span className="animate-pulse">●</span> live
+                          </span>
+                        )}
                         <button
                           onClick={() => beginEdit(s)}
                           className="rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-slate-100"
@@ -761,6 +804,22 @@ function Console() {
                   )}
                   {toolsOpenFor === s.id && editingId !== s.id && (
                     <div className="border-t border-slate-100 bg-slate-50/60 rounded-b-lg p-3 flex flex-col gap-2">
+                      {session.status === "live" &&
+                        i !== session.currentStep && (
+                          <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">
+                            <span>
+                              Editing tools for this step — not the one showing
+                              now
+                              {current ? ` (${current.title})` : ""}.
+                            </span>
+                            <button
+                              onClick={() => control("goto", i)}
+                              className="ml-auto shrink-0 rounded-md border border-amber-400 bg-white px-2 py-0.5 font-medium text-amber-800 hover:bg-amber-100"
+                            >
+                              Show this step
+                            </button>
+                          </div>
+                        )}
                       {s.tools.length > 0 && (
                         <ul className="flex flex-col gap-1">
                           {s.tools.map((t, ti) => (
@@ -787,14 +846,33 @@ function Console() {
                                 </span>
                               )}
                               {session.status === "live" ? (
-                                <button
-                                  onClick={() => launchTool(t)}
-                                  title="Launch"
-                                  aria-label="Launch"
-                                  className="ml-auto shrink-0 rounded-md bg-indigo-600 text-white px-2 py-1 text-[13px] leading-none hover:bg-indigo-700"
-                                >
-                                  🚀
-                                </button>
+                                liveActivityByTool.has(t.id) ? (
+                                  <button
+                                    onClick={() =>
+                                      api(
+                                        `/api/sessions/${id}/activities/${liveActivityByTool.get(
+                                          t.id
+                                        )}`,
+                                        "PATCH",
+                                        { status: "closed" }
+                                      )
+                                    }
+                                    title="Live now — click to close for participants"
+                                    aria-label="Live — click to close"
+                                    className="ml-auto shrink-0 inline-flex items-center gap-1 rounded-md bg-rose-600 text-white px-2 py-1 text-[11px] font-semibold leading-none hover:bg-rose-700"
+                                  >
+                                    <span className="animate-pulse">●</span> Live
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => launchTool(t)}
+                                    title="Launch"
+                                    aria-label="Launch"
+                                    className="ml-auto shrink-0 rounded-md bg-indigo-600 text-white px-2 py-1 text-[13px] leading-none hover:bg-indigo-700"
+                                  >
+                                    🚀
+                                  </button>
+                                )
                               ) : (
                                 <span className="ml-auto shrink-0 text-[10px] text-slate-400">
                                   start session to launch
@@ -939,6 +1017,7 @@ function Console() {
                             <option value="impact3">Impact 3 (comment + 3 scales)</option>
                             <option value="impact4">Impact 4 (comment + 4 scales)</option>
                             <option value="survey">Survey (questions + comments)</option>
+                            <option value="slides">Slides (play deck pages)</option>
                           </select>
                           <button
                             type="button"
@@ -1046,6 +1125,90 @@ function Console() {
                             />
                             minutes
                           </label>
+                        )}
+                        {toolKind === "slides" && (
+                          <div className="flex flex-col gap-2 rounded-md border border-indigo-200 bg-indigo-50/40 p-2.5">
+                            {decks.length === 0 ? (
+                              <p className="text-xs text-slate-500">
+                                No slide decks in this course yet — add one on the{" "}
+                                <a
+                                  href={
+                                    courseId ? `/course/${courseId}` : "#"
+                                  }
+                                  className="text-indigo-600 underline"
+                                >
+                                  course page
+                                </a>
+                                .
+                              </p>
+                            ) : (
+                              <>
+                                <label className="flex items-center gap-2 text-xs text-slate-600">
+                                  Deck:
+                                  <select
+                                    value={toolDeckId}
+                                    onChange={(e) => {
+                                      const d = decks.find(
+                                        (x) => x.id === e.target.value
+                                      );
+                                      setToolDeckId(e.target.value);
+                                      setToolStartPage(1);
+                                      setToolEndPage(d?.pageCount || 1);
+                                    }}
+                                    className="flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs bg-white"
+                                  >
+                                    <option value="">Choose a deck…</option>
+                                    {decks.map((d) => (
+                                      <option key={d.id} value={d.id}>
+                                        {d.title} ({d.pageCount} slides)
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                {toolDeckId && (
+                                  <label className="flex items-center gap-2 text-xs text-slate-600">
+                                    Slides
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={toolEndPage}
+                                      value={toolStartPage}
+                                      onChange={(e) =>
+                                        setToolStartPage(
+                                          Math.max(1, Number(e.target.value) || 1)
+                                        )
+                                      }
+                                      className="w-16 rounded-md border border-slate-300 px-2 py-1 text-xs bg-white"
+                                    />
+                                    to
+                                    <input
+                                      type="number"
+                                      min={toolStartPage}
+                                      max={
+                                        decks.find((d) => d.id === toolDeckId)
+                                          ?.pageCount ?? toolEndPage
+                                      }
+                                      value={toolEndPage}
+                                      onChange={(e) =>
+                                        setToolEndPage(
+                                          Math.max(
+                                            1,
+                                            Number(e.target.value) || 1
+                                          )
+                                        )
+                                      }
+                                      className="w-16 rounded-md border border-slate-300 px-2 py-1 text-xs bg-white"
+                                    />
+                                    <span className="text-slate-400">
+                                      of{" "}
+                                      {decks.find((d) => d.id === toolDeckId)
+                                        ?.pageCount ?? "?"}
+                                    </span>
+                                  </label>
+                                )}
+                              </>
+                            )}
+                          </div>
                         )}
                         {toolKind === "exhibit" && toolExhibitType === "text" && (
                           <textarea
@@ -1243,9 +1406,11 @@ function Console() {
                               disabled={
                                 toolKind === "video"
                                   ? !toolExhibitRef.trim()
-                                  : toolKind === "timer"
-                                    ? false
-                                    : !toolPrompt.trim()
+                                  : toolKind === "slides"
+                                    ? !toolPrompt.trim() || !toolDeckId
+                                    : toolKind === "timer"
+                                      ? false
+                                      : !toolPrompt.trim()
                               }
                               className="rounded-md bg-slate-800 text-white px-3 py-1.5 text-xs font-medium hover:bg-slate-900 disabled:opacity-40"
                             >

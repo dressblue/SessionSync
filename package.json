@@ -12,6 +12,7 @@
     "@electric-sql/pglite": "^0.5.4",
     "@vercel/blob": "^2.6.1",
     "next": "16.2.11",
+    "pdfjs-dist": "^4.10.38",
     "pg": "^8.22.0",
     "pptxgenjs": "^4.0.1",
     "qrcode.react": "^4.2.0",
