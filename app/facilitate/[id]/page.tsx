@@ -768,7 +768,15 @@ function Console() {
                         {session.status === "live" &&
                           (i === session.currentStep ? (
                             <button
-                              onClick={() => control("deselect")}
+                              onClick={() => {
+                                control("deselect");
+                                // Suspending the step also collapses its Tools
+                                // editor — nothing is "showing" to edit against.
+                                if (toolsOpenFor === s.id) {
+                                  setToolsOpenFor(null);
+                                  resetToolForm();
+                                }
+                              }}
                               title="Close this step — session stays live; participants see a holding screen"
                               className="rounded-md bg-emerald-100 text-emerald-700 border border-emerald-300 px-2 py-1 text-xs font-medium hover:bg-emerald-200"
                             >
