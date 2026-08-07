@@ -9,6 +9,7 @@ import {
   elementToSvg,
   elementIndex,
   sortByZ,
+  resolveEnd,
 } from "@/lib/whiteboard";
 
 const COLORS = ["#0f172a", "#e11d48", "#4f46e5", "#059669", "#d97706", "#ffffff"];
@@ -30,6 +31,7 @@ const STAMPS_FLAT = STAMP_GROUPS.flatMap((g) => g.items);
 type Tool =
   | "select"
   | "pen"
+  | "eraser"
   | "text"
   | "line"
   | "arrow"
@@ -115,6 +117,8 @@ export function Whiteboard({
     { a: WBAnchor; x: number; y: number } | null
   >(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [dragRowId, setDragRowId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; value: string; isNew?: boolean; cell?: number } | null>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
 
@@ -132,9 +136,11 @@ export function Whiteboard({
   const [pending, setPending] = useState<Record<string, Partial<Stroke>>>({});
   const drag = useRef<
     | { mode: "move"; id: string; ox: number; oy: number; sx: number; sy: number }
-    | { mode: "resize"; id: string; x: number; y: number }
+    | { mode: "resize"; id: string; ax: number; ay: number } // box corner: opposite corner fixed
+    | { mode: "endpoint"; id: string; fx: number; fy: number; moving: "a" | "b" } // line endpoint
     | null
   >(null);
+  const erasing = useRef(false);
 
   const syncedIds = new Set(strokes.map((s) => s.id));
   // Merge: polled elements (with any pending override) + own not-yet-synced,
@@ -192,6 +198,31 @@ export function Whiteboard({
     return null;
   }
 
+  // Eraser: hit-test EVERY element (incl. pen strokes / lines / connectors, which
+  // aren't box-selectable) by proximity, and remove the top-most one under `pt`.
+  function eraseAt(pt: [number, number]) {
+    const thr = 0.02;
+    for (let i = elements.length - 1; i >= 0; i--) {
+      const e = elements[i];
+      let hit = false;
+      if (!e.k) {
+        const p = e.p ?? [];
+        for (let j = 1; j < p.length && !hit; j++) if (distToSeg(pt, p[j - 1], p[j]) < thr) hit = true;
+      } else if (e.k === "line" || e.k === "arrow") {
+        hit = distToSeg(pt, [e.x ?? 0, e.y ?? 0], [(e.x ?? 0) + (e.bw ?? 0), (e.y ?? 0) + (e.bh ?? 0)]) < thr;
+      } else if (e.k === "conn") {
+        hit = distToSeg(pt, resolveEnd(e.a, e.b, byId), resolveEnd(e.b, e.a, byId)) < thr;
+      } else {
+        const b = boxOf(e);
+        hit = pt[0] >= b.x - thr && pt[0] <= b.x + b.bw + thr && pt[1] >= b.y - thr && pt[1] <= b.y + b.bh + thr;
+      }
+      if (hit) {
+        removeId(e.id);
+        return;
+      }
+    }
+  }
+
   async function create(el: Stroke) {
     setLocalEls((prev) => [...prev, el]);
     const { id, mine, ...rest } = el; // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -211,8 +242,26 @@ export function Whiteboard({
       setDrawing([pt]);
       return;
     }
+    if (tool === "eraser") {
+      capture();
+      erasing.current = true;
+      eraseAt(pt);
+      return;
+    }
     if (tool === "select") {
       const hit = hitObject(pt);
+      // Second click on an already-selected table → edit the clicked cell
+      // directly (double-click also works, but this is far easier).
+      if (hit && hit.k === "table" && hit.id === selectedId) {
+        const b = boxOf(hit);
+        const cols = hit.cols ?? 3;
+        const rows = hit.rows ?? 3;
+        const cc = Math.min(cols - 1, Math.max(0, Math.floor(((pt[0] - b.x) / (b.bw || 1)) * cols)));
+        const rr = Math.min(rows - 1, Math.max(0, Math.floor(((pt[1] - b.y) / (b.bh || 1)) * rows)));
+        const idx = rr * cols + cc;
+        setEditing({ id: hit.id, value: (hit.cells ?? [])[idx] ?? "", cell: idx });
+        return;
+      }
       setSelectedId(hit?.id ?? null);
       if (hit) {
         capture();
@@ -247,6 +296,10 @@ export function Whiteboard({
   }
 
   function pointerMove(e: React.PointerEvent) {
+    if (erasing.current) {
+      eraseAt(toPoint(e));
+      return;
+    }
     if (drawing) {
       const pt = toPoint(e);
       const last = drawing[drawing.length - 1];
@@ -273,12 +326,39 @@ export function Whiteboard({
     if (drag.current?.mode === "resize") {
       const pt = toPoint(e);
       const d = drag.current;
-      setPending((p) => ({ ...p, [d.id]: { ...p[d.id], bw: Math.max(0.02, pt[0] - d.x), bh: Math.max(0.02, pt[1] - d.y) } }));
+      setPending((p) => ({
+        ...p,
+        [d.id]: {
+          ...p[d.id],
+          x: Math.min(d.ax, pt[0]),
+          y: Math.min(d.ay, pt[1]),
+          bw: Math.max(0.01, Math.abs(pt[0] - d.ax)),
+          bh: Math.max(0.01, Math.abs(pt[1] - d.ay)),
+        },
+      }));
       return;
+    }
+    if (drag.current?.mode === "endpoint") {
+      const pt = toPoint(e);
+      const d = drag.current;
+      const a = d.moving === "a" ? pt : [d.fx, d.fy];
+      const b = d.moving === "b" ? pt : [d.fx, d.fy];
+      setPending((p) => ({ ...p, [d.id]: { ...p[d.id], x: a[0], y: a[1], bw: b[0] - a[0], bh: b[1] - a[1] } }));
+      return;
+    }
+    // Idle hover in select mode → outline the object under the cursor so it's
+    // clear what will be grabbed (borderless text/no-fill shapes are hard to see).
+    if (tool === "select") {
+      const h = hitObject(toPoint(e));
+      setHoverId(h?.id ?? null);
     }
   }
 
   async function pointerUp() {
+    if (erasing.current) {
+      erasing.current = false;
+      return;
+    }
     if (drawing) {
       const points = drawing.length === 1 ? [...drawing, drawing[0]] : drawing;
       const d = drawing;
@@ -349,16 +429,41 @@ export function Whiteboard({
     onElementUpdate({ id, t: value });
   }
 
-  function removeSelected() {
-    if (!selected) return;
-    onUndo(selected.id);
-    setLocalEls((prev) => prev.filter((e) => e.id !== selected.id));
-    setSelectedId(null);
+  function removeId(id: string) {
+    onUndo(id);
+    setLocalEls((prev) => prev.filter((e) => e.id !== id));
+    if (selectedId === id) setSelectedId(null);
   }
 
-  // Layer order: bring the selected element to the front / send to the back.
-  function relayer(dir: "front" | "back") {
-    if (!selected) return;
+  function startHandle(e: React.PointerEvent, d: NonNullable<typeof drag.current>) {
+    e.stopPropagation();
+    svgRef.current?.setPointerCapture?.(e.pointerId);
+    drag.current = d;
+  }
+
+  // Drag-reorder in the Objects list: move `dragId` to `targetId`'s slot and
+  // re-stamp every element's z from the new front-to-back order.
+  function reorderTo(dragId: string, targetId: string) {
+    if (dragId === targetId) return;
+    const order = [...elements].reverse().map((e) => e.id); // front → back
+    const from = order.indexOf(dragId);
+    if (from < 0) return;
+    order.splice(from, 1);
+    const at = order.indexOf(targetId);
+    if (at < 0) return;
+    order.splice(at, 0, dragId);
+    const n = order.length;
+    order.forEach((id, i) => {
+      const z = n - i; // front-most gets the highest z
+      if ((byId.get(id)?.z ?? 0) !== z) {
+        setPending((p) => ({ ...p, [id]: { ...p[id], z } }));
+        onElementUpdate({ id, z });
+      }
+    });
+  }
+
+  // Layer order: bring an element to the front / send it to the back.
+  function relayerId(id: string, dir: "front" | "back") {
     let mn = 0;
     let mx = 0;
     for (const e of elements) {
@@ -367,8 +472,8 @@ export function Whiteboard({
       if (z > mx) mx = z;
     }
     const z = dir === "front" ? mx + 1 : mn - 1;
-    setPending((p) => ({ ...p, [selected.id]: { ...p[selected.id], z } }));
-    onElementUpdate({ id: selected.id, z });
+    setPending((p) => ({ ...p, [id]: { ...p[id], z } }));
+    onElementUpdate({ id, z });
   }
 
   // Selection box (in %), for handles + editor overlay positioning.
@@ -400,6 +505,7 @@ export function Whiteboard({
           <div className="flex flex-wrap items-center gap-1.5">
             {toolBtn("select", "▷", "Select / move")}
             {toolBtn("pen", "✎", "Pen")}
+            {toolBtn("eraser", "⌫", "Eraser — click or drag over anything to remove it")}
             {toolBtn("text", "T", "Text")}
             {toolBtn("line", "╱", "Line")}
             {toolBtn("arrow", "↗", "Arrow")}
@@ -559,21 +665,21 @@ export function Whiteboard({
               {selected && (
                 <>
                   <button
-                    onClick={() => relayer("front")}
+                    onClick={() => relayerId(selected.id, "front")}
                     title="Bring to front"
                     className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                   >
                     ⬆ Front
                   </button>
                   <button
-                    onClick={() => relayer("back")}
+                    onClick={() => relayerId(selected.id, "back")}
                     title="Send to back"
                     className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                   >
                     ⬇ Back
                   </button>
                   <button
-                    onClick={removeSelected}
+                    onClick={() => removeId(selected.id)}
                     className="rounded-lg border border-rose-300 px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50"
                   >
                     Delete
@@ -595,7 +701,8 @@ export function Whiteboard({
         </>
       )}
 
-      <div className="relative w-full">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+        <div className="relative min-w-0 flex-1">
         <svg
           ref={svgRef}
           viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
@@ -652,52 +759,93 @@ export function Whiteboard({
                 />
               );
             })()}
-          {/* Selection outline + resize handle */}
+          {/* Select mode: faint outline every object (borderless text/no-fill
+              are otherwise invisible); stronger outline on hover. */}
+          {tool === "select" &&
+            interactive &&
+            objects.map((o) => {
+              if (o.id === selectedId) return null;
+              const b = boxOf(o);
+              const hov = o.id === hoverId;
+              return (
+                <rect
+                  key={`hl-${o.id}`}
+                  x={b.x * VIEW_W - 2}
+                  y={b.y * VIEW_H - 2}
+                  width={b.bw * VIEW_W + 4}
+                  height={b.bh * VIEW_H + 4}
+                  fill="none"
+                  stroke={hov ? "#6366f1" : "#94a3b8"}
+                  strokeWidth={hov ? 1.5 : 0.75}
+                  strokeDasharray={hov ? undefined : "3 3"}
+                  opacity={hov ? 0.9 : 0.45}
+                  pointerEvents="none"
+                />
+              );
+            })}
+          {/* Selection outline */}
           {selBox && tool === "select" && (
-            <g pointerEvents="none">
-              <rect
-                x={selBox.x * VIEW_W - 3}
-                y={selBox.y * VIEW_H - 3}
-                width={selBox.bw * VIEW_W + 6}
-                height={selBox.bh * VIEW_H + 6}
-                fill="none"
-                stroke="#6366f1"
-                strokeWidth={1.5}
-                strokeDasharray="5 4"
-              />
-            </g>
+            <rect
+              pointerEvents="none"
+              x={selBox.x * VIEW_W - 3}
+              y={selBox.y * VIEW_H - 3}
+              width={selBox.bw * VIEW_W + 6}
+              height={selBox.bh * VIEW_H + 6}
+              fill="none"
+              stroke="#6366f1"
+              strokeWidth={1.5}
+              strokeDasharray="5 4"
+            />
           )}
-        </svg>
-
-        {/* Resize handle (bottom-right) — a real DOM element for easy grabbing. */}
-        {selBox && tool === "select" && interactive && selected?.k !== "conn" && (
-          <div
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              (e.target as Element).setPointerCapture?.(e.pointerId);
-              drag.current = { mode: "resize", id: selected!.id, x: selBox.x, y: selBox.y };
-            }}
-            onPointerMove={(e) => {
-              if (drag.current?.mode !== "resize") return;
-              const rect = svgRef.current!.getBoundingClientRect();
-              const px = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-              const py = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
-              const d = drag.current;
-              setPending((p) => ({ ...p, [d.id]: { ...p[d.id], bw: Math.max(0.02, px - d.x), bh: Math.max(0.02, py - d.y) } }));
-            }}
-            onPointerUp={() => {
-              if (drag.current?.mode === "resize") {
-                const id = drag.current.id;
-                drag.current = null;
-                const patch = pending[id];
-                if (patch) onElementUpdate({ id, ...patch });
+          {/* Transform handles — box corners (resize from opposite corner) or
+              line/arrow endpoints (drag either end). */}
+          {selected &&
+            tool === "select" &&
+            interactive &&
+            selected.k !== "conn" &&
+            (() => {
+              const handle = (
+                nx: number,
+                ny: number,
+                d: NonNullable<typeof drag.current>,
+                key: string
+              ) => (
+                <circle
+                  key={key}
+                  cx={nx * VIEW_W}
+                  cy={ny * VIEW_H}
+                  r={6.5}
+                  fill="#6366f1"
+                  stroke="#fff"
+                  strokeWidth={1.5}
+                  style={{ cursor: "pointer" }}
+                  onPointerDown={(e) => startHandle(e, d)}
+                />
+              );
+              const id = selected.id;
+              if (selected.k === "line" || selected.k === "arrow") {
+                const ax = selected.x ?? 0;
+                const ay = selected.y ?? 0;
+                const bx = ax + (selected.bw ?? 0);
+                const by = ay + (selected.bh ?? 0);
+                return (
+                  <g>
+                    {handle(ax, ay, { mode: "endpoint", id, fx: bx, fy: by, moving: "a" }, "ea")}
+                    {handle(bx, by, { mode: "endpoint", id, fx: ax, fy: ay, moving: "b" }, "eb")}
+                  </g>
+                );
               }
-            }}
-            title="Resize"
-            className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize rounded-full border border-white bg-indigo-500 shadow"
-            style={{ left: pct(selBox.x + selBox.bw), top: pct(selBox.y + selBox.bh) }}
-          />
-        )}
+              const b = boxOf(selected);
+              return (
+                <g>
+                  {handle(b.x, b.y, { mode: "resize", id, ax: b.x + b.bw, ay: b.y + b.bh }, "tl")}
+                  {handle(b.x + b.bw, b.y, { mode: "resize", id, ax: b.x, ay: b.y + b.bh }, "tr")}
+                  {handle(b.x, b.y + b.bh, { mode: "resize", id, ax: b.x + b.bw, ay: b.y }, "bl")}
+                  {handle(b.x + b.bw, b.y + b.bh, { mode: "resize", id, ax: b.x, ay: b.y }, "br")}
+                </g>
+              );
+            })()}
+        </svg>
 
         {/* Inline label / text editor overlay (percent-positioned over the board). */}
         {editing && (
@@ -724,6 +872,20 @@ export function Whiteboard({
                 onChange={(e) => setEditing({ id: editing.id, value: e.target.value })}
                 onBlur={commitEdit}
                 onKeyDown={(e) => {
+                  if (editing.cell !== undefined && e.key === "Tab") {
+                    // Commit this cell and jump to the next — fast row entry.
+                    e.preventDefault();
+                    const el0 = byId.get(editing.id);
+                    const n = (el0?.rows ?? 3) * (el0?.cols ?? 3);
+                    const cells = Array.from({ length: n }, (_, i) =>
+                      i === editing.cell ? editing.value : (el0?.cells ?? [])[i] ?? ""
+                    );
+                    setPending((p) => ({ ...p, [editing.id]: { ...p[editing.id], cells } }));
+                    onElementUpdate({ id: editing.id, cells });
+                    const nx = (editing.cell + (e.shiftKey ? -1 : 1) + n) % n;
+                    setEditing({ id: editing.id, value: cells[nx] ?? "", cell: nx });
+                    return;
+                  }
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     commitEdit();
@@ -735,6 +897,79 @@ export function Whiteboard({
               />
             );
           })()
+        )}
+        </div>
+        {interactive && (
+          <div className="w-full shrink-0 lg:w-44">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Objects ({elements.length})
+            </p>
+            {elements.length === 0 ? (
+              <p className="text-xs text-slate-400">Nothing yet.</p>
+            ) : (
+              <ul className="flex max-h-64 flex-col gap-0.5 overflow-y-auto rounded-lg border border-slate-200 p-1">
+                {[...elements].reverse().map((e) => (
+                  <li
+                    key={e.id}
+                    draggable
+                    onClick={() => {
+                      setTool("select");
+                      setSelectedId(e.id);
+                    }}
+                    onMouseEnter={() => setHoverId(e.id)}
+                    onMouseLeave={() => setHoverId(null)}
+                    onDragStart={() => setDragRowId(e.id)}
+                    onDragOver={(ev) => ev.preventDefault()}
+                    onDrop={() => {
+                      if (dragRowId) reorderTo(dragRowId, e.id);
+                      setDragRowId(null);
+                    }}
+                    onDragEnd={() => setDragRowId(null)}
+                    title="Drag to reorder layers"
+                    className={`flex cursor-grab items-center gap-1 rounded px-1.5 py-1 text-xs ${
+                      selectedId === e.id ? "bg-indigo-100 text-indigo-800" : "hover:bg-slate-100"
+                    }`}
+                  >
+                    <span className="w-4 shrink-0 text-center">{elIcon(e)}</span>
+                    <span className="min-w-0 flex-1 truncate">{elLabel(e)}</span>
+                    <button
+                      type="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        relayerId(e.id, "front");
+                      }}
+                      title="Bring to front"
+                      className="shrink-0 px-0.5 text-slate-400 hover:text-indigo-600"
+                    >
+                      ⬆
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        relayerId(e.id, "back");
+                      }}
+                      title="Send to back"
+                      className="shrink-0 px-0.5 text-slate-400 hover:text-indigo-600"
+                    >
+                      ⬇
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        removeId(e.id);
+                      }}
+                      title="Delete"
+                      className="shrink-0 px-0.5 text-slate-300 hover:text-rose-500"
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </div>
 
@@ -774,6 +1009,37 @@ export function Whiteboard({
 function near(a: number | undefined, b: number | undefined) {
   if (a === undefined || b === undefined) return a === b;
   return Math.abs(a - b) < 0.002;
+}
+
+// Distance from point p to segment a→b (all normalized 0..1).
+function distToSeg(p: [number, number], a: [number, number], b: [number, number]) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  let t = len2 ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+}
+
+const KIND_NAMES: Record<string, string> = {
+  rect: "Rectangle", rrect: "Rounded rect", ellipse: "Ellipse", triangle: "Triangle",
+  diamond: "Diamond", cloud: "Cloud", line: "Line", arrow: "Arrow", text: "Text",
+  sticky: "Sticky", table: "Table", conn: "Connector",
+};
+const KIND_ICONS: Record<string, string> = {
+  rect: "▭", rrect: "▢", ellipse: "◯", triangle: "△", diamond: "◇", cloud: "☁",
+  line: "╱", arrow: "↗", text: "T", sticky: "▤", table: "▦", conn: "⛓",
+};
+function elLabel(e: Stroke): string {
+  if (!e.k) return "Pen stroke";
+  if (e.k === "stamp") return "Stamp";
+  if ((e.k === "text" || e.k === "sticky") && e.t?.trim()) return e.t.trim().slice(0, 24);
+  return KIND_NAMES[e.k] ?? e.k;
+}
+function elIcon(e: Stroke): string {
+  if (!e.k) return "✎";
+  if (e.k === "stamp") return e.ch ?? "★";
+  return KIND_ICONS[e.k] ?? "◆";
 }
 
 // Small helper: attach a dblclick listener to the svg to open the label editor.
