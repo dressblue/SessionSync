@@ -310,8 +310,13 @@ export async function POST(
       if (!row) {
         return NextResponse.json({ error: "Element not found" }, { status: 404 });
       }
-      // participantId === null here means the authorized facilitator (moderator).
-      if (participantId !== null && row.participant_id !== participantId) {
+      // The element's owner may edit it. So may the session moderator — a
+      // facilitator carries their own participant seat (non-null participantId),
+      // so they won't match a participant's element or a facilitator-drawn
+      // NULL-owner one; fall back to an auth check to grant them any-element edit.
+      const owns =
+        participantId !== null && row.participant_id === participantId;
+      if (!owns && !(await authorizeSession(req, id))) {
         return NextResponse.json({ error: "Not your element" }, { status: 403 });
       }
       let cur: Record<string, unknown> = {};
@@ -685,20 +690,26 @@ export async function DELETE(
   if (!entryId) {
     return NextResponse.json({ error: "entryId required" }, { status: 400 });
   }
+  // First try deleting the caller's own element (participants may only remove
+  // what they contributed).
   if (participantId) {
-    await query(
-      `DELETE FROM activity_responses WHERE id = $1 AND participant_id = $2`,
+    const own = await query<{ id: string }>(
+      `DELETE FROM activity_responses WHERE id = $1 AND participant_id = $2 RETURNING id`,
       [entryId, participantId]
     );
-  } else if (await authorizeSession(req, id)) {
+    if (own.rows.length) return NextResponse.json({ ok: true });
+  }
+  // Otherwise fall back to moderator authority: a facilitator may delete any
+  // element in their session — a participant's, or a facilitator-drawn
+  // NULL-owner one — even though they also carry a participant seat.
+  if (await authorizeSession(req, id)) {
     await query(
       `DELETE FROM activity_responses
-       WHERE id = $1 AND participant_id IS NULL
+       WHERE id = $1
          AND activity_id IN (SELECT id FROM activities WHERE session_id = $2)`,
       [entryId, id]
     );
-  } else {
-    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+    return NextResponse.json({ ok: true });
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ error: "Not authorized" }, { status: 403 });
 }
