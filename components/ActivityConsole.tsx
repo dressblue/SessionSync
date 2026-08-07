@@ -469,6 +469,24 @@ export function ActivityConsole({
               </button>
             ))}
           <button
+            onClick={() => {
+              if (
+                confirm(
+                  "Close and discard this tool? It will NOT be kept in the session report."
+                )
+              )
+                call(
+                  `/api/sessions/${sessionId}/activities/${activity.id}`,
+                  "DELETE"
+                );
+            }}
+            disabled={busy}
+            title="Stop this tool and remove it — NOT kept in the session report"
+            className="rounded-lg border border-slate-300 text-slate-600 px-3 py-1.5 text-xs font-medium hover:bg-slate-100 disabled:opacity-40"
+          >
+            ✕ Discard
+          </button>
+          <button
             onClick={() =>
               call(
                 `/api/sessions/${sessionId}/activities/${activity.id}`,

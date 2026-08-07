@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { UserButton, useUser } from "@clerk/nextjs";
 import {
@@ -94,6 +94,10 @@ function Console() {
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Most-recently-shown step id — the fallback target for "Save to step" from a
+  // live activity when the session is in the holding view (no step on screen).
+  const lastShownStepIdRef = useRef<string | null>(null);
 
   // Step-tool editor state
   const [toolsOpenFor, setToolsOpenFor] = useState<string | null>(null);
@@ -264,6 +268,12 @@ function Console() {
       .catch(() => {});
   }, []);
 
+  // Remember the last step actually on screen (survives deselect → holding view).
+  const shownStepId = state?.steps?.[state?.session?.currentStep ?? -1]?.id;
+  useEffect(() => {
+    if (shownStepId) lastShownStepIdRef.current = shownStepId;
+  }, [shownStepId]);
+
   // Load every session's steps in this course for the Move/Copy picker.
   const courseId = state?.session.courseId;
   useEffect(() => {
@@ -355,6 +365,16 @@ function Console() {
     if (dest !== undefined && toolsOpenFor && toolsOpenFor !== dest) {
       setToolsOpenFor(null);
       resetToolForm();
+    }
+    // Moving to another step (Next / Back / Show) "saves & closes" any LIVE
+    // tools (status=closed → kept for the session report) so a tool never
+    // lingers over the next step's content. (deselect/refresh keep them.)
+    if (action === "next" || action === "prev" || action === "goto") {
+      for (const a of state?.activities ?? []) {
+        api(`/api/sessions/${id}/activities/${a.id}`, "PATCH", {
+          status: "closed",
+        });
+      }
     }
     return api(`/api/sessions/${id}/control`, "POST", { action, step });
   };
@@ -670,7 +690,42 @@ function Console() {
   const current = steps[session.currentStep];
   const prevStep = steps[session.currentStep - 1];
   const nextStep = steps[session.currentStep + 1];
+  // "Save to step" target: the step on screen, else the last one shown, else the
+  // first step — so a live tool is always saveable, even in the holding view.
+  const saveToStepTarget =
+    current ??
+    steps.find((s) => s.id === lastShownStepIdRef.current) ??
+    steps[0];
   const online = participants.filter((p) => p.online);
+  // Split the roster so facilitators and participants sit in their own labelled
+  // groups instead of intermixing (distinguished only by a small badge before).
+  const facilitatorList = participants.filter((p) => p.isFacilitator);
+  const attendeeList = participants.filter((p) => !p.isFacilitator);
+  const renderPerson = (p: (typeof participants)[number]) => (
+    <li key={p.id} className="flex items-center gap-2 text-sm group">
+      <span
+        className={`w-2 h-2 rounded-full shrink-0 ${
+          p.online ? "bg-emerald-500" : "bg-slate-300"
+        }`}
+      />
+      <span className={`truncate ${p.online ? "" : "text-slate-400"}`}>
+        {p.name}
+      </span>
+      {!p.isFacilitator && (
+        <button
+          onClick={() => {
+            if (confirm(`Remove ${p.name} from this session?`)) {
+              api(`/api/sessions/${id}/participants/${p.id}`, "DELETE");
+            }
+          }}
+          title="End this participant's session"
+          className="ml-auto shrink-0 text-xs text-slate-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+        >
+          Remove
+        </button>
+      )}
+    </li>
+  );
   // When the session is live and no tool/activity is open, the current step's own
   // content is exactly what participants see — so the step itself is "broadcasting".
   // The moment any tool goes live, participants see the tool instead, so we suppress
@@ -1618,46 +1673,31 @@ function Console() {
                 ({online.length} online / {participants.length} joined)
               </span>
             </h2>
-            <ul className="flex flex-col gap-1.5 max-h-72 overflow-y-auto">
-              {participants.map((p) => (
-                <li key={p.id} className="flex items-center gap-2 text-sm group">
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      p.online ? "bg-emerald-500" : "bg-slate-300"
-                    }`}
-                  />
-                  <span className={p.online ? "" : "text-slate-400"}>
-                    {p.name}
-                  </span>
-                  {p.isFacilitator && (
-                    <span className="text-[10px] uppercase font-semibold text-indigo-400">
-                      facilitator
-                    </span>
-                  )}
-                  {!p.isFacilitator && (
-                    <button
-                      onClick={() => {
-                        if (
-                          confirm(`Remove ${p.name} from this session?`)
-                        ) {
-                          api(
-                            `/api/sessions/${id}/participants/${p.id}`,
-                            "DELETE"
-                          );
-                        }
-                      }}
-                      title="End this participant's session"
-                      className="ml-auto text-xs text-slate-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </li>
-              ))}
-              {participants.length === 0 && (
-                <li className="text-sm text-slate-400">No one has joined yet</li>
+            <div className="flex flex-col gap-3 max-h-80 overflow-y-auto">
+              {facilitatorList.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-500">
+                    Facilitators ({facilitatorList.length})
+                  </p>
+                  <ul className="flex flex-col gap-1.5">
+                    {facilitatorList.map(renderPerson)}
+                  </ul>
+                </div>
               )}
-            </ul>
+              {attendeeList.length > 0 && (
+                <div className="flex flex-col gap-1.5 border-t border-slate-100 pt-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Participants ({attendeeList.length})
+                  </p>
+                  <ul className="flex flex-col gap-1.5">
+                    {attendeeList.map(renderPerson)}
+                  </ul>
+                </div>
+              )}
+              {participants.length === 0 && (
+                <p className="text-sm text-slate-400">No one has joined yet</p>
+              )}
+            </div>
           </section>
 
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
@@ -1912,8 +1952,8 @@ function Console() {
               myParticipantId={myPid}
               myParticipantName={user?.fullName ?? user?.username ?? undefined}
               roster={participants}
-              activeStepId={steps[session.currentStep]?.id ?? null}
-              activeStepTitle={steps[session.currentStep]?.title}
+              activeStepId={saveToStepTarget?.id ?? null}
+              activeStepTitle={saveToStepTarget?.title}
               onChanged={refresh}
             />
           )}
