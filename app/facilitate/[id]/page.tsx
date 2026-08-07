@@ -881,6 +881,9 @@ function Console() {
                               key={t.id}
                               className="flex items-center gap-2 text-xs bg-white rounded-md border border-slate-200 px-2.5 py-1.5"
                             >
+                              <span className="shrink-0 w-4 text-right tabular-nums text-slate-400">
+                                {ti + 1}
+                              </span>
                               <span className="font-bold uppercase text-[10px] text-indigo-500 shrink-0">
                                 {TOOL_BADGES[t.kind] ?? t.kind}
                               </span>
@@ -966,7 +969,7 @@ function Console() {
                                 (
                                   [
                                     ["move", "🚚", "Move this tool to another step"],
-                                    ["clone", "⎘", "Copy this tool to another step"],
+                                    ["clone", "🪄", "Copy this tool to another step"],
                                   ] as const
                                 ).map(([action, icon, tip]) => (
                                   <select
@@ -979,9 +982,9 @@ function Console() {
                                       e.target.value = "";
                                       if (v) relocateTool(s.id, t.id, v);
                                     }}
-                                    className="shrink-0 rounded-md border border-slate-300 px-1 py-1 text-[11px] text-slate-600 bg-white max-w-[64px]"
+                                    className="shrink-0 appearance-none cursor-pointer text-center rounded-md border border-slate-300 w-7 py-1 text-[12px] leading-none text-slate-600 bg-white"
                                   >
-                                    <option value="">{icon} …</option>
+                                    <option value="">{icon}</option>
                                     {moveGroups.map((g, gi) => {
                                       const opts = g.steps.filter(
                                         (st) => st.id !== s.id
@@ -1033,7 +1036,7 @@ function Console() {
                                 }}
                                 title="Delete tool"
                                 aria-label="Delete tool"
-                                className="shrink-0 rounded-md px-1.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                                className="shrink-0 rounded-md px-1 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
                               >
                                 <TrashIcon />
                               </button>
