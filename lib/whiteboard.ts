@@ -146,41 +146,42 @@ export function elementToSvg(el: Stroke, byId: Map<string, Stroke>): string {
   const fill = el.f ? esc(el.f) : "none";
   const cx = X + BW / 2;
   const cy = Y + BH / 2;
+  const labelFs = el.fs ?? 15; // shape labels honor the element's font size
 
   switch (el.k) {
     case "rect":
       return (
         `<rect x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${BW.toFixed(1)}" height="${BH.toFixed(1)}" fill="${fill}" stroke="${esc(stroke)}" stroke-width="${sw}"/>` +
-        (el.t ? multiText(cx, cy, el.t, stroke, 15, BW) : "")
+        (el.t ? multiText(cx, cy, el.t, stroke, labelFs, BW) : "")
       );
     case "rrect":
       return (
         `<rect x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${BW.toFixed(1)}" height="${BH.toFixed(1)}" rx="${(Math.min(BW, BH) * 0.16).toFixed(1)}" fill="${fill}" stroke="${esc(stroke)}" stroke-width="${sw}"/>` +
-        (el.t ? multiText(cx, cy, el.t, stroke, 15, BW) : "")
+        (el.t ? multiText(cx, cy, el.t, stroke, labelFs, BW) : "")
       );
     case "ellipse":
       return (
         `<ellipse cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="${(BW / 2).toFixed(1)}" ry="${(BH / 2).toFixed(1)}" fill="${fill}" stroke="${esc(stroke)}" stroke-width="${sw}"/>` +
-        (el.t ? multiText(cx, cy, el.t, stroke, 15, BW) : "")
+        (el.t ? multiText(cx, cy, el.t, stroke, labelFs, BW) : "")
       );
     case "triangle": {
       const pts = `${cx.toFixed(1)},${Y.toFixed(1)} ${(X + BW).toFixed(1)},${(Y + BH).toFixed(1)} ${X.toFixed(1)},${(Y + BH).toFixed(1)}`;
       return (
         `<polygon points="${pts}" fill="${fill}" stroke="${esc(stroke)}" stroke-width="${sw}" stroke-linejoin="round"/>` +
-        (el.t ? multiText(cx, Y + BH * 0.66, el.t, stroke, 14, BW * 0.7) : "")
+        (el.t ? multiText(cx, Y + BH * 0.66, el.t, stroke, labelFs, BW * 0.7) : "")
       );
     }
     case "diamond": {
       const pts = `${cx.toFixed(1)},${Y.toFixed(1)} ${(X + BW).toFixed(1)},${cy.toFixed(1)} ${cx.toFixed(1)},${(Y + BH).toFixed(1)} ${X.toFixed(1)},${cy.toFixed(1)}`;
       return (
         `<polygon points="${pts}" fill="${fill}" stroke="${esc(stroke)}" stroke-width="${sw}" stroke-linejoin="round"/>` +
-        (el.t ? multiText(cx, cy, el.t, stroke, 14, BW * 0.7) : "")
+        (el.t ? multiText(cx, cy, el.t, stroke, labelFs, BW * 0.7) : "")
       );
     }
     case "cloud":
       return (
         `<g transform="translate(${X.toFixed(1)},${Y.toFixed(1)}) scale(${BW.toFixed(1)},${BH.toFixed(1)})"><path d="${CLOUD_UNIT}" fill="${fill === "none" ? "#ffffff" : fill}" stroke="${esc(stroke)}" stroke-width="${sw}" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></g>` +
-        (el.t ? multiText(cx, cy + BH * 0.05, el.t, stroke, 14, BW * 0.7) : "")
+        (el.t ? multiText(cx, cy + BH * 0.05, el.t, stroke, labelFs, BW * 0.7) : "")
       );
     case "line":
     case "arrow": {

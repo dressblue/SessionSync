@@ -326,6 +326,7 @@ export async function POST(
       if ("t" in u) patch.t = str(u.t, 500) ?? "";
       if ("c" in u) patch.c = str(u.c, 20) ?? cur.c;
       if ("f" in u) patch.f = str(u.f, 20) ?? null;
+      if ("fs" in u) patch.fs = num(u.fs, 8, 200, 24);
       if ("z" in u && typeof u.z === "number" && isFinite(u.z)) patch.z = u.z;
       if ("cells" in u) patch.cells = cellArray(u.cells);
       const value = JSON.stringify({ ...cur, ...patch });

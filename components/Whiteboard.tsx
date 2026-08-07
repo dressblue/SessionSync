@@ -103,6 +103,7 @@ export function Whiteboard({
   const [color, setColor] = useState(COLORS[0]);
   const [fill, setFill] = useState<string | null>(null);
   const [width, setWidth] = useState(WIDTHS[1]);
+  const [fontSize, setFontSize] = useState(24);
   const [stamp, setStamp] = useState(STAMPS_FLAT[0]);
   const [stampOpen, setStampOpen] = useState(false);
   const [shapeMenu, setShapeMenu] = useState(false);
@@ -188,10 +189,15 @@ export function Whiteboard({
     ];
   }
 
-  function hitObject(pt: [number, number]): Stroke | null {
+  function hitObject(pt: [number, number], margin = 0): Stroke | null {
     for (let i = objects.length - 1; i >= 0; i--) {
       const b = boxOf(objects[i]);
-      if (pt[0] >= b.x && pt[0] <= b.x + b.bw && pt[1] >= b.y && pt[1] <= b.y + b.bh) {
+      if (
+        pt[0] >= b.x - margin &&
+        pt[0] <= b.x + b.bw + margin &&
+        pt[1] >= b.y - margin &&
+        pt[1] <= b.y + b.bh + margin
+      ) {
         return objects[i];
       }
     }
@@ -272,7 +278,7 @@ export function Whiteboard({
     }
     if (tool === "conn") {
       capture();
-      const hit = hitObject(pt);
+      const hit = hitObject(pt, 0.02); // forgiving snap → connects to ANY object type
       setConnDraft({ a: hit ? { id: hit.id } : { x: pt[0], y: pt[1] }, x: pt[0], y: pt[1] });
       return;
     }
@@ -281,7 +287,7 @@ export function Whiteboard({
       if (tool === "stamp") {
         create({ id, mine: true, k: "stamp", x: pt[0] - 0.03, y: pt[1] - 0.04, bw: 0.06, bh: 0.08, ch: stamp });
       } else if (tool === "text") {
-        create({ id, mine: true, k: "text", x: pt[0], y: pt[1], bw: 0.3, bh: 0.06, c: color, fs: 24, t: "" });
+        create({ id, mine: true, k: "text", x: pt[0], y: pt[1], bw: 0.3, bh: 0.06, c: color, fs: fontSize, t: "" });
         setEditing({ id, value: "", isNew: true });
       } else {
         create({ id, mine: true, k: "sticky", x: pt[0] - 0.07, y: pt[1] - 0.05, bw: 0.14, bh: 0.11, f: fill ?? "#fde68a", t: "" });
@@ -389,7 +395,7 @@ export function Whiteboard({
     if (connDraft) {
       const c = connDraft;
       setConnDraft(null);
-      const hit = hitObject([c.x, c.y]);
+      const hit = hitObject([c.x, c.y], 0.02);
       const b: WBAnchor = hit ? { id: hit.id } : { x: c.x, y: c.y };
       // ignore a zero-length connector to nothing
       if (!c.a.id && !hit && Math.hypot((b.x ?? 0) - (c.a.x ?? 0), (b.y ?? 0) - (c.a.y ?? 0)) < 0.02) return;
@@ -661,6 +667,26 @@ export function Whiteboard({
                 </button>
               ))}
             </div>
+            {/* Font size — applies to new text and (live) the selected text/label. */}
+            <label className="ml-1 flex items-center gap-1 text-[10px] uppercase text-slate-400" title="Font size (text + shape labels)">
+              <span className="text-sm normal-case text-slate-500">A</span>
+              <select
+                value={fontSize}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setFontSize(v);
+                  if (selected && !!selected.k && selected.k !== "conn" && selected.k !== "stamp") {
+                    setPending((p) => ({ ...p, [selected.id]: { ...p[selected.id], fs: v } }));
+                    onElementUpdate({ id: selected.id, fs: v });
+                  }
+                }}
+                className="rounded-md border border-slate-200 bg-white px-1 py-0.5 text-xs text-slate-700"
+              >
+                {[12, 16, 20, 24, 32, 40, 56].map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </label>
             <div className="ml-auto flex items-center gap-1.5">
               {selected && (
                 <>
