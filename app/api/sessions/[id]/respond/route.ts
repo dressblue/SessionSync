@@ -214,6 +214,119 @@ export async function POST(
   }
 
   if (activity.kind === "whiteboard") {
+    // Shared sanitizers for placed objects (kept tight so stored JSON is clean).
+    const num = (v: unknown, lo: number, hi: number, dflt: number) =>
+      typeof v === "number" && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : dflt;
+    const str = (v: unknown, cap: number) =>
+      typeof v === "string" ? v.slice(0, cap) : undefined;
+    const ELEMENT_KINDS = [
+      "rect", "rrect", "ellipse", "triangle", "diamond", "cloud",
+      "line", "arrow", "text", "sticky", "stamp", "conn",
+    ];
+    const anchor = (v: unknown) => {
+      if (!v || typeof v !== "object") return {};
+      const o = v as Record<string, unknown>;
+      const out: { id?: string; x?: number; y?: number } = {};
+      if (typeof o.id === "string" && o.id.length <= 40) out.id = o.id;
+      if (typeof o.x === "number" && isFinite(o.x)) out.x = Math.min(1, Math.max(0, o.x));
+      if (typeof o.y === "number" && isFinite(o.y)) out.y = Math.min(1, Math.max(0, o.y));
+      return out;
+    };
+
+    // Add a placed object (client-generated id so connectors can reference it).
+    if (body?.element && typeof body.element === "object") {
+      const e = body.element as Record<string, unknown>;
+      const k = typeof e.k === "string" && ELEMENT_KINDS.includes(e.k) ? e.k : null;
+      const elId =
+        typeof e.id === "string" && e.id.length >= 8 && e.id.length <= 40 ? e.id : null;
+      if (!k || !elId) {
+        return NextResponse.json({ error: "Invalid element" }, { status: 400 });
+      }
+      let el: Record<string, unknown>;
+      if (k === "conn") {
+        el = {
+          k,
+          arrow: !!e.arrow,
+          a: anchor(e.a),
+          b: anchor(e.b),
+          c: str(e.c, 20) ?? "#0f172a",
+          sw: num(e.sw, 0.5, 20, 3),
+        };
+        if (e.dash) el.dash = true;
+      } else {
+        el = {
+          k,
+          x: num(e.x, 0, 1, 0),
+          y: num(e.y, 0, 1, 0),
+          bw: num(e.bw, -1, 1, 0.1),
+          bh: num(e.bh, -1, 1, 0.1),
+          c: str(e.c, 20) ?? "#0f172a",
+          sw: num(e.sw, 0.5, 20, 3),
+        };
+        const f = str(e.f, 20);
+        if (f) el.f = f;
+        const t = str(e.t, 500);
+        if (t !== undefined) el.t = t;
+        if (k === "text") el.fs = num(e.fs, 8, 200, 24);
+        if (k === "stamp") el.ch = str(e.ch, 8) ?? "⭐";
+      }
+      const value = JSON.stringify(el);
+      if (value.length > 4000) {
+        return NextResponse.json({ error: "Element too large" }, { status: 400 });
+      }
+      await query(
+        `INSERT INTO activity_responses (id, activity_id, participant_id, value)
+         VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
+        [elId, activity.id, participantId, value]
+      );
+      return NextResponse.json({ ok: true, id: elId });
+    }
+
+    // Move / resize / relabel a placed object (own element, or facilitator).
+    if (body?.elUpdate && typeof body.elUpdate === "object") {
+      const u = body.elUpdate as Record<string, unknown>;
+      const elId = typeof u.id === "string" ? u.id : null;
+      if (!elId) {
+        return NextResponse.json({ error: "Invalid update" }, { status: 400 });
+      }
+      const rows = await query<{ value: string; participant_id: string | null }>(
+        `SELECT value, participant_id FROM activity_responses
+           WHERE id = $1 AND activity_id = $2`,
+        [elId, activity.id]
+      );
+      const row = rows.rows[0];
+      if (!row) {
+        return NextResponse.json({ error: "Element not found" }, { status: 404 });
+      }
+      // participantId === null here means the authorized facilitator (moderator).
+      if (participantId !== null && row.participant_id !== participantId) {
+        return NextResponse.json({ error: "Not your element" }, { status: 403 });
+      }
+      let cur: Record<string, unknown> = {};
+      try {
+        cur = JSON.parse(row.value);
+      } catch {
+        /* replaced below */
+      }
+      const patch: Record<string, unknown> = {};
+      if ("x" in u) patch.x = num(u.x, 0, 1, 0);
+      if ("y" in u) patch.y = num(u.y, 0, 1, 0);
+      if ("bw" in u) patch.bw = num(u.bw, -1, 1, 0.1);
+      if ("bh" in u) patch.bh = num(u.bh, -1, 1, 0.1);
+      if ("t" in u) patch.t = str(u.t, 500) ?? "";
+      if ("c" in u) patch.c = str(u.c, 20) ?? cur.c;
+      if ("f" in u) patch.f = str(u.f, 20) ?? null;
+      const value = JSON.stringify({ ...cur, ...patch });
+      if (value.length > 4000) {
+        return NextResponse.json({ error: "Element too large" }, { status: 400 });
+      }
+      await query(`UPDATE activity_responses SET value = $1 WHERE id = $2`, [
+        value,
+        elId,
+      ]);
+      return NextResponse.json({ ok: true });
+    }
+
     const stroke = body?.stroke;
     const points = Array.isArray(stroke?.p) ? stroke.p : [];
     const valid =
@@ -244,12 +357,16 @@ export async function POST(
     if (value.length > 30_000) {
       return NextResponse.json({ error: "Stroke too large" }, { status: 400 });
     }
+    const strokeId =
+      typeof stroke.id === "string" && stroke.id.length >= 8 && stroke.id.length <= 40
+        ? stroke.id
+        : randomUUID();
     await query(
       `INSERT INTO activity_responses (id, activity_id, participant_id, value)
-       VALUES ($1, $2, $3, $4)`,
-      [randomUUID(), activity.id, participantId, value]
+       VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
+      [strokeId, activity.id, participantId, value]
     );
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, id: strokeId });
   }
 
   // Word sort: place/unplace a word into a column. A word may live in several

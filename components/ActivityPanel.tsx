@@ -1067,6 +1067,8 @@ export function ActivityPanel({
           canDraw={!!participantId || canModerate}
           canModerate={canModerate}
           onStroke={(stroke) => send({ stroke }, "POST", false)}
+          onElement={(element) => send({ element }, "POST", false)}
+          onElementUpdate={(elUpdate) => send({ elUpdate }, "POST", false)}
           onUndo={(entryId) => send({ entryId }, "DELETE")}
           onClear={() => manage({ clear: true })}
         />

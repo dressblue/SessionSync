@@ -58,12 +58,43 @@ export interface WorkflowGraph {
   startId: string;
 }
 
+// A whiteboard element. Freehand pen (legacy, no `k`) keeps { c, w, p }; every
+// other kind carries `k` + a normalized (0..1) bounding box and its own fields.
+export type WBAnchor = { id?: string; x?: number; y?: number };
 export interface Stroke {
   id: string;
   mine: boolean;
-  c: string;
-  w: number;
-  p: [number, number][];
+  // pen (freehand)
+  c?: string;
+  w?: number;
+  p?: [number, number][];
+  // objects
+  k?:
+    | "rect"
+    | "rrect"
+    | "ellipse"
+    | "triangle"
+    | "diamond"
+    | "cloud"
+    | "line"
+    | "arrow"
+    | "text"
+    | "sticky"
+    | "stamp"
+    | "conn";
+  x?: number;
+  y?: number;
+  bw?: number;
+  bh?: number;
+  f?: string | null; // fill (shapes) / background (sticky)
+  sw?: number; // stroke width
+  t?: string; // text / label
+  fs?: number; // font size (text)
+  ch?: string; // stamp emoji
+  arrow?: boolean; // connector arrowhead
+  dash?: boolean; // connector dashed line
+  a?: WBAnchor; // connector endpoints (anchored to {id} or free {x,y})
+  b?: WBAnchor;
 }
 
 export interface ActivityState {

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import type { ActivityState, Stroke } from "@/components/useSessionState";
+import { boardToSvg } from "@/lib/whiteboard";
 import { LikertChart } from "@/components/LikertChart";
 import { WordCloud } from "@/components/WordCloud";
 import { CardSort } from "@/components/CardSort";
@@ -50,9 +51,13 @@ function strokesToDataUrl(strokes: Stroke[]): string {
   const ctx = canvas.getContext("2d")!;
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, 800, 600);
+  // Raster export (PPTX/Word) currently rasterizes pen strokes; placed objects
+  // render fully on the report page + live board (shared SVG renderer). Object
+  // rasterization for the PPTX/Word image is a fast-follow.
   for (const s of strokes) {
-    ctx.strokeStyle = s.c;
-    ctx.lineWidth = s.w;
+    if (s.k || !s.p) continue;
+    ctx.strokeStyle = s.c ?? "#0f172a";
+    ctx.lineWidth = s.w ?? 3;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.beginPath();
@@ -195,7 +200,7 @@ function activityLines(a: ActivityState): string[] {
     });
   }
   if (a.kind === "whiteboard") {
-    return [`Shared drawing with ${a.strokes?.length ?? 0} strokes`];
+    return [`Shared whiteboard with ${a.strokes?.length ?? 0} objects`];
   }
   if (a.kind === "slides") {
     const s = a.slides;
@@ -618,24 +623,8 @@ export default function ReportPage() {
                 <svg
                   viewBox="0 0 800 600"
                   className="w-full max-w-md border border-slate-200 rounded-lg mt-2"
-                >
-                  {a.strokes.map((s) => (
-                    <path
-                      key={s.id}
-                      d={s.p
-                        .map(
-                          (pt, i) =>
-                            `${i === 0 ? "M" : "L"}${pt[0] * 800},${pt[1] * 600}`
-                        )
-                        .join(" ")}
-                      stroke={s.c}
-                      strokeWidth={s.w}
-                      fill="none"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  ))}
-                </svg>
+                  dangerouslySetInnerHTML={{ __html: boardToSvg(a.strokes) }}
+                />
               ) : a.kind === "likert" &&
                 (a.scale ?? 5) === 5 &&
                 (a.ratings?.length ?? 0) > 0 ? (

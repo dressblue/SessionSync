@@ -116,12 +116,29 @@ export function resolveWorkflowGraph(config: {
   return { nodes, edges, startId: nodes[0]?.id ?? "" };
 }
 
+// A whiteboard element. Freehand pen (legacy, no `k`) keeps { c, w, p }; other
+// kinds carry `k` + a normalized bounding box / endpoints. See useSessionState.
+export type WBAnchor = { id?: string; x?: number; y?: number };
 export interface Stroke {
   id: string;
   mine: boolean;
-  c: string;
-  w: number;
-  p: [number, number][];
+  c?: string;
+  w?: number;
+  p?: [number, number][];
+  k?: string;
+  x?: number;
+  y?: number;
+  bw?: number;
+  bh?: number;
+  f?: string | null;
+  sw?: number;
+  t?: string;
+  fs?: number;
+  ch?: string;
+  arrow?: boolean;
+  dash?: boolean;
+  a?: WBAnchor;
+  b?: WBAnchor;
 }
 
 export interface ActivityPayload {
@@ -936,16 +953,16 @@ export function buildActivityPayload(
       .slice(-1000)
       .map((r) => {
         try {
-          const s = JSON.parse(r.value) as { c: string; w: number; p: [number, number][] };
+          // Every element field flows through untouched (pen: c/w/p; objects:
+          // k + geometry). id/mine are authoritative and always overwritten.
+          const s = JSON.parse(r.value) as Record<string, unknown>;
           return {
+            ...s,
             id: r.id,
             mine:
               (!!viewerParticipantId && r.participant_id === viewerParticipantId) ||
               (facilitatorView && r.participant_id === null),
-            c: s.c,
-            w: s.w,
-            p: s.p,
-          };
+          } as Stroke;
         } catch {
           return null;
         }
