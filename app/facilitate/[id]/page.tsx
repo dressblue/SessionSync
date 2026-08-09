@@ -751,10 +751,11 @@ function Console() {
   }[session.status];
 
   // Presenter-screen size controls: only meaningful while a projector is open
-  // (presenterLive), so they surface only then. Two independent multipliers —
-  // Text scales rem type only; Zoom scales the whole projector.
+  // (presenterLive), so they surface only then, as a slim strip under the header
+  // (right-aligned, beneath the Presenter View button). Two independent
+  // multipliers — Text scales rem type only; Zoom scales the whole projector.
   const presenterSizeControls = session.presenterLive ? (
-    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 pt-3">
+    <div className="border-b border-slate-200 bg-white px-6 py-2 flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
       <span className="text-[11px] font-semibold uppercase tracking-wide text-indigo-500">
         ▶ Presenter size
       </span>
@@ -836,7 +837,6 @@ function Console() {
           End session
         </button>
       </div>
-      {presenterSizeControls}
     </section>
   );
 
@@ -933,6 +933,9 @@ function Console() {
         </span>
         <UserButton />
       </header>
+      {/* Presenter size controls appear right under the header (below the
+          Presenter View button) whenever a projector screen is live. */}
+      {presenterSizeControls}
 
       {(actionError || error) && (
         <div className="fixed top-3 right-3 z-50 rounded-lg bg-amber-100 text-amber-900 text-sm px-4 py-2 shadow-lg border border-amber-300">
