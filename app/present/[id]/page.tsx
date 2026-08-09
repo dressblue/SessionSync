@@ -2,10 +2,12 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { QRCodeSVG } from "qrcode.react";
 import { useSessionState } from "@/components/useSessionState";
 import { ActivityPanel } from "@/components/ActivityPanel";
 import { Markdown } from "@/components/Markdown";
 import { SpotlightBanner, SpotlightCard } from "@/components/SpotlightMessage";
+import { shareOrigin } from "@/lib/appOrigin";
 
 // Read-only projector view. The facilitator shares THIS window in Zoom/Teams
 // while driving from the console in another. No identity, no inputs, no side
@@ -111,7 +113,66 @@ function Presenter() {
   );
 
   let body: React.ReactNode;
-  if (spotlight && spotlight.style === "card") {
+  if (session.presentQr) {
+    // Join-QR takeover: overrides whatever tool/step was on screen, using the
+    // full space to show a big QR + the join URL and session key.
+    const isCourse = !!session.courseId;
+    const keyActive =
+      !!session.joinKey &&
+      !!session.joinKeyExpires &&
+      new Date(session.joinKeyExpires).getTime() > Date.now();
+    const code = isCourse ? (keyActive ? session.joinKey : null) : session.code;
+    const origin = shareOrigin();
+    const joinUrl = origin && code ? `${origin}/join?code=${code}` : "";
+    body = (
+      <div className="flex-1 flex flex-col items-center justify-center px-8 py-6 text-center">
+        <h2 className="text-4xl font-bold text-slate-900 mb-2">Scan to join</h2>
+        <p className="text-xl text-slate-400 mb-6">
+          Point your phone camera at the code
+        </p>
+        {joinUrl ? (
+          <>
+            <div className="rounded-2xl border border-slate-200 shadow-sm p-6 bg-white">
+              <QRCodeSVG
+                value={joinUrl}
+                size={512}
+                level="M"
+                marginSize={2}
+                className="h-auto w-[min(56vh,58vw)]"
+              />
+            </div>
+            <div className="mt-8 rounded-2xl bg-slate-50 border border-slate-200 px-10 py-6">
+              <p className="text-lg text-slate-500">
+                Can&apos;t scan? Go to{" "}
+                <span className="font-semibold text-slate-700">
+                  {origin?.replace(/^https?:\/\//, "")}/join
+                </span>
+              </p>
+              <div className="mt-3 flex items-center justify-center gap-4">
+                <span className="text-xl uppercase tracking-wide text-slate-400">
+                  {isCourse ? "Key" : "Session ID"}
+                </span>
+                <span className="font-mono text-5xl tracking-[0.25em] font-bold text-indigo-700 break-all">
+                  {code}
+                </span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-10 py-14 max-w-xl">
+            <p className="text-2xl font-semibold text-amber-700">
+              No active join code
+            </p>
+            <p className="text-lg text-amber-600 mt-2">
+              {isCourse
+                ? "Generate a student key from the console, then reopen the QR."
+                : "This session has no join code."}
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  } else if (spotlight && spotlight.style === "card") {
     // A presented message takes over the projector until the facilitator clears it.
     body = (
       <div className="flex-1 flex items-center justify-center py-12">

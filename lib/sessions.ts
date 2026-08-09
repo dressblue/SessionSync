@@ -25,6 +25,7 @@ export interface SessionRow {
   presenter_text_scale: number;
   presenter_zoom_scale: number;
   presenter_seen_at: string | null;
+  present_qr: boolean;
 }
 
 export type ActivityKind =

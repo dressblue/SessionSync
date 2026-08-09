@@ -98,6 +98,10 @@ function Console() {
   // Most-recently-shown step id — the fallback target for "Save to step" from a
   // live activity when the session is in the holding view (no step on screen).
   const lastShownStepIdRef = useRef<string | null>(null);
+  // The presenter/projector window we opened (Presenter View button or the QR
+  // launcher), so the QR toggle can close a window it opened itself.
+  const presenterWin = useRef<Window | null>(null);
+  const qrOpenedPresenter = useRef(false);
 
   // Step-tool editor state
   const [toolsOpenFor, setToolsOpenFor] = useState<string | null>(null);
@@ -389,6 +393,38 @@ function Console() {
       action: which === "text" ? "textScale" : "zoomScale",
       scale: next,
     });
+  };
+
+  // Open the read-only projector window (shared in Zoom/Teams), keeping a handle.
+  const openPresenter = () => {
+    presenterWin.current = window.open(
+      `${origin || ""}/present/${id}`,
+      "SessionSyncPresenter",
+      "width=1280,height=800"
+    );
+    return presenterWin.current;
+  };
+
+  // Toggle the join-QR takeover on the projector. When no presenter is open, the
+  // QR launcher opens one; deactivating then closes the window it opened.
+  const toggleQr = async () => {
+    const s = state?.session;
+    if (!s) return;
+    if (s.presentQr) {
+      await api(`/api/sessions/${id}/control`, "POST", { action: "qr", on: false });
+      if (qrOpenedPresenter.current) {
+        presenterWin.current?.close();
+        presenterWin.current = null;
+        qrOpenedPresenter.current = false;
+      }
+    } else {
+      await api(`/api/sessions/${id}/control`, "POST", { action: "qr", on: true });
+      const haveOpenWin = !!(presenterWin.current && !presenterWin.current.closed);
+      if (!s.presenterLive && !haveOpenWin) {
+        openPresenter();
+        qrOpenedPresenter.current = true;
+      }
+    }
   };
 
   async function addStep(e: React.FormEvent) {
@@ -908,18 +944,29 @@ function Console() {
           <h1 className="text-xl font-bold truncate">{session.title}</h1>
         </div>
         <button
-          onClick={() =>
-            window.open(
-              `${origin || ""}/present/${id}`,
-              "SessionSyncPresenter",
-              "width=1280,height=800"
-            )
-          }
+          onClick={openPresenter}
           title="Open a clean, read-only screen to share in Zoom/Teams"
           className="ml-auto rounded-lg border border-indigo-300 text-indigo-700 px-3 py-1.5 text-xs font-medium hover:bg-indigo-50"
         >
           ⤢ Presenter View
         </button>
+        {session.status !== "ended" && (
+          <button
+            onClick={toggleQr}
+            title={
+              session.presentQr
+                ? "Stop showing the join QR — restore the tool/step (or close the presenter it opened)"
+                : "Show the join QR + link on the presenter screen (opens the presenter if needed)"
+            }
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+              session.presentQr
+                ? "border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700"
+                : "border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+            }`}
+          >
+            ▦ Join QR
+          </button>
+        )}
         <a
           href={`/facilitate/${id}/report`}
           className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"

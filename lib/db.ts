@@ -415,4 +415,12 @@ async function ensureSchema(
   await run(
     `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS presenter_seen_at TIMESTAMPTZ;`
   );
+
+  // Phase 18: "present the join QR" toggle. When true, the presenter/projector
+  // screen shows a full-screen join QR + URL + session key, overriding whatever
+  // tool or step was on screen (restored when toggled off). Driven from a button
+  // beside the console's Presenter View button.
+  await run(
+    `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS present_qr BOOLEAN NOT NULL DEFAULT false;`
+  );
 }

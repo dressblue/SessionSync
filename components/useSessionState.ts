@@ -292,6 +292,8 @@ export interface StatePayload {
     presenterZoomScale: number;
     /** True (facilitator view only) while a projector screen is polling. */
     presenterLive: boolean;
+    /** When on, the presenter screen shows the join QR (overriding tool/step). */
+    presentQr: boolean;
   };
   activities: ActivityState[];
   pastActivities: {

@@ -204,6 +204,9 @@ export async function GET(
             return !!seen && now - new Date(seen).getTime() < 7000;
           })()
         : false,
+      // When on, the presenter shows the join QR (facilitator uses it to
+      // highlight the toggle; presenter uses it to take over the screen).
+      presentQr: !!(session as { present_qr?: boolean }).present_qr,
     },
     activities,
     pastActivities: past,

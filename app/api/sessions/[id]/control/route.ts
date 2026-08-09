@@ -25,6 +25,13 @@ export async function POST(
     return NextResponse.json({ ok: true });
   }
 
+  // Toggle the join-QR takeover on the presenter screen.
+  if (action === "qr") {
+    const on = body?.on === true;
+    await query(`UPDATE sessions SET present_qr = $1 WHERE id = $2`, [on, id]);
+    return NextResponse.json({ ok: true, presentQr: on });
+  }
+
   // Presenter-screen sizing: two independent multipliers set from the console.
   // Clamped to a sane projector range so a stray value can't wreck the screen.
   if (action === "textScale" || action === "zoomScale") {
@@ -88,6 +95,8 @@ export async function POST(
          WHERE session_id = $1 AND facilitator_id IS NULL AND removed_at IS NULL`,
       [id]
     );
+    // A stale QR takeover shouldn't linger past the session.
+    await query(`UPDATE sessions SET present_qr = false WHERE id = $1`, [id]);
   }
   return NextResponse.json({ status, currentStep: current });
 }
