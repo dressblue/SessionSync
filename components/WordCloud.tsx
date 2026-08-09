@@ -2,26 +2,6 @@
 
 import { useMemo } from "react";
 
-const CLOUD_COLORS = [
-  "#4f46e5", // indigo
-  "#0891b2", // cyan
-  "#059669", // emerald
-  "#d97706", // amber
-  "#db2777", // pink
-  "#7c3aed", // violet
-  "#b91c1c", // red
-  "#0d9488", // teal
-  "#2563eb", // blue
-  "#ca8a04", // gold
-  "#65a30d", // lime
-  "#c026d3", // fuchsia
-  "#ea580c", // orange
-  "#0369a1", // sky
-  "#9333ea", // purple
-  "#16a34a", // green
-  "#e11d48", // rose
-  "#475569", // slate
-];
 
 export interface CloudWord {
   text: string;
@@ -55,13 +35,14 @@ interface Placed {
   vertical: boolean;
 }
 
-// Stable color per word (so a word keeps its colour across live updates). Uses a
-// djb2 hash — a plain char-code sum clusters badly (short/similar words collide
-// onto the same few hues), making the palette look far smaller than it is.
-const colorFor = (text: string) => {
-  let h = 5381;
-  for (const c of text) h = ((h << 5) + h + c.charCodeAt(0)) >>> 0;
-  return CLOUD_COLORS[h % CLOUD_COLORS.length];
+// Colour by layout index using the golden angle (137.5°): consecutive words land
+// far apart on the colour wheel, so any N words span the whole spectrum evenly —
+// no small-palette clustering. Vivid, readable-on-white band; lightness alternates
+// a touch for extra separation. (Generative, so effectively unlimited colours.)
+const colorForIndex = (i: number) => {
+  const hue = (i * 137.508) % 360;
+  const light = 40 + (i % 2) * 6; // alternate 40% / 46%
+  return `hsl(${hue.toFixed(0)} 70% ${light}%)`;
 };
 
 // Stable orientation per word — a deterministic ~1-in-3 are set vertical for the
@@ -147,7 +128,7 @@ function packWords(cloud: CloudWord[]): {
       x: bx + boxW / 2,
       y: by + boxH / 2,
       size,
-      color: colorFor(w.text),
+      color: colorForIndex(i),
       vertical,
     });
   });
