@@ -35,6 +35,8 @@ interface Props {
    *  session nav bar and the "Now showing" step slide, in that order. */
   navSlot?: ReactNode;
   stepSlot?: ReactNode;
+  /** Step name each live activity was launched from (activityId → "3. Title"). */
+  stepNameByActivity?: Map<string, string>;
   onChanged: () => void;
 }
 
@@ -98,6 +100,7 @@ export function ActivityConsole({
   activeStepTitle,
   navSlot,
   stepSlot,
+  stepNameByActivity,
   onChanged,
 }: Props) {
   const [kind, setKind] = useState<Kind>("vote");
@@ -392,13 +395,21 @@ export function ActivityConsole({
       className="bg-white rounded-xl border-2 border-rose-300 ring-2 ring-rose-100 shadow-sm p-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-        <h2 className="font-semibold flex items-center gap-2">
+        <h2 className="font-semibold flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="inline-flex items-center gap-1 rounded-full bg-rose-600 text-white px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide">
             <span className="animate-pulse">●</span> Live
           </span>
           <span className="text-xs font-normal text-slate-400">
             participants see this now
           </span>
+          {stepNameByActivity?.get(activity.id) && (
+            <span
+              title="The agenda step this tool was launched from"
+              className="inline-flex items-center gap-1 rounded-md bg-slate-100 text-slate-600 px-2 py-0.5 text-[11px] font-medium"
+            >
+              ▸ {stepNameByActivity.get(activity.id)}
+            </span>
+          )}
         </h2>
         <div className="flex flex-wrap items-center gap-2">
           {(activity.kind === "sort" ||

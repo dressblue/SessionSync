@@ -701,6 +701,28 @@ function Console() {
   }
   const stepHasLiveTool = (s: (typeof steps)[number]) =>
     s.tools.some((t) => liveActivityByTool.has(t.id));
+  // Which step each open activity was launched from. The live panels render
+  // newest-first, so the LAST activity is the top of the stack; its step is the
+  // "Active" (rose) step, and any second live tool's step gets a distinct colour.
+  const stepIndexForActivity = (a: (typeof activities)[number]) =>
+    a.stepToolId
+      ? steps.findIndex((s) => s.tools.some((t) => t.id === a.stepToolId))
+      : -1;
+  const stepNameByActivity = new Map<string, string>();
+  for (const a of activities) {
+    const idx = stepIndexForActivity(a);
+    if (idx >= 0) stepNameByActivity.set(a.id, `${idx + 1}. ${steps[idx].title}`);
+  }
+  const topActivity = activities[activities.length - 1];
+  const secondActivity =
+    activities.length >= 2 ? activities[activities.length - 2] : undefined;
+  const topIdx = topActivity ? stepIndexForActivity(topActivity) : -1;
+  const secondIdx = secondActivity ? stepIndexForActivity(secondActivity) : -1;
+  const topStepId = topIdx >= 0 ? steps[topIdx].id : null;
+  const secondStepId =
+    secondIdx >= 0 && steps[secondIdx].id !== topStepId
+      ? steps[secondIdx].id
+      : null;
   // Move/Copy targets, grouped by session (a step's own title carries whatever
   // numbering the facilitator gave it). Falls back to just this session's steps
   // until the course-wide list loads.
@@ -996,17 +1018,28 @@ function Console() {
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
             <h2 className="font-semibold mb-3">Agenda</h2>
             <ol className="flex flex-col gap-2">
-              {steps.map((s, i) => (
+              {steps.map((s, i) => {
+                // The step whose tool sits at the top of the live stack is the
+                // "Active" step (rose); a second live tool's step gets amber.
+                const isTopTool = s.id === topStepId;
+                const isSecondTool = !isTopTool && s.id === secondStepId;
+                const isCurrent =
+                  session.status === "live" && i === session.currentStep;
+                return (
                 <li
                   key={s.id}
                   className={`rounded-lg border transition-opacity ${
-                    session.status === "live" && i === session.currentStep
-                      ? broadcasting
-                        ? "border-rose-400 border-l-4 ring-2 ring-rose-200 bg-rose-50"
-                        : "border-indigo-500 border-l-4 ring-2 ring-indigo-200 bg-indigo-50"
-                      : session.status === "live" && toolsOpenFor !== s.id
-                        ? "border-slate-200 opacity-60"
-                        : "border-slate-200"
+                    isTopTool
+                      ? "border-rose-400 border-l-4 ring-2 ring-rose-200 bg-rose-50"
+                      : isSecondTool
+                        ? "border-amber-400 border-l-4 ring-2 ring-amber-200 bg-amber-50"
+                        : isCurrent
+                          ? broadcasting
+                            ? "border-rose-400 border-l-4 ring-2 ring-rose-200 bg-rose-50"
+                            : "border-indigo-500 border-l-4 ring-2 ring-indigo-200 bg-indigo-50"
+                          : session.status === "live" && toolsOpenFor !== s.id
+                            ? "border-slate-200 opacity-60"
+                            : "border-slate-200"
                   }`}
                 >
                   {editingId === s.id ? (
@@ -1110,7 +1143,11 @@ function Console() {
                         {stepHasLiveTool(s) && (
                           <span
                             title="A tool in this step is live for participants"
-                            className="shrink-0 inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-700 px-1.5 py-0.5 text-[10px] font-semibold"
+                            className={`shrink-0 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                              isSecondTool
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-rose-100 text-rose-700"
+                            }`}
                           >
                             <span className="animate-pulse">●</span> live
                           </span>
@@ -1794,7 +1831,8 @@ function Console() {
                     </div>
                   )}
                 </li>
-              ))}
+                );
+              })}
             </ol>
 
             <div className="mt-4 border-t border-slate-100 pt-3">
@@ -2047,6 +2085,7 @@ function Console() {
               activeStepTitle={saveToStepTarget?.title}
               navSlot={liveNavSection}
               stepSlot={stepSlideSection}
+              stepNameByActivity={stepNameByActivity}
               onChanged={refresh}
             />
           ) : (
