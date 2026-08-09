@@ -71,32 +71,42 @@ function Presenter() {
   const { session, steps, activities, spotlight } = state;
   const current = steps[session.currentStep];
 
+  const showStep =
+    session.status === "live" && steps.length > 0 && session.currentStep >= 0;
   const brandBar = (
-    <header className="shrink-0 flex items-center gap-3 px-8 py-4 border-b border-slate-100">
-      <div className="min-w-0">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-indigo-500">
+    // One tight line: session name on the left, current step name on the right.
+    <header className="shrink-0 flex items-center gap-4 px-8 py-3 border-b border-slate-100">
+      <div className="min-w-0 flex items-baseline gap-2">
+        <span className="shrink-0 text-[11px] font-semibold uppercase tracking-widest text-indigo-500">
           SessionSync
-        </p>
-        <h1 className="text-lg font-bold truncate text-slate-800">
+        </span>
+        <h1 className="min-w-0 truncate text-lg font-bold text-slate-800">
           {session.title}
         </h1>
       </div>
-      {session.status === "live" && steps.length > 0 && session.currentStep >= 0 && (
-        <span className="ml-auto text-sm font-medium text-slate-400">
-          {session.currentStep + 1} / {steps.length}
-        </span>
-      )}
-      <button
-        onClick={() =>
-          fs
-            ? document.exitFullscreen()
-            : document.documentElement.requestFullscreen?.()
-        }
-        title={fs ? "Exit full screen" : "Full screen"}
-        className={`${session.status === "live" && steps.length > 0 && session.currentStep >= 0 ? "" : "ml-auto"} rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50`}
-      >
-        {fs ? "Exit full screen" : "⤢ Full screen"}
-      </button>
+      <div className="ml-auto flex min-w-0 items-baseline gap-3">
+        {showStep && current && (
+          <p className="min-w-0 truncate text-lg font-semibold uppercase tracking-wide text-indigo-500 text-right">
+            {current.title}
+          </p>
+        )}
+        {showStep && (
+          <span className="shrink-0 text-sm font-medium text-slate-400">
+            {session.currentStep + 1} / {steps.length}
+          </span>
+        )}
+        <button
+          onClick={() =>
+            fs
+              ? document.exitFullscreen()
+              : document.documentElement.requestFullscreen?.()
+          }
+          title={fs ? "Exit full screen" : "Full screen"}
+          className="shrink-0 self-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50"
+        >
+          {fs ? "Exit full screen" : "⤢ Full screen"}
+        </button>
+      </div>
     </header>
   );
 
@@ -129,12 +139,10 @@ function Presenter() {
     // grows to fill the column and each panel fills its cell.
     const single = activities.length === 1;
     body = (
-      <div className="flex-1 flex flex-col overflow-y-auto w-[90%] max-w-[2200px] mx-auto px-6 py-8">
-        {current && (
-          <p className="text-xl font-semibold uppercase tracking-wide text-indigo-500 mb-5 text-center shrink-0">
-            {current.title}
-          </p>
-        )}
+      // Step name now lives in the header, so the tool starts right at the top.
+      // px-8 matches the header, so the tool's left border lines up with the
+      // session name and its right border with the Full-screen button.
+      <div className="flex-1 flex flex-col overflow-y-auto w-full px-8 py-6">
         <div
           className={`grid flex-1 min-h-[72vh] gap-8 items-stretch [&>*]:min-w-0 [&>*]:flex [&>*]:flex-col [&>*>*]:flex-1 ${single ? "" : "xl:grid-cols-2"}`}
         >

@@ -184,11 +184,27 @@ export function ActivityPanel({
     );
     return (
       <div className="flex items-start justify-between gap-6 mb-4">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-1">
+        <div
+          className={`min-w-0 ${
+            presentation
+              ? "flex flex-wrap items-baseline gap-x-3 gap-y-1"
+              : ""
+          }`}
+        >
+          <p
+            className={`shrink-0 font-semibold uppercase tracking-wide text-indigo-600 ${
+              presentation ? "text-sm" : "text-xs mb-1"
+            }`}
+          >
             {label}
           </p>
-          <h3 className="text-lg font-semibold">{activity.prompt}</h3>
+          <h3
+            className={`min-w-0 font-semibold ${
+              presentation ? "text-xl" : "text-lg"
+            }`}
+          >
+            {activity.prompt}
+          </h3>
         </div>
         {featured.length > 0 && (
           <div className="shrink-0 max-w-[55%] text-right flex flex-col items-end gap-0.5">
@@ -235,14 +251,25 @@ export function ActivityPanel({
       </form>
     ) : null;
 
-  const header = (label: string) => (
-    <>
-      <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-1">
-        {label}
-      </p>
-      <h3 className="text-lg font-semibold mb-4">{activity.prompt}</h3>
-    </>
-  );
+  const header = (label: string) =>
+    presentation ? (
+      // Presenter: tool type + tool name share one line to save vertical space.
+      <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <p className="shrink-0 text-sm font-semibold uppercase tracking-wide text-indigo-600">
+          {label}
+        </p>
+        {activity.prompt && (
+          <h3 className="min-w-0 text-xl font-semibold">{activity.prompt}</h3>
+        )}
+      </div>
+    ) : (
+      <>
+        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-1">
+          {label}
+        </p>
+        <h3 className="text-lg font-semibold mb-4">{activity.prompt}</h3>
+      </>
+    );
 
   // Who's responded — the accountability strip for aggregating tools. Shows
   // participation status only, never what anyone chose.
