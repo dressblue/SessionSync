@@ -3,14 +3,24 @@
 import { useMemo } from "react";
 
 const CLOUD_COLORS = [
-  "#4f46e5",
-  "#0891b2",
-  "#059669",
-  "#d97706",
-  "#db2777",
-  "#7c3aed",
-  "#b91c1c",
-  "#0d9488",
+  "#4f46e5", // indigo
+  "#0891b2", // cyan
+  "#059669", // emerald
+  "#d97706", // amber
+  "#db2777", // pink
+  "#7c3aed", // violet
+  "#b91c1c", // red
+  "#0d9488", // teal
+  "#2563eb", // blue
+  "#ca8a04", // gold
+  "#65a30d", // lime
+  "#c026d3", // fuchsia
+  "#ea580c", // orange
+  "#0369a1", // sky
+  "#9333ea", // purple
+  "#16a34a", // green
+  "#e11d48", // rose
+  "#475569", // slate
 ];
 
 export interface CloudWord {
@@ -42,6 +52,7 @@ interface Placed {
   y: number;
   size: number;
   color: string;
+  vertical: boolean;
 }
 
 // Stable color per word (so a word keeps its colour across live updates).
@@ -49,6 +60,12 @@ const colorFor = (text: string) =>
   CLOUD_COLORS[
     ([...text].reduce((a, c) => a + c.charCodeAt(0), 0)) % CLOUD_COLORS.length
   ];
+
+// Stable orientation per word — a deterministic ~1-in-3 are set vertical for the
+// classic mixed-orientation cloud look. Uses a different hash than colorFor so
+// colour and orientation don't correlate. The headline word stays horizontal.
+const isVertical = (text: string) =>
+  ([...text].reduce((a, c) => a + c.charCodeAt(0) * 31, 7) % 3) === 0;
 
 // Archimedean-spiral packer. Words are placed largest-first from the centre;
 // each is dropped at the first spiral position where its box clears everything
@@ -91,10 +108,15 @@ function packWords(cloud: CloudWord[]): {
   ) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
   const ASPECT = 0.6; // squash vertically → wider-than-tall cloud
-  for (const w of visible) {
+  visible.forEach((w, i) => {
     const size = sizeFor(w);
-    const boxW = Math.max(size * 0.7, w.text.length * size * 0.56) + 10;
-    const boxH = size * 1.1;
+    // The headline word (largest, index 0) always reads horizontally.
+    const vertical = i > 0 && isVertical(w.text);
+    // The word's horizontal footprint; when vertical, width/height swap.
+    const textW = Math.max(size * 0.7, w.text.length * size * 0.56) + 10;
+    const textH = size * 1.1;
+    const boxW = vertical ? textH : textW;
+    const boxH = vertical ? textW : textH;
     let bx = -boxW / 2;
     let by = -boxH / 2;
     for (let t = 0; t < 1200; t += 0.22) {
@@ -109,8 +131,15 @@ function packWords(cloud: CloudWord[]): {
       }
     }
     boxes.push({ x: bx, y: by, w: boxW, h: boxH });
-    placed.push({ w, x: bx + boxW / 2, y: by + boxH / 2, size, color: colorFor(w.text) });
-  }
+    placed.push({
+      w,
+      x: bx + boxW / 2,
+      y: by + boxH / 2,
+      size,
+      color: colorFor(w.text),
+      vertical,
+    });
+  });
 
   const minX = Math.min(...boxes.map((b) => b.x));
   const minY = Math.min(...boxes.map((b) => b.y));
@@ -161,7 +190,9 @@ export function WordCloud({
               paintOrder="stroke"
               className={`font-bold select-none ${readOnly ? "" : "cursor-pointer"}`}
               style={{
-                transform: `translate(${p.x}px, ${p.y}px)`,
+                // Rotate vertical words −90° (reads bottom-to-top); textAnchor
+                // middle + central baseline keep them pivoting about their centre.
+                transform: `translate(${p.x}px, ${p.y}px)${p.vertical ? " rotate(-90deg)" : ""}`,
                 fontSize: `${p.size}px`,
                 transition: "transform .5s ease, font-size .35s ease, opacity .2s",
                 opacity: p.w.mine && !canModerate && !readOnly ? 0.65 : 1,
