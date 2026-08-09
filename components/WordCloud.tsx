@@ -67,6 +67,12 @@ const colorFor = (text: string) =>
 const isVertical = (text: string) =>
   ([...text].reduce((a, c) => a + c.charCodeAt(0) * 31, 7) % 3) === 0;
 
+// Deterministic per-word size multiplier (~0.7–1.4). Layered on top of the
+// frequency-based size so the cloud shows varied sizes even when many words
+// share the same count — the classic mixed-size look.
+const jitterFor = (text: string) =>
+  0.72 + (([...text].reduce((a, c) => a + c.charCodeAt(0) * 17, 3)) % 100) / 100 * 0.68;
+
 // Archimedean-spiral packer. Words are placed largest-first from the centre;
 // each is dropped at the first spiral position where its box clears everything
 // already placed. Deterministic (same input → same layout), so live updates
@@ -93,8 +99,8 @@ function packWords(cloud: CloudWord[]): {
   // Downvotes shrink a word by up to 50% of its natural size (floored at the
   // minimum so it stays readable); it's outlined at render time to stay findable.
   const sizeFor = (w: CloudWord) => {
-    const nat = naturalSize(w.weight);
-    if (w.downvotes <= 0) return nat;
+    const nat = naturalSize(w.weight) * jitterFor(w.text);
+    if (w.downvotes <= 0) return Math.max(MIN_SIZE, nat);
     const net = w.count - w.downvotes;
     const factor = Math.max(0.5, Math.min(1, net / w.count));
     return Math.max(MIN_SIZE, nat * factor);
@@ -112,15 +118,17 @@ function packWords(cloud: CloudWord[]): {
     const size = sizeFor(w);
     // The headline word (largest, index 0) always reads horizontally.
     const vertical = i > 0 && isVertical(w.text);
-    // The word's horizontal footprint; when vertical, width/height swap.
-    const textW = Math.max(size * 0.7, w.text.length * size * 0.56) + 10;
-    const textH = size * 1.1;
+    // The word's horizontal footprint; when vertical, width/height swap. Boxes
+    // are a touch smaller than the glyphs so words pack densely and may kiss /
+    // slightly overlap — the classic tight word-cloud look.
+    const textW = Math.max(size * 0.6, w.text.length * size * 0.52);
+    const textH = size * 0.92;
     const boxW = vertical ? textH : textW;
     const boxH = vertical ? textW : textH;
     let bx = -boxW / 2;
     let by = -boxH / 2;
     for (let t = 0; t < 1200; t += 0.22) {
-      const r = 3.2 * t;
+      const r = 2.7 * t;
       const cx = r * Math.cos(t);
       const cy = r * Math.sin(t) * ASPECT;
       const cand = { x: cx - boxW / 2, y: cy - boxH / 2, w: boxW, h: boxH };
