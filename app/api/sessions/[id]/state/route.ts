@@ -72,6 +72,13 @@ export async function GET(
   // view (?view=public) forces the participant-facing view even for a
   // logged-in facilitator, so moderation never lands on the shared screen.
   const forcePublic = url.searchParams.get("view") === "public";
+  // The projector poll doubles as a presenter-presence heartbeat, so the
+  // console can offer its size controls only while a presenter screen is open.
+  if (forcePublic) {
+    await query(`UPDATE sessions SET presenter_seen_at = now() WHERE id = $1`, [
+      id,
+    ]);
+  }
   const facilitatorView = !forcePublic && !!(await authorizeSession(req, id));
   const [steps, participants, activities, toolsByStep, materials, files, past] =
     await Promise.all([
@@ -183,6 +190,20 @@ export async function GET(
         (session as { chat_mode?: string }).chat_mode === "open"
           ? (session as { chat_mode?: string }).chat_mode
           : "group",
+      // Presenter sizing (read by the projector, driven from the console).
+      presenterTextScale:
+        (session as { presenter_text_scale?: number }).presenter_text_scale ?? 1,
+      presenterZoomScale:
+        (session as { presenter_zoom_scale?: number }).presenter_zoom_scale ?? 1,
+      // Only the facilitator needs to know a projector is live (to reveal the
+      // size controls); recent = a public poll within the last ~7s.
+      presenterLive: facilitatorView
+        ? (() => {
+            const seen = (session as { presenter_seen_at?: string | null })
+              .presenter_seen_at;
+            return !!seen && now - new Date(seen).getTime() < 7000;
+          })()
+        : false,
     },
     activities,
     pastActivities: past,

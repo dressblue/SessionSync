@@ -287,6 +287,11 @@ export interface StatePayload {
     joinKey: string | null;
     joinKeyExpires: string | null;
     chatMode: "group" | "facilitator" | "open";
+    /** Presenter-screen sizing, driven from the console. */
+    presenterTextScale: number;
+    presenterZoomScale: number;
+    /** True (facilitator view only) while a projector screen is polling. */
+    presenterLive: boolean;
   };
   activities: ActivityState[];
   pastActivities: {

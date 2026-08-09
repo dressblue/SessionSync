@@ -22,6 +22,9 @@ export interface SessionRow {
   chat_mode: "group" | "facilitator" | "open";
   spotlight_message_id: string | null;
   spotlight_style: "banner" | "card" | null;
+  presenter_text_scale: number;
+  presenter_zoom_scale: number;
+  presenter_seen_at: string | null;
 }
 
 export type ActivityKind =

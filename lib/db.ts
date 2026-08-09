@@ -399,4 +399,20 @@ async function ensureSchema(
   await run(
     `CREATE INDEX IF NOT EXISTS idx_tool_templates_course ON tool_templates (course_id);`
   );
+
+  // Phase 17: presenter-screen sizing, driven from the facilitator console. Two
+  // independent multipliers — text_scale grows only text (applied via the root
+  // font-size, so rem-based type scales; vector/px art doesn't), zoom_scale
+  // grows EVERYTHING (CSS zoom). presenter_seen_at is the projector heartbeat:
+  // the ?view=public poll stamps it, so the console only shows the size controls
+  // while a presenter screen is actually open.
+  await run(
+    `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS presenter_text_scale REAL NOT NULL DEFAULT 1;`
+  );
+  await run(
+    `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS presenter_zoom_scale REAL NOT NULL DEFAULT 1;`
+  );
+  await run(
+    `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS presenter_seen_at TIMESTAMPTZ;`
+  );
 }

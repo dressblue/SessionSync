@@ -379,6 +379,18 @@ function Console() {
     return api(`/api/sessions/${id}/control`, "POST", { action, step });
   };
 
+  // Nudge a presenter-screen size multiplier (text-only or zoom-everything).
+  const bumpPresenter = (which: "text" | "zoom", delta: number) => {
+    const s = state?.session;
+    if (!s) return;
+    const cur = which === "text" ? s.presenterTextScale : s.presenterZoomScale;
+    const next = Math.min(3, Math.max(0.6, Math.round((cur + delta) * 20) / 20));
+    return api(`/api/sessions/${id}/control`, "POST", {
+      action: which === "text" ? "textScale" : "zoomScale",
+      scale: next,
+    });
+  };
+
   async function addStep(e: React.FormEvent) {
     e.preventDefault();
     if (!newTitle.trim()) return;
@@ -737,6 +749,145 @@ function Console() {
     live: "bg-emerald-100 text-emerald-700",
     ended: "bg-rose-100 text-rose-700",
   }[session.status];
+
+  // Presenter-screen size controls: only meaningful while a projector is open
+  // (presenterLive), so they surface only then. Two independent multipliers —
+  // Text scales rem type only; Zoom scales the whole projector.
+  const presenterSizeControls = session.presenterLive ? (
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 pt-3">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-indigo-500">
+        ▶ Presenter size
+      </span>
+      {(
+        [
+          ["Text", "text", session.presenterTextScale],
+          ["Zoom", "zoom", session.presenterZoomScale],
+        ] as const
+      ).map(([label, which, val]) => (
+        <div key={which} className="flex items-center gap-1">
+          <span className="w-9 text-xs text-slate-500">{label}</span>
+          <button
+            onClick={() => bumpPresenter(which, -0.1)}
+            disabled={val <= 0.6}
+            title={`Smaller ${label.toLowerCase()} on the presenter screen`}
+            className="h-6 w-6 rounded-md border border-slate-300 text-sm leading-none text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+          >
+            −
+          </button>
+          <span className="w-11 text-center text-xs tabular-nums text-slate-600">
+            {Math.round(val * 100)}%
+          </span>
+          <button
+            onClick={() => bumpPresenter(which, 0.1)}
+            disabled={val >= 3}
+            title={`Bigger ${label.toLowerCase()} on the presenter screen`}
+            className="h-6 w-6 rounded-md border border-slate-300 text-sm leading-none text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+          >
+            +
+          </button>
+        </div>
+      ))}
+    </div>
+  ) : null;
+
+  // Live session nav (Back / Next / Push refresh / End) + presenter size
+  // controls — passed to the console so it renders BELOW the live tool panels.
+  const liveNavSection = (
+    <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => control("prev")}
+          disabled={session.currentStep <= 0}
+          title={prevStep ? `Back to “${prevStep.title}”` : "Back"}
+          className="inline-flex min-w-0 max-w-[45%] items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100 disabled:opacity-40 transition"
+        >
+          <span className="shrink-0">←&nbsp;Back</span>
+          {prevStep && (
+            <span className="hidden truncate font-normal text-slate-400 sm:block">
+              {prevStep.title}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => control("next")}
+          disabled={session.currentStep >= steps.length - 1}
+          title={nextStep ? `Next: “${nextStep.title}”` : "Next step"}
+          className="inline-flex min-w-0 max-w-[52%] items-center gap-1.5 rounded-lg bg-indigo-600 text-white px-5 py-2 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 transition"
+        >
+          <span className="shrink-0">Next</span>
+          {nextStep && (
+            <span className="hidden truncate font-normal text-indigo-200 sm:block">
+              {nextStep.title}
+            </span>
+          )}
+          <span className="shrink-0">→</span>
+        </button>
+        <button
+          onClick={() => control("refresh")}
+          title="Force every participant screen to reload"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition"
+        >
+          ↻ Push refresh
+        </button>
+        <button
+          onClick={() => control("end")}
+          className="ml-auto rounded-lg border border-rose-300 text-rose-700 px-4 py-2 text-sm font-medium hover:bg-rose-50 transition"
+        >
+          End session
+        </button>
+      </div>
+      {presenterSizeControls}
+    </section>
+  );
+
+  // The "Now showing" step slide — passed to the console so it renders AFTER the
+  // live tool panels (and after the nav).
+  const stepSlideSection = current ? (
+    <section
+      className={
+        broadcasting
+          ? "rounded-xl border-2 border-rose-300 ring-2 ring-rose-100 bg-rose-50 shadow-sm p-5"
+          : "bg-white rounded-xl border border-slate-200 shadow-sm p-5"
+      }
+    >
+      <p
+        className={`text-xs font-semibold uppercase tracking-wide mb-1 flex items-center gap-2 ${
+          broadcasting ? "text-rose-700" : "text-slate-400"
+        }`}
+      >
+        Now showing — step {session.currentStep + 1} of {steps.length}
+        {broadcasting && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-700 px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal">
+            <span className="animate-pulse">●</span> On screen
+          </span>
+        )}
+      </p>
+      <h3 className="font-semibold">{current.title}</h3>
+      {current.tools.length > 0 && (
+        <p className="mt-1 text-xs text-slate-400">
+          {current.tools.length} tool
+          {current.tools.length === 1 ? "" : "s"} on this step — open Tools in the
+          agenda to launch, edit, or delete.
+        </p>
+      )}
+      {current.content && (
+        <div className="mt-2 max-h-48 overflow-y-auto text-sm border border-slate-100 rounded-lg p-3 bg-slate-50">
+          <Markdown>{current.content}</Markdown>
+        </div>
+      )}
+    </section>
+  ) : (
+    <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+      <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600 mb-1">
+        Session live — no step on screen
+      </p>
+      <p className="text-sm text-slate-500">
+        {steps.length === 0
+          ? "Add an agenda step in the left column to display it."
+          : "Participants are in a holding view. Click Show on any agenda step to bring it up."}
+      </p>
+    </section>
+  );
 
   return (
     <div className="flex-1 min-h-screen">
@@ -1830,119 +1981,9 @@ function Console() {
               </div>
             </section>
           )}
-          <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-            <div className="flex flex-wrap items-center gap-2">
-              {session.status !== "live" ? (
-                <button
-                  onClick={() => control("start")}
-                  disabled={steps.length === 0}
-                  className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-semibold hover:bg-emerald-700 disabled:opacity-40 transition"
-                >
-                  {session.status === "ended" ? "Restart session" : "Start session"}
-                </button>
-              ) : (
-                <>
-                  <button
-                    onClick={() => control("prev")}
-                    disabled={session.currentStep <= 0}
-                    title={prevStep ? `Back to “${prevStep.title}”` : "Back"}
-                    className="inline-flex min-w-0 max-w-[45%] items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100 disabled:opacity-40 transition"
-                  >
-                    <span className="shrink-0">←&nbsp;Back</span>
-                    {prevStep && (
-                      <span className="hidden truncate font-normal text-slate-400 sm:block">
-                        {prevStep.title}
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => control("next")}
-                    disabled={session.currentStep >= steps.length - 1}
-                    title={nextStep ? `Next: “${nextStep.title}”` : "Next step"}
-                    className="inline-flex min-w-0 max-w-[52%] items-center gap-1.5 rounded-lg bg-indigo-600 text-white px-5 py-2 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 transition"
-                  >
-                    <span className="shrink-0">Next</span>
-                    {nextStep && (
-                      <span className="hidden truncate font-normal text-indigo-200 sm:block">
-                        {nextStep.title}
-                      </span>
-                    )}
-                    <span className="shrink-0">→</span>
-                  </button>
-                  <button
-                    onClick={() => control("refresh")}
-                    title="Force every participant screen to reload"
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition"
-                  >
-                    ↻ Push refresh
-                  </button>
-                  <button
-                    onClick={() => control("end")}
-                    className="ml-auto rounded-lg border border-rose-300 text-rose-700 px-4 py-2 text-sm font-medium hover:bg-rose-50 transition"
-                  >
-                    End session
-                  </button>
-                </>
-              )}
-            </div>
-
-            {session.status === "live" && current && (
-              <div
-                className={
-                  broadcasting
-                    ? "mt-4 rounded-lg border border-rose-300 ring-2 ring-rose-200 bg-rose-50 p-4"
-                    : "mt-4 border-t border-slate-100 pt-4"
-                }
-              >
-                <p
-                  className={`text-xs font-semibold uppercase tracking-wide mb-1 flex items-center gap-2 ${
-                    broadcasting ? "text-rose-700" : "text-slate-400"
-                  }`}
-                >
-                  Now showing — step {session.currentStep + 1} of {steps.length}
-                  {broadcasting && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-700 px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal">
-                      <span className="animate-pulse">●</span> On screen
-                    </span>
-                  )}
-                </p>
-                <h3 className="font-semibold">{current.title}</h3>
-                {current.tools.length > 0 && (
-                  <p className="mt-1 text-xs text-slate-400">
-                    {current.tools.length} tool
-                    {current.tools.length === 1 ? "" : "s"} on this step — open
-                    Tools in the agenda to launch, edit, or delete.
-                  </p>
-                )}
-                {current.content && (
-                  <div className="mt-2 max-h-48 overflow-y-auto text-sm border border-slate-100 rounded-lg p-3 bg-slate-50">
-                    <Markdown>{current.content}</Markdown>
-                  </div>
-                )}
-              </div>
-            )}
-            {session.status === "live" && !current && (
-              <div className="mt-4 border-t border-slate-100 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600 mb-1">
-                  Session live — no step on screen
-                </p>
-                <p className="text-sm text-slate-500">
-                  {steps.length === 0
-                    ? "Add an agenda step in the left column to display it."
-                    : "Participants are in a holding view. Click Show on any agenda step to bring it up."}
-                </p>
-              </div>
-            )}
-            {session.status === "lobby" && (
-              <p className="mt-3 text-sm text-slate-500">
-                {steps.length === 0
-                  ? "Add at least one agenda step in the left column, then start the session."
-                  : `${steps.length} step${steps.length === 1 ? "" : "s"} ready. Participants see a waiting screen until you start.`}
-              </p>
-            )}
-          </section>
-
-          {session.status === "live" && (
+          {session.status === "live" ? (
+            // Live tools sit at the very top; the console renders the nav bar and
+            // the step slide (passed as slots) below them, then the Push form.
             <ActivityConsole
               sessionId={id}
               authHeaders={{}}
@@ -1954,8 +1995,29 @@ function Console() {
               roster={participants}
               activeStepId={saveToStepTarget?.id ?? null}
               activeStepTitle={saveToStepTarget?.title}
+              navSlot={liveNavSection}
+              stepSlot={stepSlideSection}
               onChanged={refresh}
             />
+          ) : (
+            <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => control("start")}
+                  disabled={steps.length === 0}
+                  className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-semibold hover:bg-emerald-700 disabled:opacity-40 transition"
+                >
+                  {session.status === "ended" ? "Restart session" : "Start session"}
+                </button>
+              </div>
+              {session.status === "lobby" && (
+                <p className="mt-3 text-sm text-slate-500">
+                  {steps.length === 0
+                    ? "Add at least one agenda step in the left column, then start the session."
+                    : `${steps.length} step${steps.length === 1 ? "" : "s"} ready. Participants see a waiting screen until you start.`}
+                </p>
+              )}
+            </section>
           )}
         </div>
       </div>

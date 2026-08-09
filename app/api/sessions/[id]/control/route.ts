@@ -25,6 +25,17 @@ export async function POST(
     return NextResponse.json({ ok: true });
   }
 
+  // Presenter-screen sizing: two independent multipliers set from the console.
+  // Clamped to a sane projector range so a stray value can't wreck the screen.
+  if (action === "textScale" || action === "zoomScale") {
+    const raw = Number(body?.scale);
+    const scale = Math.min(3, Math.max(0.6, Number.isFinite(raw) ? raw : 1));
+    const col =
+      action === "textScale" ? "presenter_text_scale" : "presenter_zoom_scale";
+    await query(`UPDATE sessions SET ${col} = $1 WHERE id = $2`, [scale, id]);
+    return NextResponse.json({ ok: true, scale });
+  }
+
   const steps = await getSteps(id);
   const maxIdx = Math.max(0, steps.length - 1);
   const clamp = (n: number) => Math.min(maxIdx, Math.max(0, n));

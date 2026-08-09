@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type {
   ActivityState,
   RosterEntry,
@@ -31,6 +31,10 @@ interface Props {
   /** The live/active agenda step — enables saving the activity as a step tool. */
   activeStepId?: string | null;
   activeStepTitle?: string;
+  /** Rendered between the live tool panels and the Push-activity form: the
+   *  session nav bar and the "Now showing" step slide, in that order. */
+  navSlot?: ReactNode;
+  stepSlot?: ReactNode;
   onChanged: () => void;
 }
 
@@ -92,6 +96,8 @@ export function ActivityConsole({
   roster,
   activeStepId,
   activeStepTitle,
+  navSlot,
+  stepSlot,
   onChanged,
 }: Props) {
   const [kind, setKind] = useState<Kind>("vote");
@@ -281,6 +287,8 @@ export function ActivityConsole({
             : (activity.options ?? activity.items ?? []);
     const words = [...new Set(raw.map((w) => w.trim()).filter(Boolean))];
     resetForm();
+    // Remember the source so pushing the new tool retires it (save & close).
+    reuseSourceId.current = activity.id;
     setKind(target);
     setPrompt(activity.prompt ?? "");
     if (target === "wordcloud") {
@@ -311,7 +319,14 @@ export function ActivityConsole({
       "POST",
       buildBody()
     );
-    if (ok) resetForm();
+    if (ok) {
+      // If this push came from a "Reuse words →" action, retire its source now
+      // that the new tool is live (it lands at the top of the live panels).
+      const src = reuseSourceId.current;
+      reuseSourceId.current = null;
+      if (src) await saveAndCloseSource(src);
+      resetForm();
+    }
   }
 
   // Save the configured activity as a reusable tool on the active agenda step.
@@ -335,6 +350,33 @@ export function ActivityConsole({
       { fromActivityId: activityId }
     );
     if (ok) setSavedToStepIds((s) => new Set(s).add(activityId));
+  }
+
+  // The activity a reuse/convert action sprang from — carried through the
+  // populate-then-push flow so we can retire it once the new tool is live.
+  const reuseSourceId = useRef<string | null>(null);
+
+  // Retire the source of a reuse: save it to the active step (best effort — only
+  // if a step is live) and close it, so the freshly-created tool stands alone at
+  // the top of the live panels.
+  async function saveAndCloseSource(sourceId: string) {
+    if (activeStepId) await saveLiveToStep(sourceId);
+    await call(
+      `/api/sessions/${sessionId}/activities/${sourceId}`,
+      "PATCH",
+      { status: "closed" }
+    );
+  }
+
+  // Immediately convert a source activity into a new `kind` tool, then retire the
+  // source. Used by the ↻ To vote / ↻ To scoring buttons.
+  async function convertAndClose(source: ActivityState, target: Kind) {
+    const ok = await call(`/api/sessions/${sessionId}/activities`, "POST", {
+      kind: target,
+      prompt: source.prompt,
+      fromActivityId: source.id,
+    });
+    if (ok) await saveAndCloseSource(source.id);
   }
 
   const segBtn = (active: boolean) =>
@@ -395,15 +437,9 @@ export function ActivityConsole({
             activity.kind !== "wordcloud" &&
             !(activity.kind === "vote" && activity.phase !== "collect") && (
               <button
-                onClick={() =>
-                  call(`/api/sessions/${sessionId}/activities`, "POST", {
-                    kind: "vote",
-                    prompt: activity.prompt,
-                    fromActivityId: activity.id,
-                  })
-                }
+                onClick={() => convertAndClose(activity, "vote")}
                 disabled={busy}
-                title="Turn this activity's content into vote options"
+                title="Turn this into a new vote — the new tool opens on top and this one is saved & closed"
                 className="rounded-lg border border-indigo-300 text-indigo-700 px-3 py-1.5 text-xs font-medium hover:bg-indigo-50 disabled:opacity-40"
               >
                 ↻ To vote
@@ -413,15 +449,9 @@ export function ActivityConsole({
             activity.kind !== "exhibit" &&
             !(activity.kind === "likert" && activity.phase !== "collect") && (
               <button
-                onClick={() =>
-                  call(`/api/sessions/${sessionId}/activities`, "POST", {
-                    kind: "likert",
-                    prompt: activity.prompt,
-                    fromActivityId: activity.id,
-                  })
-                }
+                onClick={() => convertAndClose(activity, "likert")}
                 disabled={busy}
-                title="Turn this activity's content into items to score 1–5"
+                title="Turn this into a new scoring survey — the new tool opens on top and this one is saved & closed"
                 className="rounded-lg border border-indigo-300 text-indigo-700 px-3 py-1.5 text-xs font-medium hover:bg-indigo-50 disabled:opacity-40"
               >
                 ↻ To scoring
@@ -516,7 +546,9 @@ export function ActivityConsole({
 
   return (
     <>
-      {activities.map(liveCard)}
+      {/* Live tool panels sit at the very top; the newest is #1 so a reused /
+          converted tool lands on top. */}
+      {[...activities].reverse().map(liveCard)}
       {activities.length > 0 && (
         <p className="text-xs text-slate-400 -my-3 px-1">
           You participate like a student — vote, comment, rate, draw. ★ chips
@@ -526,6 +558,11 @@ export function ActivityConsole({
           keeps everything for the session report.
         </p>
       )}
+
+      {/* Session nav bar + the "Now showing" step slide, in that order — below
+          the live tools, above the Push-activity form. */}
+      {navSlot}
+      {stepSlot}
 
       {activities.length < 2 && (
         <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">

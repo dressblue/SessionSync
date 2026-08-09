@@ -29,6 +29,18 @@ function Presenter() {
     else if (e > epochRef.current) window.location.reload();
   }, [state]);
 
+  // Text-size control (from the console): scale the ROOT font-size so every
+  // rem-based size on the projector grows/shrinks, without touching px/vector
+  // art (whiteboard) or the % layout. Zoom (below) is the scale-everything lever.
+  const textScale = state?.session?.presenterTextScale ?? 1;
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.fontSize = `${16 * textScale}px`;
+    return () => {
+      root.style.fontSize = "";
+    };
+  }, [textScale]);
+
   useEffect(() => {
     const onChange = () => setFs(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onChange);
@@ -112,16 +124,19 @@ function Presenter() {
       </div>
     );
   } else if (activities.length > 0) {
-    // Live activity/activities — the room watches these fill in.
+    // Live activity/activities — the room watches these fill in. Uses ~90% of the
+    // width and stretches tall so a single tool fills the projector: the grid
+    // grows to fill the column and each panel fills its cell.
+    const single = activities.length === 1;
     body = (
-      <div className="flex-1 overflow-y-auto w-[80%] max-w-[1800px] mx-auto px-6 py-8">
+      <div className="flex-1 flex flex-col overflow-y-auto w-[90%] max-w-[2200px] mx-auto px-6 py-8">
         {current && (
-          <p className="text-xl font-semibold uppercase tracking-wide text-indigo-500 mb-5 text-center">
+          <p className="text-xl font-semibold uppercase tracking-wide text-indigo-500 mb-5 text-center shrink-0">
             {current.title}
           </p>
         )}
         <div
-          className={`grid gap-8 items-start [&>*]:min-w-0 ${activities.length > 1 ? "xl:grid-cols-2" : ""}`}
+          className={`grid flex-1 min-h-[72vh] gap-8 items-stretch [&>*]:min-w-0 [&>*]:flex [&>*]:flex-col [&>*>*]:flex-1 ${single ? "" : "xl:grid-cols-2"}`}
         >
           {activities.map((a) => (
             <ActivityPanel
@@ -139,7 +154,7 @@ function Presenter() {
   } else if (current) {
     // The current "slide" — step title + content, large for across-the-room.
     body = (
-      <div className="flex-1 overflow-y-auto w-[80%] max-w-[1600px] mx-auto px-6 py-12">
+      <div className="flex-1 overflow-y-auto w-[90%] max-w-[2000px] mx-auto px-6 py-12">
         <h2 className="text-5xl font-bold text-slate-900 mb-8 leading-tight">
           {current.title}
         </h2>
@@ -160,8 +175,14 @@ function Presenter() {
     );
   }
 
+  // Zoom control (from the console): scale the WHOLE projector uniformly —
+  // text, shapes, whiteboard, charts — via CSS zoom. Independent of textScale.
+  const zoomScale = session.presenterZoomScale ?? 1;
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div
+      className="min-h-screen flex flex-col bg-white"
+      style={zoomScale !== 1 ? { zoom: zoomScale } : undefined}
+    >
       {brandBar}
       {spotlight && spotlight.style === "banner" && (
         <SpotlightBanner spotlight={spotlight} />
