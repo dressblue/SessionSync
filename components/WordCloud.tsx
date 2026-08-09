@@ -55,11 +55,14 @@ interface Placed {
   vertical: boolean;
 }
 
-// Stable color per word (so a word keeps its colour across live updates).
-const colorFor = (text: string) =>
-  CLOUD_COLORS[
-    ([...text].reduce((a, c) => a + c.charCodeAt(0), 0)) % CLOUD_COLORS.length
-  ];
+// Stable color per word (so a word keeps its colour across live updates). Uses a
+// djb2 hash — a plain char-code sum clusters badly (short/similar words collide
+// onto the same few hues), making the palette look far smaller than it is.
+const colorFor = (text: string) => {
+  let h = 5381;
+  for (const c of text) h = ((h << 5) + h + c.charCodeAt(0)) >>> 0;
+  return CLOUD_COLORS[h % CLOUD_COLORS.length];
+};
 
 // Stable orientation per word — a deterministic ~1-in-3 are set vertical for the
 // classic mixed-orientation cloud look. Uses a different hash than colorFor so
