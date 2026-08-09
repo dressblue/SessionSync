@@ -77,5 +77,17 @@ export async function POST(
     `UPDATE sessions SET status = $1, current_step = $2 WHERE id = $3`,
     [status, current, id]
   );
+  // Ending a session drops every PARTICIPANT (their app falls to the "session
+  // ended" screen and their seat leaves the roster). Facilitator seats
+  // (facilitator_id set) are spared, so the console keeps working and a restart
+  // never locks the facilitator out. A restart leaves them removed — participants
+  // rejoin fresh (rejoining by name/link clears removed_at).
+  if (action === "end") {
+    await query(
+      `UPDATE participants SET removed_at = now()
+         WHERE session_id = $1 AND facilitator_id IS NULL AND removed_at IS NULL`,
+      [id]
+    );
+  }
   return NextResponse.json({ status, currentStep: current });
 }
