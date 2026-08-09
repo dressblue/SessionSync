@@ -151,6 +151,7 @@ export interface ActivityState {
   }[];
   seedTotal?: number;
   seedHidden?: number;
+  shuffle?: number;
   scale?: number;
   items?: string[];
   ratings?: {

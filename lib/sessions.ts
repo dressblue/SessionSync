@@ -199,6 +199,7 @@ export interface ActivityPayload {
   }[];
   seedTotal?: number; // facilitator seed words on this cloud
   seedHidden?: number; // …of which still hidden (awaiting reveal)
+  shuffle?: number; // facilitator-bumped layout seed (re-shuffle control)
   // likert
   phase?: "collect" | "rate";
   scale?: number;
@@ -700,6 +701,8 @@ export interface ActivityConfig {
   startId?: string;
   history?: string[];
   showMap?: boolean;
+  // wordcloud — facilitator-bumped layout seed (re-shuffle control)
+  shuffle?: number;
 }
 
 export function parseActivityConfig(activity: ActivityRow): ActivityConfig {
@@ -1293,6 +1296,8 @@ export function buildActivityPayload(
     const seedRows = subs.filter((r) => r.participant_id == null);
     payload.seedTotal = seedRows.length;
     payload.seedHidden = seedRows.filter((r) => r.hidden).length;
+    // Facilitator-bumped layout seed (re-shuffle control).
+    payload.shuffle = typeof config.shuffle === "number" ? config.shuffle : 0;
     // Keep entries (visible submissions) for the close-out report.
     payload.entries = entriesFrom(subs);
     payload.responders = respondersFrom(subs);

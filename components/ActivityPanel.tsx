@@ -808,10 +808,23 @@ export function ActivityPanel({
           canModerate={canModerate}
           readOnly={!participantId && !canModerate}
           present={presentation}
+          shuffle={activity.shuffle}
           onDownvote={(word) => send({ value: word, action: "downvote" })}
           onHide={toggleWord}
           onClearDownvotes={(word) => send({ value: word, action: "clearDownvotes" })}
         />
+        {canModerate && (cloud?.length ?? 0) > 1 && (
+          <div className="mt-3">
+            <button
+              onClick={() => manage({ shuffle: true })}
+              disabled={busy}
+              title="Re-arrange the words so participants re-read the whole set"
+              className="rounded-lg border border-indigo-300 text-indigo-700 px-3 py-1.5 text-sm font-medium hover:bg-indigo-50 disabled:opacity-50"
+            >
+              🔀 Shuffle layout
+            </button>
+          </div>
+        )}
         {canModerate && (activity.seedTotal ?? 0) > 0 && (
           <div className="mt-3">
             {(activity.seedHidden ?? 0) > 0 ? (

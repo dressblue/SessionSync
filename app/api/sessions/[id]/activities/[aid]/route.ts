@@ -52,6 +52,32 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ ok: true });
   }
 
+  // Re-shuffle a word cloud's layout: bump a seed in its config so every viewer
+  // re-lays-out and participants re-scan the whole set of words.
+  if (body?.shuffle === true) {
+    const res = await query<ActivityRow>(
+      `SELECT * FROM activities WHERE id = $1 AND session_id = $2`,
+      [aid, id]
+    );
+    const activity = res.rows[0];
+    if (!activity) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    let config: Record<string, unknown> = {};
+    try {
+      config = JSON.parse(activity.config);
+    } catch {
+      /* empty */
+    }
+    const next =
+      (typeof config.shuffle === "number" ? config.shuffle : 0) + 1;
+    await query(
+      `UPDATE activities SET config = $1 WHERE id = $2 AND session_id = $3`,
+      [JSON.stringify({ ...config, shuffle: next }), aid, id]
+    );
+    return NextResponse.json({ ok: true, shuffle: next });
+  }
+
   // Timer transport: start/pause/reset/add against the countdown anchor.
   if (body?.timer && typeof body.timer === "object") {
     const res = await query<ActivityRow>(

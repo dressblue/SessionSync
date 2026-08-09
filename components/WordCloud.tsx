@@ -24,6 +24,8 @@ interface Props {
   readOnly?: boolean;
   /** Projector mode — fill the screen for across-the-room viewing. */
   present?: boolean;
+  /** Facilitator-bumped seed — changing it re-lays-out the cloud (re-scan). */
+  shuffle?: number;
 }
 
 interface Placed {
@@ -57,11 +59,26 @@ const isVertical = (text: string) =>
 const jitterFor = (text: string) =>
   0.72 + (([...text].reduce((a, c) => a + c.charCodeAt(0) * 17, 3)) % 100) / 100 * 0.68;
 
+// Tiny seeded PRNG (mulberry32) — drives the facilitator "re-shuffle" so the
+// same seed always yields the same layout for every viewer.
+function mulberry32(a: number) {
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 // Archimedean-spiral packer. Words are placed largest-first from the centre;
 // each is dropped at the first spiral position where its box clears everything
-// already placed. Deterministic (same input → same layout), so live updates
-// animate smoothly via CSS transitions rather than reshuffling.
-function packWords(cloud: CloudWord[]): {
+// already placed. Deterministic per (input, seed) — a facilitator bumping the
+// shuffle `seed` re-lays-out the whole cloud so participants re-scan every word.
+function packWords(
+  cloud: CloudWord[],
+  seed = 0
+): {
   placed: Placed[];
   vb: { x: number; y: number; w: number; h: number };
 } {
@@ -72,6 +89,25 @@ function packWords(cloud: CloudWord[]): {
   if (visible.length === 0) {
     return { placed: [], vb: { x: 0, y: 0, w: 100, h: 60 } };
   }
+  const rng = mulberry32(((seed + 1) * 2654435761) >>> 0);
+  // Colours are golden-angle by ALPHABETICAL rank — spread across the spectrum
+  // AND stable per word, so a re-shuffle moves positions without changing colours.
+  const colorRank = new Map<string, number>();
+  [...visible]
+    .sort((a, b) => a.text.localeCompare(b.text))
+    .forEach((w, i) => colorRank.set(w.text, i));
+  // Placement order: weight-sorted, but a shuffle seed re-orders all-but-the
+  // headline so the arrangement changes; a global spiral phase rotates it too.
+  let order = visible;
+  if (seed) {
+    const rest = visible.slice(1);
+    for (let i = rest.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [rest[i], rest[j]] = [rest[j], rest[i]];
+    }
+    order = [visible[0], ...rest];
+  }
+  const phase = seed ? rng() * Math.PI * 2 : 0;
   const maxW = Math.max(...visible.map((w) => w.weight));
   const minW = Math.min(...visible.map((w) => w.weight));
   const MIN_SIZE = 22;
@@ -98,7 +134,7 @@ function packWords(cloud: CloudWord[]): {
   ) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
   const ASPECT = 0.6; // squash vertically → wider-than-tall cloud
-  visible.forEach((w, i) => {
+  order.forEach((w, i) => {
     const size = sizeFor(w);
     // The headline word (largest, index 0) always reads horizontally.
     const vertical = i > 0 && isVertical(w.text);
@@ -113,8 +149,8 @@ function packWords(cloud: CloudWord[]): {
     let by = -boxH / 2;
     for (let t = 0; t < 1200; t += 0.22) {
       const r = 2.7 * t;
-      const cx = r * Math.cos(t);
-      const cy = r * Math.sin(t) * ASPECT;
+      const cx = r * Math.cos(t + phase);
+      const cy = r * Math.sin(t + phase) * ASPECT;
       const cand = { x: cx - boxW / 2, y: cy - boxH / 2, w: boxW, h: boxH };
       if (!boxes.some((b) => overlaps(cand, b))) {
         bx = cand.x;
@@ -128,7 +164,7 @@ function packWords(cloud: CloudWord[]): {
       x: bx + boxW / 2,
       y: by + boxH / 2,
       size,
-      color: colorForIndex(i),
+      color: colorForIndex(colorRank.get(w.text) ?? i),
       vertical,
     });
   });
@@ -152,8 +188,9 @@ export function WordCloud({
   onClearDownvotes,
   readOnly = false,
   present = false,
+  shuffle = 0,
 }: Props) {
-  const { placed, vb } = useMemo(() => packWords(cloud), [cloud]);
+  const { placed, vb } = useMemo(() => packWords(cloud, shuffle), [cloud, shuffle]);
   const hidden = cloud.filter((w) => w.hidden || w.weight <= 0);
 
   return (
