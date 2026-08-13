@@ -122,8 +122,20 @@ function multiText(
     .join("");
 }
 
-// Render one element to an SVG fragment string (VIEW_W×VIEW_H coordinate space).
+// Render one element to an SVG fragment string, then rotate it about its box
+// center if `rot` is set (pen strokes and connectors aren't box-anchored, so
+// they're left unrotated).
 export function elementToSvg(el: Stroke, byId: Map<string, Stroke>): string {
+  const raw = elementToSvgRaw(el, byId);
+  if (!el.rot || !el.k || el.k === "conn") return raw;
+  const b = boxOf(el);
+  const cx = (b.x + b.bw / 2) * VIEW_W;
+  const cy = (b.y + b.bh / 2) * VIEW_H;
+  return `<g transform="rotate(${el.rot.toFixed(1)} ${cx.toFixed(1)} ${cy.toFixed(1)})">${raw}</g>`;
+}
+
+// Render one element to an SVG fragment string (VIEW_W×VIEW_H coordinate space).
+function elementToSvgRaw(el: Stroke, byId: Map<string, Stroke>): string {
   const W = VIEW_W;
   const H = VIEW_H;
   const stroke = el.c ?? "#0f172a";

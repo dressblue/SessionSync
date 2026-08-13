@@ -12,8 +12,16 @@ import {
   resolveEnd,
 } from "@/lib/whiteboard";
 
-const COLORS = ["#0f172a", "#e11d48", "#4f46e5", "#059669", "#d97706", "#ffffff"];
-const FILLS = [null, "#dbeafe", "#dcfce7", "#fee2e2", "#fef9c3", "#e5e7eb", "#0f172a"] as const;
+const COLORS = [
+  "#0f172a", "#64748b", "#ffffff", "#e11d48", "#f97316", "#f59e0b",
+  "#eab308", "#84cc16", "#22c55e", "#059669", "#14b8a6", "#06b6d4",
+  "#3b82f6", "#4f46e5", "#8b5cf6", "#d946ef", "#ec4899", "#78350f",
+];
+const FILLS: (string | null)[] = [
+  null, "#ffffff", "#0f172a", "#fecaca", "#fed7aa", "#fef08a",
+  "#d9f99d", "#bbf7d0", "#a7f3d0", "#a5f3fc", "#bfdbfe", "#c7d2fe",
+  "#ddd6fe", "#f5d0fe", "#fbcfe8", "#e5e7eb", "#fca5a5", "#fdba74",
+];
 const WIDTHS = [2, 4, 7];
 const STAMP_GROUPS: { label: string; items: string[] }[] = [
   { label: "People", items: ["🙂", "😀", "🧍", "🧍‍♀️", "👥", "👨‍👩‍👧", "🧑‍🏫", "🧑‍💼", "👷", "👮", "🧑‍⚕️", "🙋", "👶", "🧑‍🍳", "🕺", "🧑‍🌾"] },
@@ -159,6 +167,7 @@ export function Whiteboard({
     | { mode: "move"; ids: { id: string; ox: number; oy: number }[]; sx: number; sy: number }
     | { mode: "resize"; id: string; ax: number; ay: number } // box corner: opposite corner fixed
     | { mode: "endpoint"; id: string; fx: number; fy: number; moving: "a" | "b" } // line endpoint
+    | { mode: "rotate"; id: string; cx: number; cy: number } // spin about box center
     | null
   >(null);
   const erasing = useRef(false);
@@ -175,6 +184,13 @@ export function Whiteboard({
   const isSel = (id: string) => selectedIds.has(id);
   // The single selected element (only when exactly one) — drives handles/font.
   const selected = selectedIds.size === 1 ? byId.get([...selectedIds][0]) : undefined;
+  // Apply an appearance change (color, fill…) to the currently-selected element,
+  // optimistically, so the palette also recolours a placed object.
+  const applyToSelected = (patch: Record<string, unknown>) => {
+    if (!selected) return;
+    setPending((p) => ({ ...p, [selected.id]: { ...p[selected.id], ...patch } }));
+    onElementUpdate({ id: selected.id, ...patch });
+  };
   const interactive = canDraw;
 
   // Selecting an element selects its whole group; shift toggles it in/out.
@@ -452,6 +468,16 @@ export function Whiteboard({
       const a = d.moving === "a" ? pt : [d.fx, d.fy];
       const b = d.moving === "b" ? pt : [d.fx, d.fy];
       setPending((p) => ({ ...p, [d.id]: { ...p[d.id], x: a[0], y: a[1], bw: b[0] - a[0], bh: b[1] - a[1] } }));
+      return;
+    }
+    if (drag.current?.mode === "rotate") {
+      const pt = toPoint(e);
+      const d = drag.current;
+      // Handle sits above the box, so straight-up = 0°. Shift-free snap to 15°.
+      let deg = (Math.atan2(pt[1] - d.cy, pt[0] - d.cx) * 180) / Math.PI + 90;
+      if (e.shiftKey) deg = Math.round(deg / 15) * 15;
+      const rot = ((Math.round(deg) % 360) + 360) % 360;
+      setPending((p) => ({ ...p, [d.id]: { ...p[d.id], rot } }));
       return;
     }
     // Idle hover in select mode → outline the object under the cursor so it's
@@ -750,33 +776,75 @@ export function Whiteboard({
 
           <div className="flex flex-wrap items-center gap-2">
             {/* stroke color */}
-            <div className="flex items-center gap-1">
+            <div className="flex max-w-[220px] items-center gap-1 overflow-x-auto">
               {COLORS.map((c) => (
                 <button
                   key={c}
                   type="button"
-                  onClick={() => setColor(c)}
-                  className={`h-6 w-6 rounded-full border-2 shadow ${color === c ? "border-indigo-500 scale-110" : "border-white"}`}
+                  onClick={() => {
+                    setColor(c);
+                    applyToSelected({ c });
+                  }}
+                  className={`h-6 w-6 shrink-0 rounded-full border-2 shadow ${color === c ? "border-indigo-500 scale-110" : "border-white"}`}
                   style={{ backgroundColor: c }}
                   title={`Line ${c}`}
                 />
               ))}
+              <label
+                className="relative h-6 w-6 shrink-0 cursor-pointer rounded-full border-2 border-white shadow"
+                title="Custom line color"
+                style={{
+                  background:
+                    "conic-gradient(red,orange,yellow,lime,cyan,blue,magenta,red)",
+                }}
+              >
+                <input
+                  type="color"
+                  value={color}
+                  onChange={(e) => {
+                    setColor(e.target.value);
+                    applyToSelected({ c: e.target.value });
+                  }}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
+              </label>
             </div>
             {/* fill */}
-            <div className="ml-1 flex items-center gap-1">
-              <span className="text-[10px] uppercase text-slate-400">fill</span>
+            <div className="ml-1 flex max-w-[240px] items-center gap-1 overflow-x-auto">
+              <span className="shrink-0 text-[10px] uppercase text-slate-400">fill</span>
               {FILLS.map((f, i) => (
                 <button
                   key={i}
                   type="button"
-                  onClick={() => setFill(f)}
-                  className={`h-6 w-6 rounded-md border-2 ${fill === f ? "border-indigo-500" : "border-slate-200"} ${f === null ? "bg-white" : ""}`}
+                  onClick={() => {
+                    setFill(f);
+                    applyToSelected({ f: f ?? null });
+                  }}
+                  className={`h-6 w-6 shrink-0 rounded-md border-2 ${fill === f ? "border-indigo-500" : "border-slate-200"} ${f === null ? "bg-white" : ""}`}
                   style={f ? { backgroundColor: f } : undefined}
                   title={f === null ? "No fill" : `Fill ${f}`}
                 >
                   {f === null ? <span className="text-rose-400">∅</span> : null}
                 </button>
               ))}
+              <label
+                className="relative h-6 w-6 shrink-0 cursor-pointer rounded-md border-2 border-slate-200"
+                title="Custom fill color"
+                style={{
+                  background:
+                    "conic-gradient(red,orange,yellow,lime,cyan,blue,magenta,red)",
+                }}
+              >
+                <input
+                  type="color"
+                  value={fill ?? "#ffffff"}
+                  onChange={(e) => {
+                    setFill(e.target.value);
+                    applyToSelected({ f: e.target.value });
+                  }}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
+              </label>
             </div>
             {/* width */}
             <div className="ml-1 flex items-center gap-1">
@@ -1013,12 +1081,46 @@ export function Whiteboard({
                 );
               }
               const b = boxOf(selected);
+              const cxN = b.x + b.bw / 2;
+              const cyN = b.y + b.bh / 2;
+              const rotY = b.y - 0.06; // rotation handle sits above the box
               return (
                 <g>
                   {handle(b.x, b.y, { mode: "resize", id, ax: b.x + b.bw, ay: b.y + b.bh }, "tl")}
                   {handle(b.x + b.bw, b.y, { mode: "resize", id, ax: b.x, ay: b.y + b.bh }, "tr")}
                   {handle(b.x, b.y + b.bh, { mode: "resize", id, ax: b.x + b.bw, ay: b.y }, "bl")}
                   {handle(b.x + b.bw, b.y + b.bh, { mode: "resize", id, ax: b.x, ay: b.y }, "br")}
+                  {/* rotation handle + tether */}
+                  <line
+                    x1={cxN * VIEW_W}
+                    y1={b.y * VIEW_H}
+                    x2={cxN * VIEW_W}
+                    y2={rotY * VIEW_H}
+                    stroke="#6366f1"
+                    strokeWidth={1.5}
+                  />
+                  <circle
+                    cx={cxN * VIEW_W}
+                    cy={rotY * VIEW_H}
+                    r={7}
+                    fill="#fff"
+                    stroke="#6366f1"
+                    strokeWidth={2}
+                    style={{ cursor: "grab" }}
+                    onPointerDown={(e) =>
+                      startHandle(e, { mode: "rotate", id, cx: cxN, cy: cyN })
+                    }
+                  />
+                  <text
+                    x={cxN * VIEW_W}
+                    y={rotY * VIEW_H + 3.5}
+                    textAnchor="middle"
+                    fontSize={9}
+                    fill="#6366f1"
+                    style={{ pointerEvents: "none" }}
+                  >
+                    ⟳
+                  </text>
                 </g>
               );
             })()}
