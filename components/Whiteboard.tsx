@@ -13,6 +13,7 @@ import {
 } from "@/lib/whiteboard";
 import { ART_GROUPS } from "@/lib/artPieces";
 import { FACE_PIECE_GROUPS } from "@/lib/facePieceAssets";
+import { CARTOON_PIECE_GROUPS } from "@/lib/cartoonPieceAssets";
 
 const COLORS = [
   "#0f172a", "#64748b", "#ffffff", "#e11d48", "#f97316", "#f59e0b",
@@ -399,6 +400,7 @@ export function Whiteboard({
 
   const [uploading, setUploading] = useState(false);
   const [partsOpen, setPartsOpen] = useState(false);
+  const [cartoonOpen, setCartoonOpen] = useState(false);
   // Place a hosted image at true aspect ratio (used by paste/drop and the
   // AI face-part picker).
   async function placeImageUrl(url: string, w = 0.24) {
@@ -1023,54 +1025,39 @@ export function Whiteboard({
             </div>
             {/* (The old vector "Face ▾" art picker was removed — the AI Face kit
                 below supersedes it.) */}
-            {/* AI face-part pieces (hand-drawn eyes etc., placed as images) */}
-            <div className="relative">
-              <button
-                type="button"
-                title="Drop a hand-drawn face part (eyes…)"
-                onClick={() => {
-                  setPartsOpen((v) => !v);
-                  setStampOpen(false);
-                  setShapeMenu(false);
-                }}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm leading-none hover:bg-slate-50"
-              >
-                🧑 Face kit ▾
-              </button>
-              {partsOpen && (
-                <div className="absolute z-10 mt-1 max-h-80 w-72 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
-                  {FACE_PIECE_GROUPS.map((g) => (
-                    <div key={g.label} className="mb-1">
-                      <p className="px-1 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                        {g.label}
-                      </p>
-                      <div className="grid grid-cols-4 gap-1">
-                        {g.items.map((piece) => (
-                          <button
-                            key={piece.id}
-                            type="button"
-                            title={piece.label}
-                            onClick={() => {
-                              setPartsOpen(false);
-                              placeImageUrl(piece.url);
-                            }}
-                            className="flex aspect-square items-center justify-center rounded border border-slate-100 bg-white p-0.5 hover:bg-slate-50"
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={piece.url}
-                              alt={piece.label}
-                              className="max-h-full max-w-full object-contain"
-                              loading="lazy"
-                            />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Two AI face-part kits (placed as images): realistic pencil "Face
+                kit" and a bold "Cartoon kit". Build two faces — one you show,
+                one as you see yourself. */}
+            <KitPicker
+              label="🧑 Face kit"
+              groups={FACE_PIECE_GROUPS}
+              open={partsOpen}
+              onToggle={() => {
+                setPartsOpen((v) => !v);
+                setCartoonOpen(false);
+                setStampOpen(false);
+                setShapeMenu(false);
+              }}
+              onPick={(url) => {
+                setPartsOpen(false);
+                placeImageUrl(url);
+              }}
+            />
+            <KitPicker
+              label="🎨 Cartoon kit"
+              groups={CARTOON_PIECE_GROUPS}
+              open={cartoonOpen}
+              onToggle={() => {
+                setCartoonOpen((v) => !v);
+                setPartsOpen(false);
+                setStampOpen(false);
+                setShapeMenu(false);
+              }}
+              onPick={(url) => {
+                setCartoonOpen(false);
+                placeImageUrl(url);
+              }}
+            />
             {/* image upload (paste/drop also work) */}
             {onPasteImage && (
               <>
@@ -1828,6 +1815,65 @@ const KIND_ICONS: Record<string, string> = {
   rect: "▭", rrect: "▢", ellipse: "◯", triangle: "△", diamond: "◇", cloud: "☁",
   line: "╱", arrow: "↗", text: "T", sticky: "▤", table: "▦", conn: "⛓",
 };
+// A dropdown of image-based face-kit pieces (grouped), placed onto the canvas.
+// Shared by the realistic "Face kit" and the "Cartoon kit".
+function KitPicker({
+  label,
+  groups,
+  open,
+  onToggle,
+  onPick,
+}: {
+  label: string;
+  groups: { label: string; items: { id: string; label: string; url: string }[] }[];
+  open: boolean;
+  onToggle: () => void;
+  onPick: (url: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        title={`${label} — drop a face part onto the canvas`}
+        onClick={onToggle}
+        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm leading-none hover:bg-slate-50"
+      >
+        {label} ▾
+      </button>
+      {open && (
+        <div className="absolute z-10 mt-1 max-h-80 w-72 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
+          {groups.map((g) => (
+            <div key={g.label} className="mb-1">
+              <p className="px-1 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                {g.label}
+              </p>
+              <div className="grid grid-cols-4 gap-1">
+                {g.items.map((piece) => (
+                  <button
+                    key={piece.id}
+                    type="button"
+                    title={piece.label}
+                    onClick={() => onPick(piece.url)}
+                    className="flex aspect-square items-center justify-center rounded border border-slate-100 bg-white p-0.5 hover:bg-slate-50"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={piece.url}
+                      alt={piece.label}
+                      className="max-h-full max-w-full object-contain"
+                      loading="lazy"
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function elLabel(e: Stroke): string {
   if (e.nm?.trim()) return e.nm.trim();
   if (!e.k) return "Pen stroke";
