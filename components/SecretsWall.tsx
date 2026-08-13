@@ -103,18 +103,6 @@ export function SecretsWall({
         />
       )}
 
-      {/* Familiarity scoring round (when the facilitator has opened one). */}
-      {secrets.scoringDoorId && !readOnly && (
-        <ScorePanel
-          secrets={secrets}
-          canModerate={canModerate}
-          present={present}
-          canRate={!!participantId && !canModerate}
-          onScore={onScore}
-          onManage={onManage}
-        />
-      )}
-
       {/* Facilitator tally: who has read, who's still waiting, wall progress. */}
       {canModerate && !present && !readOnly && (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
@@ -205,6 +193,19 @@ export function SecretsWall({
             know who wrote it, and neither should they.
           </p>
         </div>
+      )}
+
+      {/* Familiarity scoring — sits directly under the secret being presented
+          so the facilitator sees the story and its scores together. */}
+      {secrets.scoringDoorId && !readOnly && (
+        <ScorePanel
+          secrets={secrets}
+          canModerate={canModerate}
+          present={present}
+          canRate={!!participantId && !canModerate}
+          onScore={onScore}
+          onManage={onManage}
+        />
       )}
 
       {/* The wall */}
