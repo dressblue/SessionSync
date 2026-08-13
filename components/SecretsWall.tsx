@@ -89,6 +89,7 @@ export function SecretsWall({
         <TurnBanner
           secrets={secrets}
           activeReaderName={activeReaderName}
+          myOpenIndex={myOpenDoor?.index ?? null}
           canModerate={canModerate}
           readers={readers}
           onManage={onManage}
@@ -203,9 +204,22 @@ export function SecretsWall({
         )}
       </div>
 
-      {/* Facilitator: reclose the wall */}
+      {/* Facilitator: return an open pick to the wall, or reclose submissions */}
       {canModerate && !present && !readOnly && (
-        <div>
+        <div className="flex flex-wrap items-center gap-4">
+          {openDoors.length > 0 && (
+            <button
+              onClick={() =>
+                openDoors.forEach((d) =>
+                  onManage?.({ action: "reset", secretId: d.id })
+                )
+              }
+              className="text-xs font-medium text-amber-700 underline hover:text-amber-900"
+              title="Send the opened door back to the wall (unread) so the same reader can pick a different one"
+            >
+              ↩ Return their pick to the wall (let them choose again)
+            </button>
+          )}
           <button
             onClick={() => onManage?.({ action: "phase", value: "collect" })}
             className="text-xs text-slate-400 underline hover:text-slate-600"
@@ -347,16 +361,19 @@ function CollectPhase({
 function TurnBanner({
   secrets,
   activeReaderName,
+  myOpenIndex,
   canModerate,
   readers,
   onManage,
 }: {
   secrets: Secrets;
   activeReaderName: string | null;
+  myOpenIndex: number | null;
   canModerate: boolean;
   readers: RosterEntry[];
   onManage?: (body: Record<string, unknown>) => void;
 }) {
+  const pickedIndex = secrets.activeReaderDoorIndex;
   if (canModerate) {
     return (
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 p-3">
@@ -380,7 +397,9 @@ function TurnBanner({
         </select>
         {activeReaderName && (
           <span className="text-sm text-indigo-700">
-            {activeReaderName} is choosing…
+            {pickedIndex != null
+              ? `${activeReaderName} has selected Door ${pickedIndex}`
+              : `${activeReaderName} is choosing…`}
           </span>
         )}
       </div>
@@ -391,10 +410,17 @@ function TurnBanner({
   return (
     <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-800">
       {secrets.iAmActiveReader ? (
-        <strong>Your turn — pick a door on the wall (not your own).</strong>
+        myOpenIndex != null ? (
+          <strong>You have selected Door {myOpenIndex} — read it below.</strong>
+        ) : (
+          <strong>Your turn — pick a door on the wall (not your own).</strong>
+        )
       ) : activeReaderName ? (
         <>
-          <strong>{activeReaderName}</strong> is choosing a door…
+          <strong>{activeReaderName}</strong>{" "}
+          {pickedIndex != null
+            ? `has selected Door ${pickedIndex}.`
+            : "is choosing a door…"}
         </>
       ) : (
         "Watch the wall — the facilitator will name who picks next."
@@ -448,9 +474,9 @@ function DoorCell({
         #{door.index}
       </span>
 
-      {door.mine && door.status === "available" && (
-        <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-400">
-          yours
+      {door.mine && (
+        <span className="mt-0.5 rounded-full bg-white/80 px-1.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-600 ring-1 ring-indigo-200">
+          your secret
         </span>
       )}
       {(opened || sealed) && door.readerName && (

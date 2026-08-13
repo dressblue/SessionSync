@@ -310,6 +310,7 @@ export interface ActivityPayload {
     activeReaderId: string | null; // whose turn to pick (participant id)
     activeReaderName: string | null;
     iAmActiveReader: boolean;
+    activeReaderDoorIndex: number | null; // door the reader has opened this turn
     facilitatorReading: boolean; // a door is open to the facilitator
     doors: {
       id: string;
@@ -1231,6 +1232,10 @@ export function buildActivityPayload(
     );
     const iAmActiveReader =
       !!viewerParticipantId && viewerParticipantId === activeReaderId;
+    // Which door (if any) the active reader has already opened this turn.
+    const activeReaderDoor = secretRows.find(
+      (d) => d.status === "opened" && !!d.meta.r && d.meta.r === activeReaderId
+    );
 
     const activeReaderName = activeReaderId
       ? (responseRows.find((r) => r.participant_id === activeReaderId)?.name ??
@@ -1252,6 +1257,7 @@ export function buildActivityPayload(
       activeReaderId,
       activeReaderName,
       iAmActiveReader,
+      activeReaderDoorIndex: activeReaderDoor ? activeReaderDoor.index : null,
       facilitatorReading: secretRows.some(
         (d) => d.status === "opened" && d.meta.r === "facilitator"
       ),

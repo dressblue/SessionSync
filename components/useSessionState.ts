@@ -233,6 +233,7 @@ export interface ActivityState {
     activeReaderId: string | null;
     activeReaderName: string | null;
     iAmActiveReader: boolean;
+    activeReaderDoorIndex: number | null;
     facilitatorReading: boolean;
     doors: {
       id: string;
