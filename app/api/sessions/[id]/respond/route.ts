@@ -333,7 +333,7 @@ export async function POST(
         if (t !== undefined) el.t = t;
         if (k === "text") el.fs = num(e.fs, 8, 200, 24);
         if (k === "stamp") el.ch = str(e.ch, 8) ?? "⭐";
-        if (k === "art") el.art = str(e.art, 24) ?? "eye_open";
+        if (k === "art") el.art = str(e.art, 24) ?? "eye_neutral";
         if (k === "poly") {
           const p = ptsArray(e.pts);
           el.pts = p.length >= 3 ? p : [[0.5, 0], [1, 1], [0, 1]];
