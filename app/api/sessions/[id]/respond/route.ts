@@ -410,6 +410,7 @@ export async function POST(
       if ("z" in u && typeof u.z === "number" && isFinite(u.z)) patch.z = u.z;
       if ("rot" in u && typeof u.rot === "number" && isFinite(u.rot))
         patch.rot = ((u.rot % 360) + 360) % 360;
+      if ("fx" in u) patch.fx = !!u.fx;
       if ("g" in u) patch.g = str(u.g, 40) || null; // "" / null clears the group
       if ("cells" in u) patch.cells = cellArray(u.cells);
       if ("pts" in u && Array.isArray(u.pts)) {

@@ -151,6 +151,7 @@ export interface Stroke {
   cells?: string[];
   z?: number;
   rot?: number;
+  fx?: boolean; // horizontal mirror about the element's box center
   g?: string;
   arrow?: boolean;
   dash?: boolean;

@@ -157,16 +157,22 @@ function patternDefsFor(el: Stroke): string {
 }
 
 // Render one element to an SVG fragment string, prepend any pattern-fill def,
-// then rotate it about its box center if `rot` is set (pen strokes and
-// connectors aren't box-anchored, so they're left unrotated).
+// then rotate and/or mirror it about its box center (pen strokes and
+// connectors aren't box-anchored, so they're left untransformed).
 export function elementToSvg(el: Stroke, byId: Map<string, Stroke>): string {
   const raw = elementToSvgRaw(el, byId);
   const defs = patternDefsFor(el);
-  if (!el.rot || !el.k || el.k === "conn") return defs + raw;
+  const anchored = !!el.k && el.k !== "conn";
+  if ((!el.rot && !el.fx) || !anchored) return defs + raw;
   const b = boxOf(el);
   const cx = (b.x + b.bw / 2) * VIEW_W;
   const cy = (b.y + b.bh / 2) * VIEW_H;
-  return `${defs}<g transform="rotate(${el.rot.toFixed(1)} ${cx.toFixed(1)} ${cy.toFixed(1)})">${raw}</g>`;
+  // Apply rotation about the box center, then a horizontal mirror about the
+  // same center (scale is rightmost, so it applies to the shape first).
+  const parts: string[] = [];
+  if (el.rot) parts.push(`rotate(${el.rot.toFixed(1)} ${cx.toFixed(1)} ${cy.toFixed(1)})`);
+  if (el.fx) parts.push(`translate(${(cx * 2).toFixed(1)} 0) scale(-1 1)`);
+  return `${defs}<g transform="${parts.join(" ")}">${raw}</g>`;
 }
 
 // Render one element to an SVG fragment string (VIEW_W×VIEW_H coordinate space).

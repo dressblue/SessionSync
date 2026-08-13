@@ -106,6 +106,7 @@ export interface Stroke {
   cells?: string[]; // table cell text, row-major
   z?: number; // layer order (higher = front)
   rot?: number; // rotation in degrees about the element's box center
+  fx?: boolean; // horizontal mirror about the element's box center
   g?: string; // group id — elements sharing a `g` select/move/delete together
   arrow?: boolean; // connector arrowhead
   dash?: boolean; // connector dashed line

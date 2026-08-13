@@ -240,6 +240,17 @@ export function Whiteboard({
     }
     applyToSelected(patch);
   };
+  // Mirror each selected element horizontally about its own box centre — lets a
+  // single asymmetric piece (an eye, ear, brow) be placed twice as a L/R pair.
+  const flipSelected = () => {
+    for (const id of selectedIds) {
+      const cur = byId.get(id);
+      if (!cur || !cur.k || cur.k === "conn") continue;
+      const fx = !cur.fx;
+      setPending((p) => ({ ...p, [id]: { ...p[id], fx } }));
+      onElementUpdate({ id, fx });
+    }
+  };
   const interactive = canDraw;
 
   // Selecting an element selects its whole group; shift toggles it in/out.
@@ -1210,6 +1221,13 @@ export function Whiteboard({
                     className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                   >
                     ⬇ Back
+                  </button>
+                  <button
+                    onClick={flipSelected}
+                    title="Flip horizontally (mirror) — e.g. to make a matching left/right eye"
+                    className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    ⇄ Flip
                   </button>
                   <button
                     onClick={() => [...selectedIds].forEach((id) => removeId(id))}
