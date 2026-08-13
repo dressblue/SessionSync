@@ -66,6 +66,7 @@ export const LIKERT_ANCHOR_SETS: Record<string, string[]> = {
     "Very Concerned",
     "Extremely Concerned",
   ],
+  amount: ["A Little", "Somewhat", "A Moderate Amount", "Quite a Lot", "A Lot"],
   numeric: ["1", "2", "3", "4", "5"],
 };
 
@@ -82,6 +83,7 @@ const LIKERT_ANCHOR_TITLES: Record<string, string> = {
   difficulty: "Difficulty",
   familiarity: "Familiarity",
   concern: "Concern",
+  amount: "Amount",
   numeric: "Numeric",
 };
 
