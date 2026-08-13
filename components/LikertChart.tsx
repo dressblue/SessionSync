@@ -17,6 +17,30 @@ interface Props {
   dense?: boolean;
 }
 
+// The colour key for a Likert scale (swatch + anchor label per level). Shared by
+// the results chart and the rating-input stack so the key sits near both.
+export function LikertLegend({
+  anchors,
+  className = "",
+}: {
+  anchors: string[];
+  className?: string;
+}) {
+  return (
+    <div className={`flex flex-wrap gap-x-4 gap-y-1 ${className}`}>
+      {anchors.map((a, k) => (
+        <span key={k} className="inline-flex items-center gap-1.5 text-xs">
+          <span
+            className="w-3 h-3 rounded-sm"
+            style={{ backgroundColor: LIKERT_COLORS[k] }}
+          />
+          {a}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // Diverging stacked bar chart for a 5-point Likert survey. Negative levels
 // extend left of a fixed center line, the neutral level straddles it, and
 // positive levels extend right — the whole chart shares one scale so bars
@@ -53,18 +77,7 @@ export function LikertChart({ items, ratings, anchors, dense }: Props) {
 
   return (
     <div className="w-full">
-      {/* Legend */}
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
-        {anchors.map((a, k) => (
-          <span key={k} className="inline-flex items-center gap-1.5 text-xs">
-            <span
-              className="w-3 h-3 rounded-sm"
-              style={{ backgroundColor: LIKERT_COLORS[k] }}
-            />
-            {a}
-          </span>
-        ))}
-      </div>
+      <LikertLegend anchors={anchors} className="mb-3" />
 
       <div className="flex flex-col gap-2">
         {rows.map((r, i) => {

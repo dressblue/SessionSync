@@ -8,7 +8,7 @@ import type {
 } from "./useSessionState";
 import { Whiteboard } from "./Whiteboard";
 import { Markdown } from "./Markdown";
-import { LikertChart } from "./LikertChart";
+import { LikertChart, LikertLegend } from "./LikertChart";
 import { VideoPlayer } from "./VideoPlayer";
 import { TimerDisplay } from "./TimerDisplay";
 import { WordCloud } from "./WordCloud";
@@ -1415,7 +1415,14 @@ export function ActivityPanel({
           </div>
         )}
 
-        {/* Rating input */}
+        {/* Rating input — a copy of the colour key sits right above the stack
+            so the scale is legible without scrolling back to the chart. */}
+        {fivePoint && (
+          <LikertLegend
+            anchors={anchors}
+            className="mb-2 border-t border-slate-100 pt-3"
+          />
+        )}
         {participantId && (
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
             Your response
