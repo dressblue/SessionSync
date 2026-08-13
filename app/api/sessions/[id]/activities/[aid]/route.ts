@@ -401,6 +401,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
     } else if (s.action === "seal" && typeof s.secretId === "string") {
       const ok = await patchDoor(s.secretId, (v) => v, 2);
       if (!ok) return NextResponse.json({ error: "Door not found" }, { status: 404 });
+      // Sealing ends the turn — clear the active reader back to "no one".
+      config.activeReaderId = null;
     } else if (s.action === "reset" && typeof s.secretId === "string") {
       const ok = await patchDoor(
         s.secretId,

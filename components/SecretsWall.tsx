@@ -66,6 +66,21 @@ export function SecretsWall({
   const myOpenDoor = doors.find(
     (d) => d.status === "opened" && d.text && !canModerate
   );
+  // The facilitator follows along on every open door in full (with the author).
+  const openDoors = doors.filter((d) => d.status === "opened" && d.text);
+  // Tally of who has read (opened or sealed doors carry the reader's name);
+  // and, from the roster, who hasn't had a turn yet.
+  const readNames = Array.from(
+    new Set(
+      doors
+        .filter((d) => d.status !== "available" && d.readerName)
+        .map((d) => d.readerName as string)
+    )
+  );
+  const notYet = readers
+    .map((r) => r.name)
+    .filter((n) => !readNames.some((rn) => rn.toLowerCase() === n.toLowerCase()));
+  const sealedCount = doors.filter((d) => d.status === "sealed").length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -79,6 +94,72 @@ export function SecretsWall({
           onManage={onManage}
         />
       )}
+
+      {/* Facilitator tally: who has read, who's still waiting, wall progress. */}
+      {canModerate && !present && !readOnly && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-semibold uppercase tracking-wide text-slate-500">
+              Read so far ({readNames.length}/{doors.length}):
+            </span>
+            {readNames.length ? (
+              readNames.map((n) => (
+                <span
+                  key={n}
+                  className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700"
+                >
+                  ✓ {n}
+                </span>
+              ))
+            ) : (
+              <span className="text-slate-400">no one yet</span>
+            )}
+          </div>
+          {notYet.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="font-semibold uppercase tracking-wide text-slate-500">
+                Not yet:
+              </span>
+              {notYet.map((n) => (
+                <span
+                  key={n}
+                  className="rounded-full bg-slate-200 px-2 py-0.5 text-slate-600"
+                >
+                  {n}
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="mt-1.5 text-[11px] text-slate-400">
+            {sealedCount} of {doors.length} door
+            {doors.length === 1 ? "" : "s"} sealed.
+          </p>
+        </div>
+      )}
+
+      {/* Facilitator follows along on every open door — full text + author. */}
+      {canModerate &&
+        openDoors.map((d) => (
+          <div
+            key={d.id}
+            className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4"
+          >
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-700">
+              Door #{d.index} · now being read
+              {d.readerName ? ` by ${d.readerName}` : ""}
+              {d.author ? ` · written by ${d.author}` : ""}
+            </p>
+            <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-900">
+              {d.text}
+            </p>
+            <button
+              onClick={() => onManage?.({ action: "seal", secretId: d.id })}
+              className="mt-2 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-500"
+            >
+              Mark revealed 🔒
+            </button>
+          </div>
+        ))}
 
       {/* The reader's private secret to perform */}
       {myOpenDoor && (
