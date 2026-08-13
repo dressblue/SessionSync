@@ -26,7 +26,6 @@ const STAMP_GROUPS: { label: string; items: string[] }[] = [
   { label: "Symbols", items: ["❤️", "⭐", "✅", "❌", "⚠️", "❓", "❗", "➕", "➖", "🚩", "🏁", "🎯", "💬", "💭", "🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "⚫", "⚪", "⬆️", "⬇️", "⬅️", "➡️", "🔁", "♻️", "🆗", "🚫"] },
   { label: "Food", items: ["🍎", "🍞", "🍕", "🍔", "🍟", "☕", "🍺", "🥗", "🍰", "🍦", "🍩", "🥤", "🍌", "🥕"] },
 ];
-const STAMPS_FLAT = STAMP_GROUPS.flatMap((g) => g.items);
 
 type Tool =
   | "select"
@@ -92,6 +91,8 @@ interface Props {
   onElementUpdate: (u: Record<string, unknown>) => void;
   onUndo: (entryId: string) => void;
   onClear: () => void;
+  /** Override the emoji bucket (the "Build" tool passes a themed set). */
+  stampGroups?: { label: string; items: string[] }[];
 }
 
 const uid = () =>
@@ -112,14 +113,17 @@ export function Whiteboard({
   onElementUpdate,
   onUndo,
   onClear,
+  stampGroups,
 }: Props) {
+  const stampGroupsUsed = stampGroups ?? STAMP_GROUPS;
+  const stampsFlat = stampGroupsUsed.flatMap((g) => g.items);
   const svgRef = useRef<SVGSVGElement>(null);
   const [tool, setTool] = useState<Tool>("select");
   const [color, setColor] = useState(COLORS[0]);
   const [fill, setFill] = useState<string | null>(null);
   const [width, setWidth] = useState(WIDTHS[1]);
   const [fontSize, setFontSize] = useState(24);
-  const [stamp, setStamp] = useState(STAMPS_FLAT[0]);
+  const [stamp, setStamp] = useState(stampsFlat[0]);
   const [stampOpen, setStampOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false); // "＋ Add" object dropdown
   const [shapeMenu, setShapeMenu] = useState(false);
@@ -716,7 +720,7 @@ export function Whiteboard({
               </button>
               {stampOpen && (
                 <div className="absolute z-10 mt-1 max-h-72 w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
-                  {STAMP_GROUPS.map((g) => (
+                  {stampGroupsUsed.map((g) => (
                     <div key={g.label} className="mb-1">
                       <p className="px-1 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                         {g.label}

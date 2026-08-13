@@ -17,6 +17,7 @@ import {
 } from "./ChecklistBuilder";
 import { BlocksBuilder } from "./BlocksBuilder";
 import { LIKERT_ANCHOR_LABELS } from "@/lib/likert";
+import { BUILD_TOPICS } from "@/lib/buildTopics";
 
 interface Props {
   sessionId: string;
@@ -62,7 +63,8 @@ type Kind =
   | "survey"
   | "checklist"
   | "blocks"
-  | "secrets";
+  | "secrets"
+  | "build";
 type Sourcing = "facilitator" | "participants";
 
 const KIND_LABEL: Record<string, string> = {
@@ -87,6 +89,7 @@ const KIND_LABEL: Record<string, string> = {
   checklist: "Checklist",
   blocks: "Blocks",
   secrets: "Secrets",
+  build: "Build",
 };
 
 // Facilitator's activity station: up to two activities run side by side
@@ -156,6 +159,7 @@ export function ActivityConsole({
   // title. The labels list IS the block count.
   const [blockLabels, setBlockLabels] = useState<string[]>(["", "", ""]);
   const [secretScoreSet, setSecretScoreSet] = useState<string>("");
+  const [buildTopicSel, setBuildTopicSel] = useState<string>("freeform");
   const [exhibitType, setExhibitType] = useState<"file" | "url" | "text">("file");
   const [exhibitFileId, setExhibitFileId] = useState("");
   const [exhibitUrl, setExhibitUrl] = useState("");
@@ -260,11 +264,12 @@ export function ActivityConsole({
     } else if (kind === "blocks") {
       body.blockLabels = blockLabels.map((l) => l.trim());
       body.blocks = blockLabels.length;
-    } else if (kind !== "whiteboard" && kind !== "secrets") {
+    } else if (kind !== "whiteboard" && kind !== "secrets" && kind !== "build") {
       body.items = list;
     }
     if (kind === "likert") body.anchorSet = anchorSet;
     if (kind === "secrets") body.scoreAnchorSet = secretScoreSet;
+    if (kind === "build") body.topic = buildTopicSel;
     if (kind === "wordcloud") {
       const seeds = seedText
         .split("\n")
@@ -288,6 +293,7 @@ export function ActivityConsole({
     setSurveyQuestions([newSurveyQuestion()]);
     setBlockLabels(["", "", ""]);
     setSecretScoreSet("");
+    setBuildTopicSel("freeform");
   }
 
   // Carry a source activity's word list into the Push-an-activity form for a new
@@ -625,6 +631,7 @@ export function ActivityConsole({
                 ["checklist", "Checklist"],
                 ["blocks", "Blocks"],
                 ["secrets", "Secrets"],
+                ["build", "Build"],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -713,7 +720,9 @@ export function ActivityConsole({
                                         ? "Question, e.g. What five things have you learned?"
                                         : kind === "secrets"
                                           ? "Prompt, e.g. Share a secret only the group will hear"
-                                          : "Prompt, e.g. Answer both questions below"
+                                          : kind === "build"
+                                            ? "Prompt (optional) — overrides the topic's default"
+                                            : "Prompt, e.g. Answer both questions below"
               }
               maxLength={300}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -735,6 +744,28 @@ export function ActivityConsole({
               />
             ) : kind === "blocks" ? (
               <BlocksBuilder labels={blockLabels} onChange={setBlockLabels} />
+            ) : kind === "build" ? (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-slate-500">
+                  Build topic (seeds the piece bucket + prompt)
+                </label>
+                <select
+                  value={buildTopicSel}
+                  onChange={(e) => setBuildTopicSel(e.target.value)}
+                  className="rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white"
+                >
+                  {BUILD_TOPICS.map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-400">
+                  Each participant builds privately on their own canvas; you can
+                  present any build to the room. Prompt above overrides the
+                  topic&apos;s default.
+                </p>
+              </div>
             ) : kind === "impact1" ||
             kind === "impact2" ||
             kind === "impact3" ||
@@ -1193,7 +1224,7 @@ export function ActivityConsole({
                     ? videoSource === "url"
                       ? !videoUrl.trim()
                       : !videoFileId
-                    : kind === "timer"
+                    : kind === "timer" || kind === "build"
                       ? false
                       : kind === "quiz"
                         ? !prompt.trim() || quizOptions.length < 2
@@ -1217,7 +1248,10 @@ export function ActivityConsole({
                     busy ||
                     (kind === "workflow"
                       ? (graph?.nodes.length ?? 0) < 2
-                      : kind !== "timer" && kind !== "video" && !prompt.trim())
+                      : kind !== "timer" &&
+                        kind !== "video" &&
+                        kind !== "build" &&
+                        !prompt.trim())
                   }
                   title={
                     activeStepTitle

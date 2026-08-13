@@ -83,7 +83,7 @@ export async function POST(
   const kind = body?.kind;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   if (
-    !["vote", "likert", "columns", "reveal", "wheel", "workflow", "whiteboard", "exhibit", "video", "timer", "wordcloud", "sort", "impact1", "impact2", "impact3", "impact4", "survey", "slides", "checklist", "blocks", "secrets"].includes(kind)
+    !["vote", "likert", "columns", "reveal", "wheel", "workflow", "whiteboard", "exhibit", "video", "timer", "wordcloud", "sort", "impact1", "impact2", "impact3", "impact4", "survey", "slides", "checklist", "blocks", "secrets", "build"].includes(kind)
   ) {
     return NextResponse.json({ error: "Unknown tool kind" }, { status: 400 });
   }
@@ -123,6 +123,7 @@ export async function POST(
   if (Array.isArray(body?.blockLabels)) config.blockLabels = body.blockLabels;
   if (typeof body?.scoreAnchorSet === "string")
     config.scoreAnchorSet = body.scoreAnchorSet;
+  if (typeof body?.topic === "string") config.topic = body.topic;
 
   const pos = await query<{ next: number }>(
     `SELECT COALESCE(MAX(position), -1) + 1 AS next FROM step_tools WHERE step_id = $1`,

@@ -3,6 +3,7 @@ import { query } from "./db";
 import { isCourseFacilitator } from "./facilitators";
 import { getFacilitator } from "./viewer";
 import { anchorLabels } from "./likert";
+import { buildTopic } from "./buildTopics";
 
 export type SessionStatus = "lobby" | "live" | "ended";
 
@@ -50,7 +51,8 @@ export type ActivityKind =
   | "slides"
   | "checklist"
   | "blocks"
-  | "secrets";
+  | "secrets"
+  | "build";
 
 export interface ActivityRow {
   id: string;
@@ -339,6 +341,26 @@ export interface ActivityPayload {
       scoreAvg: number | null;
       scoreDist: number[]; // count per rating 1..5
     }[];
+  };
+  // build — themed per-participant construction canvas. Each builder's canvas is
+  // private (only they + the facilitator); a builder can share a live read-only
+  // view with chosen peers; the facilitator can present any build to the room.
+  build?: {
+    topic: string;
+    topicLabel: string;
+    prompt: string;
+    pieces: { label: string; items: string[] }[]; // the themed bucket
+    presentingId: string | null;
+    presentingName: string | null;
+    myElements: Stroke[]; // the viewer's own editable canvas
+    sharedWith: string[]; // participant ids the viewer has shared with
+    watching: { ownerId: string | null; ownerName: string; elements: Stroke[] }[];
+    gallery?: {
+      ownerId: string | null;
+      ownerName: string;
+      elements: Stroke[];
+      count: number;
+    }[]; // facilitator only
   };
   // video (synchronized playback)
   video?: {
@@ -773,6 +795,9 @@ export interface ActivityConfig {
   activeReaderId?: string | null;
   scoreAnchorSet?: string;
   scoringDoorId?: string | null;
+  // build — themed construction canvas
+  topic?: string;
+  presentingParticipantId?: string | null;
 }
 
 export function parseActivityConfig(activity: ActivityRow): ActivityConfig {
@@ -1422,6 +1447,99 @@ export function buildActivityPayload(
           ...doorSummary(d.row.id),
         };
       }),
+    };
+    return payload;
+  }
+  if (activity.kind === "build") {
+    const topicKey = typeof config.topic === "string" ? config.topic : "freeform";
+    const topic = buildTopic(topicKey);
+    const presentingId =
+      typeof config.presentingParticipantId === "string"
+        ? config.presentingParticipantId
+        : null;
+    const FAC = "__facilitator__"; // owner key for a NULL-owner (seatless) build
+
+    // Element rows carry no column_index; share grants sit at -20.
+    const parseEl = (r: ResponseJoinRow): Stroke | null => {
+      try {
+        return { ...(JSON.parse(r.value) as object), id: r.id } as Stroke;
+      } catch {
+        return null;
+      }
+    };
+    const byOwner = new Map<string, { name: string; els: Stroke[] }>();
+    for (const r of responseRows) {
+      if (r.column_index !== null && r.column_index !== undefined) continue;
+      const el = parseEl(r);
+      if (!el) continue;
+      const owner = r.participant_id ?? FAC;
+      const g = byOwner.get(owner) ?? { name: r.name ?? "Facilitator", els: [] };
+      g.els.push(el);
+      byOwner.set(owner, g);
+    }
+    for (const g of byOwner.values()) g.els = g.els.slice(-400);
+
+    const shareRows = responseRows.filter((r) => r.column_index === -20);
+    const sharePeer = (r: ResponseJoinRow): string | null => {
+      try {
+        return (JSON.parse(r.value) as { peer?: string }).peer ?? null;
+      } catch {
+        return null;
+      }
+    };
+
+    const myKey = viewerParticipantId ?? (facilitatorView ? FAC : null);
+    const myElements = myKey ? (byOwner.get(myKey)?.els ?? []) : [];
+
+    const sharedWith = shareRows
+      .filter((r) => r.participant_id === viewerParticipantId)
+      .map(sharePeer)
+      .filter((p): p is string => !!p);
+
+    const watching: {
+      ownerId: string | null;
+      ownerName: string;
+      elements: Stroke[];
+    }[] = [];
+    if (viewerParticipantId) {
+      const sharers = new Set(
+        shareRows
+          .filter((r) => sharePeer(r) === viewerParticipantId)
+          .map((r) => r.participant_id)
+          .filter((p): p is string => !!p)
+      );
+      for (const s of sharers) {
+        const g = byOwner.get(s);
+        if (g) watching.push({ ownerId: s, ownerName: g.name, elements: g.els });
+      }
+    }
+    if (presentingId && presentingId !== myKey) {
+      const g = byOwner.get(presentingId);
+      if (g && !watching.some((w) => w.ownerId === presentingId)) {
+        watching.push({ ownerId: presentingId, ownerName: g.name, elements: g.els });
+      }
+    }
+
+    payload.build = {
+      topic: topicKey,
+      topicLabel: topic.label,
+      prompt: activity.prompt || topic.prompt,
+      pieces: topic.stampGroups,
+      presentingId,
+      presentingName: presentingId
+        ? (byOwner.get(presentingId)?.name ?? null)
+        : null,
+      myElements,
+      sharedWith,
+      watching,
+      gallery: facilitatorView
+        ? [...byOwner.entries()].map(([id, g]) => ({
+            ownerId: id === FAC ? null : id,
+            ownerName: g.name,
+            elements: g.els,
+            count: g.els.length,
+          }))
+        : undefined,
     };
     return payload;
   }

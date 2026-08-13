@@ -79,7 +79,8 @@ export async function POST(
     participantId === null &&
     activity.kind !== "whiteboard" &&
     activity.kind !== "blocks" &&
-    activity.kind !== "secrets"
+    activity.kind !== "secrets" &&
+    activity.kind !== "build"
   ) {
     return NextResponse.json(
       { error: "Only participants can respond to this activity" },
@@ -221,7 +222,50 @@ export async function POST(
     return NextResponse.json({ ok: true });
   }
 
-  if (activity.kind === "whiteboard") {
+  // Build: clear the actor's OWN canvas only (never the whole room's).
+  if (activity.kind === "build" && body?.clearMine === true) {
+    if (participantId) {
+      await query(
+        `DELETE FROM activity_responses
+         WHERE activity_id = $1 AND participant_id = $2 AND column_index IS NULL`,
+        [activity.id, participantId]
+      );
+    } else if (await authorizeSession(req, id)) {
+      await query(
+        `DELETE FROM activity_responses
+         WHERE activity_id = $1 AND participant_id IS NULL AND column_index IS NULL`,
+        [activity.id]
+      );
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  // Build reuses the whiteboard element model (owner-scoped canvases). A builder
+  // can toggle a live read-only share of their canvas to a chosen peer.
+  if (activity.kind === "build" && typeof body?.shareToggle === "string") {
+    if (!participantId) {
+      return NextResponse.json({ error: "Only builders can share" }, { status: 403 });
+    }
+    const peer = body.shareToggle;
+    const existing = await query<{ id: string }>(
+      `SELECT id FROM activity_responses
+       WHERE activity_id = $1 AND participant_id = $2 AND column_index = -20
+         AND value = $3`,
+      [activity.id, participantId, JSON.stringify({ peer })]
+    );
+    if (existing.rows[0]) {
+      await query(`DELETE FROM activity_responses WHERE id = $1`, [existing.rows[0].id]);
+    } else {
+      await query(
+        `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+         VALUES ($1, $2, $3, -20, $4)`,
+        [randomUUID(), activity.id, participantId, JSON.stringify({ peer })]
+      );
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  if (activity.kind === "whiteboard" || activity.kind === "build") {
     // Shared sanitizers for placed objects (kept tight so stored JSON is clean).
     const num = (v: unknown, lo: number, hi: number, dflt: number) =>
       typeof v === "number" && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : dflt;

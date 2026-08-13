@@ -95,6 +95,7 @@ export async function POST(
     kind === "video" ||
     kind === "timer" ||
     kind === "slides" ||
+    kind === "build" ||
     (kind === "exhibit" && body?.exhibit === "file");
   if (!prompt && !promptOptional) {
     return NextResponse.json({ error: "A prompt is required" }, { status: 400 });
@@ -520,6 +521,11 @@ export async function POST(
         ? body.scoreAnchorSet
         : null;
     config = { phase: "collect", activeReaderId: null, scoreAnchorSet };
+  } else if (kind === "build") {
+    // Themed construction canvas. topic seeds the piece bucket + prompt (resolved
+    // in the payload); each participant builds privately on their own canvas.
+    const topic = typeof body?.topic === "string" ? body.topic : "freeform";
+    config = { topic, presentingParticipantId: null };
   } else {
     return NextResponse.json({ error: "Unknown activity kind" }, { status: 400 });
   }

@@ -25,6 +25,7 @@ import { ActivityConsole } from "@/components/ActivityConsole";
 import { Chat } from "@/components/Chat";
 import { SpotlightBanner } from "@/components/SpotlightMessage";
 import { LIKERT_ANCHOR_LABELS } from "@/lib/likert";
+import { BUILD_TOPICS } from "@/lib/buildTopics";
 import { shareOrigin } from "@/lib/appOrigin";
 
 const TOOL_BADGES: Record<string, string> = {
@@ -49,6 +50,7 @@ const TOOL_BADGES: Record<string, string> = {
   checklist: "Checklist",
   blocks: "Blocks",
   secrets: "Secrets",
+  build: "Build",
 };
 
 // Compact delete affordance (replaces the word "Delete" to save row space).
@@ -131,6 +133,7 @@ function Console() {
     | "checklist"
     | "blocks"
     | "secrets"
+    | "build"
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
@@ -156,6 +159,7 @@ function Console() {
   const [toolExhibitRef, setToolExhibitRef] = useState("");
   const [toolAnchorSet, setToolAnchorSet] = useState("agreement");
   const [toolScoreSet, setToolScoreSet] = useState<string>("");
+  const [toolTopic, setToolTopic] = useState<string>("freeform");
   const [toolTimerMin, setToolTimerMin] = useState(5);
   // Slides step-tool config: which course deck + the page range to play.
   const [toolDeckId, setToolDeckId] = useState("");
@@ -490,6 +494,7 @@ function Console() {
     setToolDisplayOnly(false);
     setToolBlockLabels(["", "", ""]);
     setToolScoreSet("");
+    setToolTopic("freeform");
   }
 
   async function saveTool(stepId: string) {
@@ -571,6 +576,7 @@ function Console() {
       body.items = list;
     if (toolKind === "likert") body.anchorSet = toolAnchorSet;
     if (toolKind === "secrets") body.scoreAnchorSet = toolScoreSet;
+    if (toolKind === "build") body.topic = toolTopic;
     const ok = await api(
       editingToolId
         ? `/api/sessions/${id}/steps/${stepId}/tools/${editingToolId}`
@@ -589,6 +595,7 @@ function Console() {
     setToolSourced(t.sourcing === "participants");
     setToolAnchorSet(t.anchorSet ?? "agreement");
     setToolScoreSet(t.scoreAnchorSet ?? "");
+    setToolTopic(t.topic ?? "freeform");
     setToolTimerMin(t.minutes ?? 5);
     setToolExhibitType(t.exhibit ?? "file");
     setToolExhibitRef(
@@ -675,6 +682,7 @@ function Console() {
       blocks: tool.blocks,
       blockLabels: tool.blockLabels,
       scoreAnchorSet: tool.scoreAnchorSet,
+      topic: tool.topic,
     });
   }
 
@@ -1422,6 +1430,7 @@ function Console() {
                             <option value="checklist">Checklist (statements × options)</option>
                             <option value="blocks">Blocks (one question, N fields)</option>
                             <option value="secrets">Secrets (anonymous wall)</option>
+                            <option value="build">Build (construct on a canvas)</option>
                           </select>
                           <button
                             type="button"
@@ -1816,6 +1825,29 @@ function Console() {
                             </select>
                           </div>
                         )}
+                        {toolKind === "build" && (
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-xs font-semibold text-slate-500">
+                              Build topic (seeds the piece bucket + prompt)
+                            </label>
+                            <select
+                              value={toolTopic}
+                              onChange={(e) => setToolTopic(e.target.value)}
+                              className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white"
+                            >
+                              {BUILD_TOPICS.map((t) => (
+                                <option key={t.key} value={t.key}>
+                                  {t.label}
+                                </option>
+                              ))}
+                            </select>
+                            <p className="text-[11px] text-slate-400">
+                              Each participant builds privately; you can present
+                              any build to the room. Optional prompt below
+                              overrides the topic&apos;s default.
+                            </p>
+                          </div>
+                        )}
                         {toolKind !== "whiteboard" &&
                           toolKind !== "exhibit" &&
                           toolKind !== "video" &&
@@ -1830,6 +1862,7 @@ function Console() {
                           toolKind !== "slides" &&
                           toolKind !== "blocks" &&
                           toolKind !== "secrets" &&
+                          toolKind !== "build" &&
                           !(
                             (toolKind === "vote" || toolKind === "likert") &&
                             toolSourced
@@ -1871,7 +1904,9 @@ function Console() {
                                         !toolChecklistStatements.some((s) =>
                                           s.text.trim()
                                         )
-                                      : toolKind === "timer"
+                                      : toolKind === "timer" ||
+                                          toolKind === "build" ||
+                                          toolKind === "whiteboard"
                                         ? false
                                         : !toolPrompt.trim()
                               }

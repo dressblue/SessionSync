@@ -469,6 +469,37 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ ok: true });
   }
 
+  // Build: the facilitator presents one participant's canvas to the whole room
+  //   { build: { action:"present", participantId|null } }
+  if (body?.build && typeof body.build === "object") {
+    const res = await query<ActivityRow>(
+      `SELECT * FROM activities WHERE id = $1 AND session_id = $2 AND status = 'open'`,
+      [aid, id]
+    );
+    const activity = res.rows[0];
+    if (!activity || activity.kind !== "build") {
+      return NextResponse.json({ error: "No build activity" }, { status: 404 });
+    }
+    let config: Record<string, unknown> = {};
+    try {
+      config = JSON.parse(activity.config);
+    } catch {
+      /* rebuilt below */
+    }
+    const b = body.build as { action?: string; participantId?: string | null };
+    if (b.action === "present") {
+      config.presentingParticipantId =
+        typeof b.participantId === "string" ? b.participantId : null;
+    } else {
+      return NextResponse.json({ error: "Unknown build action" }, { status: 400 });
+    }
+    await query(`UPDATE activities SET config = $1 WHERE id = $2`, [
+      JSON.stringify(config),
+      aid,
+    ]);
+    return NextResponse.json({ ok: true });
+  }
+
   // Presentation controls: reveal count, wheel spotlight, whiteboard clear.
   if (
     typeof body?.reveal === "number" ||

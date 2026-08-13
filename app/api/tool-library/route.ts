@@ -24,6 +24,7 @@ const VALID_KINDS = [
   "checklist",
   "blocks",
   "secrets",
+  "build",
 ];
 
 const str = (v: unknown, max = 2000) =>

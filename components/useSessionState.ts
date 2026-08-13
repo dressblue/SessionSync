@@ -34,7 +34,8 @@ export type ActivityKind =
   | "slides"
   | "checklist"
   | "blocks"
-  | "secrets";
+  | "secrets"
+  | "build";
 
 export interface RichItem {
   title: string;
@@ -256,6 +257,24 @@ export interface ActivityState {
       scoreCount: number;
       scoreAvg: number | null;
       scoreDist: number[];
+    }[];
+  };
+  // build — themed per-participant construction canvas (see lib/sessions.ts).
+  build?: {
+    topic: string;
+    topicLabel: string;
+    prompt: string;
+    pieces: { label: string; items: string[] }[];
+    presentingId: string | null;
+    presentingName: string | null;
+    myElements: Stroke[];
+    sharedWith: string[];
+    watching: { ownerId: string | null; ownerName: string; elements: Stroke[] }[];
+    gallery?: {
+      ownerId: string | null;
+      ownerName: string;
+      elements: Stroke[];
+      count: number;
     }[];
   };
   video?: {

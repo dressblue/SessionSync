@@ -45,6 +45,7 @@ const KIND_LABEL: Record<string, string> = {
   checklist: "Checklist",
   blocks: "Blocks",
   secrets: "Secrets",
+  build: "Build",
 };
 
 function strokesToDataUrl(strokes: Stroke[]): string {
@@ -228,6 +229,11 @@ function activityLines(a: ActivityState): string[] {
   }
   if (a.kind === "whiteboard") {
     return [`Shared whiteboard with ${a.strokes?.length ?? 0} objects`];
+  }
+  if (a.kind === "build") {
+    const g = a.build?.gallery ?? [];
+    if (!g.length) return ["Build — no builds yet"];
+    return g.map((b) => `${b.ownerName}: ${b.count} piece${b.count === 1 ? "" : "s"}`);
   }
   if (a.kind === "slides") {
     const s = a.slides;
@@ -652,6 +658,25 @@ export default function ReportPage() {
                   className="w-full max-w-md border border-slate-200 rounded-lg mt-2"
                   dangerouslySetInnerHTML={{ __html: boardToSvg(a.strokes) }}
                 />
+              ) : a.kind === "build" && (a.build?.gallery?.length ?? 0) > 0 ? (
+                <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {a.build!.gallery!.map((g) => (
+                    <div key={g.ownerId ?? "fac"}>
+                      <p className="mb-1 text-xs font-medium text-slate-600">
+                        {g.ownerName}{" "}
+                        <span className="text-slate-400">
+                          ({g.count} piece{g.count === 1 ? "" : "s"})
+                        </span>
+                      </p>
+                      <svg
+                        viewBox="0 0 800 600"
+                        className="w-full border border-slate-200 rounded-lg bg-white"
+                        style={{ aspectRatio: "800 / 600" }}
+                        dangerouslySetInnerHTML={{ __html: boardToSvg(g.elements) }}
+                      />
+                    </div>
+                  ))}
+                </div>
               ) : a.kind === "likert" &&
                 (a.scale ?? 5) === 5 &&
                 (a.ratings?.length ?? 0) > 0 ? (

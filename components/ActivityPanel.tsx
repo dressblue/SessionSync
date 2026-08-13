@@ -16,6 +16,7 @@ import { SurveyBoard } from "./SurveyBoard";
 import { ChecklistBoard } from "./ChecklistBoard";
 import { BlocksBoard } from "./BlocksBoard";
 import { SecretsWall } from "./SecretsWall";
+import { BuildStudio } from "./BuildStudio";
 import { CardSort } from "./CardSort";
 import { ImpactBoard } from "./ImpactBoard";
 import { WorkflowBuilder } from "./WorkflowBuilder";
@@ -1113,6 +1114,29 @@ export function ActivityPanel({
           onElementUpdate={(elUpdate) => send({ elUpdate }, "POST", false)}
           onUndo={(entryId) => send({ entryId }, "DELETE")}
           onClear={() => manage({ clear: true })}
+        />
+      </div>
+    );
+  }
+
+  if (activity.kind === "build") {
+    if (!activity.build) return null;
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Build")}
+        <BuildStudio
+          build={activity.build}
+          canModerate={canModerate}
+          participantId={participantId}
+          presentation={presentation}
+          roster={roster}
+          onStroke={(stroke) => send({ stroke }, "POST", false)}
+          onElement={(element) => send({ element }, "POST", false)}
+          onElementUpdate={(elUpdate) => send({ elUpdate }, "POST", false)}
+          onUndo={(entryId) => send({ entryId }, "DELETE")}
+          onClear={() => send({ clearMine: true }, "POST", false)}
+          onShareToggle={(peerId) => send({ shareToggle: peerId }, "POST", false)}
+          onPresent={(pid) => manage({ build: { action: "present", participantId: pid } })}
         />
       </div>
     );
