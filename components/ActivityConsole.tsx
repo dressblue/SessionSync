@@ -155,6 +155,7 @@ export function ActivityConsole({
   // Blocks: one question + N answer fields (1–10, default 3), each an optional
   // title. The labels list IS the block count.
   const [blockLabels, setBlockLabels] = useState<string[]>(["", "", ""]);
+  const [secretScoreSet, setSecretScoreSet] = useState<string>("");
   const [exhibitType, setExhibitType] = useState<"file" | "url" | "text">("file");
   const [exhibitFileId, setExhibitFileId] = useState("");
   const [exhibitUrl, setExhibitUrl] = useState("");
@@ -263,6 +264,7 @@ export function ActivityConsole({
       body.items = list;
     }
     if (kind === "likert") body.anchorSet = anchorSet;
+    if (kind === "secrets") body.scoreAnchorSet = secretScoreSet;
     if (kind === "wordcloud") {
       const seeds = seedText
         .split("\n")
@@ -285,6 +287,7 @@ export function ActivityConsole({
     setSeedText("");
     setSurveyQuestions([newSurveyQuestion()]);
     setBlockLabels(["", "", ""]);
+    setSecretScoreSet("");
   }
 
   // Carry a source activity's word list into the Push-an-activity form for a new
@@ -1128,12 +1131,33 @@ export function ActivityConsole({
             ) : kind === "workflow" ? (
               <WorkflowBuilder value={graph} onChange={setGraph} height={360} />
             ) : kind === "whiteboard" ? null : kind === "secrets" ? (
-              <p className="text-[11px] text-slate-400">
-                Everyone submits one anonymous secret (only you see the author).
-                Then open the wall and name a reader per turn — they pick a door,
-                read it privately, and perform it as the author. Requires each
-                participant to be logged in on their own device.
-              </p>
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[11px] text-slate-400">
+                  Everyone submits one anonymous secret (only you see the
+                  author). Then open the wall and name a reader per turn — they
+                  pick a door, read it privately, and perform it as the author.
+                  Requires each participant logged in on their own device.
+                </p>
+                <label className="text-xs font-semibold text-slate-500 mt-1">
+                  Familiarity scoring (optional)
+                </label>
+                <select
+                  value={secretScoreSet}
+                  onChange={(e) => setSecretScoreSet(e.target.value)}
+                  className="rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white"
+                >
+                  <option value="">— no scoring —</option>
+                  {Object.entries(LIKERT_ANCHOR_LABELS).map(([k, label]) => (
+                    <option key={k} value={k}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-400">
+                  If set, each read door can open a 1–5 rating round on this
+                  scale; you see every score, participants see only the average.
+                </p>
+              </div>
             ) : (kind === "vote" ||
                 kind === "likert") &&
               sourcing === "participants" ? (

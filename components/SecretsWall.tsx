@@ -19,6 +19,8 @@ interface Props {
   onSubmit?: (text: string) => void;
   /** The active reader opens an available door. */
   onSelectDoor?: (doorId: string) => void;
+  /** A participant rates the door in the open familiarity round. */
+  onScore?: (doorId: string, score: number) => void;
   /** Facilitator flow control (PATCH secrets action). */
   onManage?: (body: Record<string, unknown>) => void;
 }
@@ -36,6 +38,7 @@ export function SecretsWall({
   readOnly = false,
   onSubmit,
   onSelectDoor,
+  onScore,
   onManage,
 }: Props) {
   const { phase, doors } = secrets;
@@ -98,6 +101,18 @@ export function SecretsWall({
         />
       )}
 
+      {/* Familiarity scoring round (when the facilitator has opened one). */}
+      {secrets.scoringDoorId && !readOnly && (
+        <ScorePanel
+          secrets={secrets}
+          canModerate={canModerate}
+          present={present}
+          canRate={!!participantId && !canModerate}
+          onScore={onScore}
+          onManage={onManage}
+        />
+      )}
+
       {/* Facilitator tally: who has read, who's still waiting, wall progress. */}
       {canModerate && !present && !readOnly && (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
@@ -155,12 +170,22 @@ export function SecretsWall({
             <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-900">
               {d.text}
             </p>
-            <button
-              onClick={() => onManage?.({ action: "seal", secretId: d.id })}
-              className="mt-2 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-500"
-            >
-              Mark revealed 🔒
-            </button>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {secrets.scoreEnabled && secrets.scoringDoorId !== d.id && (
+                <button
+                  onClick={() => onManage?.({ action: "score", secretId: d.id })}
+                  className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+                >
+                  Score familiarity
+                </button>
+              )}
+              <button
+                onClick={() => onManage?.({ action: "seal", secretId: d.id })}
+                className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-500"
+              >
+                Mark revealed 🔒
+              </button>
+            </div>
           </div>
         ))}
 
@@ -570,6 +595,127 @@ function DoorCell({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------- Familiarity scoring round ----------
+function ScorePanel({
+  secrets,
+  canModerate,
+  present,
+  canRate,
+  onScore,
+  onManage,
+}: {
+  secrets: Secrets;
+  canModerate: boolean;
+  present: boolean;
+  canRate: boolean;
+  onScore?: (doorId: string, score: number) => void;
+  onManage?: (body: Record<string, unknown>) => void;
+}) {
+  const doorId = secrets.scoringDoorId!;
+  const anchors = secrets.scoreAnchors;
+  const summary =
+    secrets.scoreAvg != null
+      ? `${secrets.scoreAvg.toFixed(1)} avg · ${secrets.scoreCount} rated`
+      : "no ratings yet";
+
+  // Facilitator: individual scores + summary + reveal-to-continue.
+  if (canModerate) {
+    return (
+      <div className="rounded-xl border-2 border-indigo-300 bg-indigo-50 p-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
+            Familiarity scores · Door {secrets.scoringDoorIndex}
+          </p>
+          <span className="text-sm font-semibold text-indigo-800">{summary}</span>
+        </div>
+        {secrets.scores.length === 0 ? (
+          <p className="text-xs text-slate-500">Waiting for ratings…</p>
+        ) : (
+          <ul className="flex flex-wrap gap-1.5">
+            {secrets.scores
+              .slice()
+              .sort((a, b) => b.score - a.score)
+              .map((s, i) => (
+                <li
+                  key={`${s.name}-${i}`}
+                  className="rounded-full bg-white px-2 py-0.5 text-xs text-slate-700 ring-1 ring-indigo-200"
+                >
+                  {s.name}: <span className="font-semibold">{s.score}</span>
+                </li>
+              ))}
+          </ul>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            onClick={() => onManage?.({ action: "stopScore" })}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-white"
+          >
+            Stop scoring
+          </button>
+          <button
+            onClick={() => onManage?.({ action: "seal", secretId: doorId })}
+            className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-500"
+          >
+            Reveal &amp; continue 🔒
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-400">
+          Individual scores are visible only to you; participants see just the
+          average.
+        </p>
+      </div>
+    );
+  }
+
+  // Projector: summary only.
+  if (present) {
+    return (
+      <div className="rounded-xl border-2 border-indigo-300 bg-indigo-50 p-6 text-center">
+        <p className="text-sm font-semibold uppercase tracking-wide text-indigo-700">
+          How familiar is this story?
+        </p>
+        <p className="mt-1 text-3xl font-bold text-indigo-800">{summary}</p>
+      </div>
+    );
+  }
+
+  // Participant: rate + see only the summary.
+  return (
+    <div className="rounded-xl border-2 border-indigo-300 bg-indigo-50 p-4">
+      <p className="mb-2 text-sm font-semibold text-indigo-800">
+        How familiar is this story to you?
+      </p>
+      {canRate ? (
+        <div className="flex flex-wrap gap-1.5">
+          {anchors.map((label, i) => {
+            const val = i + 1;
+            const chosen = secrets.myScore === val;
+            return (
+              <button
+                key={val}
+                onClick={() => onScore?.(doorId, val)}
+                className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
+                  chosen
+                    ? "border-indigo-600 bg-indigo-600 text-white"
+                    : "border-indigo-300 bg-white text-slate-700 hover:bg-indigo-100"
+                }`}
+              >
+                {val}. {label}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500">Rating in progress…</p>
+      )}
+      <p className="mt-2 text-xs text-indigo-700">
+        {secrets.myScore ? "Your rating is in. " : ""}
+        Group average: <span className="font-semibold">{summary}</span>
+      </p>
     </div>
   );
 }

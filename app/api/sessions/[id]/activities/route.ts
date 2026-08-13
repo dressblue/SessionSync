@@ -514,7 +514,12 @@ export async function POST(
   } else if (kind === "secrets") {
     // Wall of anonymous secrets. Members submit during the collect phase; the
     // facilitator opens the wall (phase = select) and names a reader per turn.
-    config = { phase: "collect", activeReaderId: null };
+    // scoreAnchorSet (optional) enables a 1–5 familiarity-rating round per door.
+    const scoreAnchorSet =
+      typeof body?.scoreAnchorSet === "string" && body.scoreAnchorSet
+        ? body.scoreAnchorSet
+        : null;
+    config = { phase: "collect", activeReaderId: null, scoreAnchorSet };
   } else {
     return NextResponse.json({ error: "Unknown activity kind" }, { status: 400 });
   }

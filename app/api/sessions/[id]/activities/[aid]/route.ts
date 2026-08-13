@@ -332,6 +332,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       phase?: string;
       activeReaderId?: string | null;
       shuffle?: number;
+      scoringDoorId?: string | null;
     } = {};
     try {
       config = JSON.parse(activity.config);
@@ -402,11 +403,17 @@ export async function PATCH(req: Request, ctx: Ctx) {
         1
       );
       if (!ok) return NextResponse.json({ error: "Door not found" }, { status: 404 });
+    } else if (s.action === "score" && typeof s.secretId === "string") {
+      // Open a familiarity-rating round on this door.
+      config.scoringDoorId = s.secretId;
+    } else if (s.action === "stopScore") {
+      config.scoringDoorId = null;
     } else if (s.action === "seal" && typeof s.secretId === "string") {
       const ok = await patchDoor(s.secretId, (v) => v, 2);
       if (!ok) return NextResponse.json({ error: "Door not found" }, { status: 404 });
-      // Sealing ends the turn — clear the active reader back to "no one".
+      // Sealing ends the turn — clear the active reader and any scoring round.
       config.activeReaderId = null;
+      config.scoringDoorId = null;
     } else if (s.action === "returnPick") {
       // Return every opened (unsealed) door to the wall — reader stays active —
       // and reshuffle the wall so the returned secret can't be spotted again.
@@ -434,6 +441,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
         );
       }
       config.shuffle = (typeof config.shuffle === "number" ? config.shuffle : 0) + 1;
+      config.scoringDoorId = null;
     } else if (s.action === "shuffle") {
       config.shuffle = (typeof config.shuffle === "number" ? config.shuffle : 0) + 1;
     } else if (s.action === "reset" && typeof s.secretId === "string") {

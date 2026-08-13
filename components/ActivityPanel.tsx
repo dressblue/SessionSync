@@ -1239,6 +1239,9 @@ export function ActivityPanel({
           present={presentation}
           onSubmit={(text) => send({ submit: text }, "POST", false)}
           onSelectDoor={(doorId) => send({ selectDoor: doorId }, "POST", false)}
+          onScore={(doorId, score) =>
+            send({ scoreDoor: doorId, score }, "POST", false)
+          }
           onManage={(b) => manage({ secrets: b })}
         />
       </div>

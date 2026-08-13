@@ -312,6 +312,18 @@ export interface ActivityPayload {
     iAmActiveReader: boolean;
     activeReaderDoorIndex: number | null; // door the reader has opened this turn
     facilitatorReading: boolean; // a door is open to the facilitator
+    // Optional 1–5 scoring round (opt-in at authoring via scoreAnchorSet). The
+    // facilitator opens a rating round on one door; every participant rates it on
+    // the chosen scale. Participants see only the summary; the facilitator sees
+    // each individual score.
+    scoreEnabled: boolean; // a scale was configured for this tool
+    scoreAnchors: string[]; // the 5 labels for the rating buttons
+    scoringDoorId: string | null; // door being scored right now, if any
+    scoringDoorIndex: number | null; // its wall number
+    myScore: number | null; // the viewer's own rating for the scoring door
+    scoreCount: number; // how many have rated the scoring door
+    scoreAvg: number | null; // average rating (the shared summary number)
+    scores: { name: string; score: number }[]; // per-rater (facilitator only)
     doors: {
       id: string;
       index: number; // stable door number on the wall
@@ -710,6 +722,9 @@ export async function getSteps(sessionId: string): Promise<StepRow[]> {
 //  collect entries  -> column_index = -1, value = suggested option/item text
 //  likert ratings   -> column_index >= 0 (item index), value = rating 1..scale
 const COLLECT_COLUMN = -1;
+// Secrets: familiarity-score rows live at this reserved column so they never
+// mix with the secret rows (0/1/2). value = JSON { s: 1..5, d: doorId }.
+const SECRET_SCORE_COL = -10;
 
 export interface ResponseJoinRow {
   id: string;
@@ -748,8 +763,12 @@ export interface ActivityConfig {
   // blocks — number of answer blocks (1–10) + optional per-block titles
   blocks?: number;
   blockLabels?: string[];
-  // secrets — collect/select phase + whose turn to pick a door
+  // secrets — collect/select phase + whose turn to pick a door + optional
+  // familiarity scoring (scoreAnchorSet chosen at authoring; scoringDoorId = the
+  // door with an open rating round).
   activeReaderId?: string | null;
+  scoreAnchorSet?: string;
+  scoringDoorId?: string | null;
 }
 
 export function parseActivityConfig(activity: ActivityRow): ActivityConfig {
@@ -1213,10 +1232,18 @@ export function buildActivityPayload(
         return {};
       }
     };
-    // Every response row is a secret. Door numbers follow creation order until
-    // the facilitator reshuffles (config.shuffle bumps), after which doors are
-    // re-ordered deterministically by a hash of their id + the shuffle seed —
-    // so a returned secret lands in a new position on the wall.
+    // Rows split by column_index: secrets sit at 0 (available) / 1 (opened) /
+    // 2 (sealed); familiarity scores sit at SECRET_SCORE_COL (-10).
+    const secretResponseRows = responseRows.filter(
+      (r) => (r.column_index ?? 0) >= 0 && (r.column_index ?? 0) <= 2
+    );
+    const scoreResponseRows = responseRows.filter(
+      (r) => r.column_index === SECRET_SCORE_COL
+    );
+    // Door numbers follow creation order until the facilitator reshuffles
+    // (config.shuffle bumps), after which doors are re-ordered deterministically
+    // by a hash of their id + the shuffle seed — so a returned secret lands in a
+    // new position on the wall.
     const seed = typeof config.shuffle === "number" ? config.shuffle : 0;
     const hashOrder = (s: string) => {
       let h = 0;
@@ -1225,10 +1252,10 @@ export function buildActivityPayload(
     };
     const orderedRows =
       seed > 0
-        ? [...responseRows].sort(
+        ? [...secretResponseRows].sort(
             (a, b) => hashOrder(`${a.id}:${seed}`) - hashOrder(`${b.id}:${seed}`)
           )
-        : responseRows;
+        : secretResponseRows;
     const secretRows = orderedRows.map((r, i) => ({
       row: r,
       meta: parse(r.value),
@@ -1264,6 +1291,45 @@ export function buildActivityPayload(
         (facilitatorView && d.row.participant_id === null && !viewerParticipantId)
     );
 
+    // Optional familiarity scoring.
+    const scoreAnchorSet =
+      typeof config.scoreAnchorSet === "string" && config.scoreAnchorSet
+        ? config.scoreAnchorSet
+        : null;
+    const scoringDoorId =
+      typeof config.scoringDoorId === "string" ? config.scoringDoorId : null;
+    const scoringDoor = scoringDoorId
+      ? secretRows.find((d) => d.row.id === scoringDoorId)
+      : null;
+    // Scores for the door currently being rated.
+    const scoreRowsForDoor = scoringDoorId
+      ? scoreResponseRows
+          .map((r) => {
+            let s = 0;
+            let d = "";
+            try {
+              const o = JSON.parse(r.value) as { s?: number; d?: string };
+              s = Number(o.s) || 0;
+              d = typeof o.d === "string" ? o.d : "";
+            } catch {
+              /* skip */
+            }
+            return { row: r, score: s, door: d };
+          })
+          .filter((x) => x.door === scoringDoorId && x.score >= 1 && x.score <= 5)
+      : [];
+    const scoreCount = scoreRowsForDoor.length;
+    const scoreAvg =
+      scoreCount > 0
+        ? scoreRowsForDoor.reduce((a, x) => a + x.score, 0) / scoreCount
+        : null;
+    const myScore =
+      viewerParticipantId != null
+        ? (scoreRowsForDoor.find(
+            (x) => x.row.participant_id === viewerParticipantId
+          )?.score ?? null)
+        : null;
+
     payload.secrets = {
       phase,
       submittedCount: secretRows.length,
@@ -1276,6 +1342,19 @@ export function buildActivityPayload(
       facilitatorReading: secretRows.some(
         (d) => d.status === "opened" && d.meta.r === "facilitator"
       ),
+      scoreEnabled: !!scoreAnchorSet,
+      scoreAnchors: scoreAnchorSet ? anchorLabels(scoreAnchorSet) : [],
+      scoringDoorId,
+      scoringDoorIndex: scoringDoor ? scoringDoor.index : null,
+      myScore,
+      scoreCount,
+      scoreAvg,
+      scores: facilitatorView
+        ? scoreRowsForDoor.map((x) => ({
+            name: x.row.name ?? "Facilitator",
+            score: x.score,
+          }))
+        : [],
       doors: secretRows.map((d) => {
         const mineDoor =
           (!!viewerParticipantId &&

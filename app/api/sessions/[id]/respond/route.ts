@@ -107,6 +107,7 @@ export async function POST(
     displayOnly?: boolean;
     blocks?: number;
     activeReaderId?: string | null;
+    scoringDoorId?: string | null;
   } = {};
   try {
     config = JSON.parse(activity.config);
@@ -649,6 +650,44 @@ export async function POST(
           [randomUUID(), activity.id, participantId, JSON.stringify({ t: text.slice(0, 800) })]
         );
       }
+      return NextResponse.json({ ok: true });
+    }
+
+    // Participant rates the door in the open familiarity-scoring round.
+    if (typeof body?.scoreDoor === "string") {
+      if (!participantId) {
+        return NextResponse.json(
+          { error: "Only participants can rate" },
+          { status: 403 }
+        );
+      }
+      if (config.scoringDoorId !== body.scoreDoor) {
+        return NextResponse.json(
+          { error: "Scoring isn't open for that story" },
+          { status: 409 }
+        );
+      }
+      const n = Math.round(Number(body?.score));
+      if (!Number.isInteger(n) || n < 1 || n > 5) {
+        return NextResponse.json({ error: "Pick a rating 1–5" }, { status: 400 });
+      }
+      // One score per (rater, door) — re-rating replaces it.
+      await query(
+        `DELETE FROM activity_responses
+         WHERE activity_id = $1 AND participant_id = $2 AND column_index = -10
+           AND value LIKE $3`,
+        [activity.id, participantId, `%"d":"${body.scoreDoor}"%`]
+      );
+      await query(
+        `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+         VALUES ($1, $2, $3, -10, $4)`,
+        [
+          randomUUID(),
+          activity.id,
+          participantId,
+          JSON.stringify({ s: n, d: body.scoreDoor }),
+        ]
+      );
       return NextResponse.json({ ok: true });
     }
 

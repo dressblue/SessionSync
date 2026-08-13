@@ -155,6 +155,7 @@ function Console() {
   const [toolExhibitType, setToolExhibitType] = useState<"file" | "url" | "text">("file");
   const [toolExhibitRef, setToolExhibitRef] = useState("");
   const [toolAnchorSet, setToolAnchorSet] = useState("agreement");
+  const [toolScoreSet, setToolScoreSet] = useState<string>("");
   const [toolTimerMin, setToolTimerMin] = useState(5);
   // Slides step-tool config: which course deck + the page range to play.
   const [toolDeckId, setToolDeckId] = useState("");
@@ -488,6 +489,7 @@ function Console() {
     setToolChecklistStatements([newChecklistStatement()]);
     setToolDisplayOnly(false);
     setToolBlockLabels(["", "", ""]);
+    setToolScoreSet("");
   }
 
   async function saveTool(stepId: string) {
@@ -568,6 +570,7 @@ function Console() {
     } else if (toolKind !== "whiteboard" && toolKind !== "secrets")
       body.items = list;
     if (toolKind === "likert") body.anchorSet = toolAnchorSet;
+    if (toolKind === "secrets") body.scoreAnchorSet = toolScoreSet;
     const ok = await api(
       editingToolId
         ? `/api/sessions/${id}/steps/${stepId}/tools/${editingToolId}`
@@ -585,6 +588,7 @@ function Console() {
     setToolPrompt(t.prompt);
     setToolSourced(t.sourcing === "participants");
     setToolAnchorSet(t.anchorSet ?? "agreement");
+    setToolScoreSet(t.scoreAnchorSet ?? "");
     setToolTimerMin(t.minutes ?? 5);
     setToolExhibitType(t.exhibit ?? "file");
     setToolExhibitRef(
@@ -670,6 +674,7 @@ function Console() {
       displayOnly: tool.displayOnly,
       blocks: tool.blocks,
       blockLabels: tool.blockLabels,
+      scoreAnchorSet: tool.scoreAnchorSet,
     });
   }
 
@@ -1785,13 +1790,31 @@ function Console() {
                           </div>
                         )}
                         {toolKind === "secrets" && (
-                          <p className="text-[11px] text-slate-400">
-                            Everyone submits one anonymous secret (only you see
-                            the author). Then open the wall and name a reader per
-                            turn — they pick a door, read it privately, and
-                            perform it as the author. Needs each participant
-                            logged in on their own device.
-                          </p>
+                          <div className="flex flex-col gap-1.5">
+                            <p className="text-[11px] text-slate-400">
+                              Everyone submits one anonymous secret (only you see
+                              the author). Then open the wall and name a reader
+                              per turn — they pick a door, read it privately, and
+                              perform it as the author.
+                            </p>
+                            <label className="text-xs font-semibold text-slate-500">
+                              Familiarity scoring (optional)
+                            </label>
+                            <select
+                              value={toolScoreSet}
+                              onChange={(e) => setToolScoreSet(e.target.value)}
+                              className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white"
+                            >
+                              <option value="">— no scoring —</option>
+                              {Object.entries(LIKERT_ANCHOR_LABELS).map(
+                                ([k, label]) => (
+                                  <option key={k} value={k}>
+                                    {label}
+                                  </option>
+                                )
+                              )}
+                            </select>
+                          </div>
                         )}
                         {toolKind !== "whiteboard" &&
                           toolKind !== "exhibit" &&

@@ -235,6 +235,14 @@ export interface ActivityState {
     iAmActiveReader: boolean;
     activeReaderDoorIndex: number | null;
     facilitatorReading: boolean;
+    scoreEnabled: boolean;
+    scoreAnchors: string[];
+    scoringDoorId: string | null;
+    scoringDoorIndex: number | null;
+    myScore: number | null;
+    scoreCount: number;
+    scoreAvg: number | null;
+    scores: { name: string; score: number }[];
     doors: {
       id: string;
       index: number;
@@ -299,6 +307,7 @@ export interface StepTool {
   displayOnly?: boolean;
   blocks?: number;
   blockLabels?: string[];
+  scoreAnchorSet?: string;
 }
 
 export interface VideoState {
