@@ -206,9 +206,12 @@ export function Whiteboard({
     | { mode: "endpoint"; id: string; fx: number; fy: number; moving: "a" | "b" } // line endpoint
     | { mode: "rotate"; id: string; cx: number; cy: number } // spin about box center
     | { mode: "vertex"; id: string; i: number; box: { x: number; y: number; bw: number; bh: number }; pts: [number, number][] } // sculpt a poly vertex
+    | { mode: "marquee"; sx: number; sy: number } // rubber-band select over empty space
     | null
   >(null);
   const erasing = useRef(false);
+  // Visible rubber-band selection box (normalized 0..1), while dragging empty space.
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
 
   const syncedIds = new Set(strokes.map((s) => s.id));
   // Merge: polled elements (with any pending override) + own not-yet-synced,
@@ -250,21 +253,31 @@ export function Whiteboard({
     setRenaming(null);
   };
   // Duplicate an object (from the Objects list): clone it with a fresh id,
-  // nudged slightly and brought to the top, then select the copy.
+  // placed to the right and HORIZONTALLY MIRRORED — so duplicating an eye / ear
+  // / brow immediately gives the matching left/right partner. Brought to the
+  // top and selected. (Connectors/pen aren't box-anchored, so they just nudge.)
   const duplicateId = async (id: string) => {
     const cur = byId.get(id);
     if (!cur) return;
-    const D = 0.02;
     const maxZ = Math.max(0, ...elements.map((e) => e.z ?? 0));
     const { mine, ...rest } = cur; // eslint-disable-line @typescript-eslint/no-unused-vars
     const copy = { ...(rest as Stroke), id: uid(), mine: true, z: maxZ + 1 } as Stroke;
-    if (typeof copy.x === "number") copy.x = Math.min(0.98, copy.x + D);
-    if (typeof copy.y === "number") copy.y = Math.min(0.98, copy.y + D);
-    if (copy.p) copy.p = copy.p.map(([px, py]) => [px + D, py + D]);
-    if (copy.a && typeof copy.a.x === "number")
-      copy.a = { ...copy.a, x: copy.a.x + D, y: (copy.a.y ?? 0) + D };
-    if (copy.b && typeof copy.b.x === "number")
-      copy.b = { ...copy.b, x: copy.b.x + D, y: (copy.b.y ?? 0) + D };
+    const boxed = !!copy.k && copy.k !== "conn";
+    if (boxed) {
+      copy.fx = !copy.fx; // mirror the partner
+      const w = Math.abs(copy.bw ?? 0.1);
+      const off = Math.min(0.4, w + 0.02); // drop it just past the original
+      if (typeof copy.x === "number") copy.x = Math.max(0, Math.min(0.98, copy.x + off));
+    } else {
+      const D = 0.03;
+      if (typeof copy.x === "number") copy.x = Math.min(0.98, copy.x + D);
+      if (typeof copy.y === "number") copy.y = Math.min(0.98, copy.y + D);
+      if (copy.p) copy.p = copy.p.map(([px, py]) => [px + D, py + D]);
+      if (copy.a && typeof copy.a.x === "number")
+        copy.a = { ...copy.a, x: copy.a.x + D, y: (copy.a.y ?? 0) + D };
+      if (copy.b && typeof copy.b.x === "number")
+        copy.b = { ...copy.b, x: copy.b.x + D, y: (copy.b.y ?? 0) + D };
+    }
     await create(copy);
     setTool("select");
     setSelectedIds(new Set([copy.id]));
@@ -510,7 +523,12 @@ export function Whiteboard({
         return;
       }
       if (!hit) {
+        // Empty space → start a rubber-band marquee to select several objects
+        // at once (then Group them). Shift keeps the existing selection.
         if (!e.shiftKey) setSelectedIds(new Set());
+        capture();
+        drag.current = { mode: "marquee", sx: pt[0], sy: pt[1] };
+        setMarquee({ x0: pt[0], y0: pt[1], x1: pt[0], y1: pt[1] });
         return;
       }
       const grp = hit.g ? elements.filter((x) => x.g === hit.g).map((x) => x.id) : [hit.id];
@@ -649,6 +667,12 @@ export function Whiteboard({
       setPending((p) => ({ ...p, [d.id]: { ...p[d.id], pts: next } }));
       return;
     }
+    if (drag.current?.mode === "marquee") {
+      const pt = toPoint(e);
+      const d = drag.current;
+      setMarquee({ x0: d.sx, y0: d.sy, x1: pt[0], y1: pt[1] });
+      return;
+    }
     // Idle hover in select mode → outline the object under the cursor so it's
     // clear what will be grabbed (borderless text/no-fill shapes are hard to see).
     if (tool === "select") {
@@ -709,6 +733,29 @@ export function Whiteboard({
       // ignore a zero-length connector to nothing
       if (!c.a.id && !hit && Math.hypot((b.x ?? 0) - (c.a.x ?? 0), (b.y ?? 0) - (c.a.y ?? 0)) < 0.02) return;
       await create({ id: uid(), mine: true, k: "conn", arrow: true, a: c.a, b, c: color, sw: width });
+      return;
+    }
+    if (drag.current?.mode === "marquee") {
+      drag.current = null;
+      const m = marquee;
+      setMarquee(null);
+      if (m) {
+        const x0 = Math.min(m.x0, m.x1), x1 = Math.max(m.x0, m.x1);
+        const y0 = Math.min(m.y0, m.y1), y1 = Math.max(m.y0, m.y1);
+        if (x1 - x0 > 0.01 || y1 - y0 > 0.01) {
+          const ids = new Set<string>();
+          for (const el of objects) {
+            const b = boxOf(el);
+            const bx0 = Math.min(b.x, b.x + b.bw), bx1 = Math.max(b.x, b.x + b.bw);
+            const by0 = Math.min(b.y, b.y + b.bh), by1 = Math.max(b.y, b.y + b.bh);
+            if (bx0 < x1 && bx1 > x0 && by0 < y1 && by1 > y0) {
+              if (el.g) elements.filter((x) => x.g === el.g).forEach((x) => ids.add(x.id));
+              else ids.add(el.id);
+            }
+          }
+          setSelectedIds((prev) => new Set([...prev, ...ids]));
+        }
+      }
       return;
     }
     if (drag.current) {
@@ -1329,6 +1376,20 @@ export function Whiteboard({
                   : { id: "draft", mine: true, k: draft.k, x: Math.min(draft.x0, draft.x1), y: Math.min(draft.y0, draft.y1), bw: Math.abs(draft.x1 - draft.x0), bh: Math.abs(draft.y1 - draft.y0), c: color, f: fill, sw: width, ...(draft.k === "table" ? { rows: tableRows, cols: tableCols } : {}), ...(draft.k === "poly" ? { pts: DEFAULT_POLY } : {}) };
               return <g opacity={0.85} dangerouslySetInnerHTML={{ __html: elementToSvg(el, byId) }} />;
             })()}
+          {/* Rubber-band selection marquee */}
+          {marquee && (
+            <rect
+              x={Math.min(marquee.x0, marquee.x1) * VIEW_W}
+              y={Math.min(marquee.y0, marquee.y1) * VIEW_H}
+              width={Math.abs(marquee.x1 - marquee.x0) * VIEW_W}
+              height={Math.abs(marquee.y1 - marquee.y0) * VIEW_H}
+              fill="#6366f1"
+              fillOpacity={0.08}
+              stroke="#6366f1"
+              strokeWidth={1.5}
+              strokeDasharray="5 4"
+            />
+          )}
           {/* Connector draft */}
           {connDraft &&
             (() => {
@@ -1755,10 +1816,13 @@ export function Whiteboard({
       {interactive && (
         <p className="text-[11px] text-slate-400">
           Draw with a tool, or use <span className="font-medium">＋ Add</span>{" "}
-          (top-right) to drop an object straight onto the board. Drag shapes with{" "}
-          <span className="font-medium">Select</span>; double-click a shape to
-          label it; the <span className="font-medium">Connector</span> snaps to
-          shapes and stays attached when you move them.
+          (top-right) to drop an object straight onto the board. With{" "}
+          <span className="font-medium">Select</span>, drag an empty area to
+          rubber-band several objects (or Shift-click each), then{" "}
+          <span className="font-medium">Group</span> them to move as one. In the{" "}
+          <span className="font-medium">Objects</span> list, double-click a row to
+          rename it and use <span className="font-medium">⧉</span> to duplicate
+          (mirrored). Double-click a shape to label it.
         </p>
       )}
       {/* double-click to edit a shape's label */}
