@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { ActivityState, RosterEntry } from "./useSessionState";
+import { LikertLegend } from "./LikertChart";
+import { LIKERT_COLORS } from "@/lib/likert";
 
 type Secrets = NonNullable<ActivityState["secrets"]>;
 type Door = Secrets["doors"][number];
@@ -632,6 +634,7 @@ function ScorePanel({
           </p>
           <span className="text-sm font-semibold text-indigo-800">{summary}</span>
         </div>
+        {anchors.length === 5 && <LikertLegend anchors={anchors} className="mb-2" />}
         {secrets.scores.length === 0 ? (
           <p className="text-xs text-slate-500">Waiting for ratings…</p>
         ) : (
@@ -683,28 +686,41 @@ function ScorePanel({
     );
   }
 
-  // Participant: rate + see only the summary.
+  // Participant: rate + see only the summary — styled like the Scoring tool.
+  const scale = anchors.length || 5;
+  const fivePoint = scale === 5;
   return (
     <div className="rounded-xl border-2 border-indigo-300 bg-indigo-50 p-4">
       <p className="mb-2 text-sm font-semibold text-indigo-800">
         How familiar is this story to you?
       </p>
+      {fivePoint && <LikertLegend anchors={anchors} className="mb-3" />}
+      {canRate && (
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Your response
+        </p>
+      )}
       {canRate ? (
-        <div className="flex flex-wrap gap-1.5">
-          {anchors.map((label, i) => {
-            const val = i + 1;
-            const chosen = secrets.myScore === val;
+        <div className="flex items-center gap-1.5">
+          {Array.from({ length: scale }, (_, s) => s + 1).map((v) => {
+            const color = fivePoint ? (LIKERT_COLORS[v - 1] ?? "#4f46e5") : "#4f46e5";
+            const selected = secrets.myScore === v;
+            const muted = secrets.myScore != null && !selected;
             return (
               <button
-                key={val}
-                onClick={() => onScore?.(doorId, val)}
-                className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
-                  chosen
-                    ? "border-indigo-600 bg-indigo-600 text-white"
-                    : "border-indigo-300 bg-white text-slate-700 hover:bg-indigo-100"
+                key={v}
+                onClick={() => onScore?.(doorId, v)}
+                title={anchors[v - 1] ?? String(v)}
+                className={`h-9 w-9 rounded-md text-sm font-bold transition ${
+                  selected
+                    ? "text-white ring-2 ring-slate-700 ring-offset-1 scale-110"
+                    : muted
+                      ? "border border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-200"
+                      : "text-white hover:opacity-90"
                 }`}
+                style={muted ? undefined : { backgroundColor: color }}
               >
-                {val}. {label}
+                {v}
               </button>
             );
           })}
@@ -712,7 +728,12 @@ function ScorePanel({
       ) : (
         <p className="text-xs text-slate-500">Rating in progress…</p>
       )}
-      <p className="mt-2 text-xs text-indigo-700">
+      {fivePoint && (
+        <p className="mt-2 text-[11px] text-slate-400">
+          1 = {anchors[0]} · {scale} = {anchors[scale - 1]}
+        </p>
+      )}
+      <p className="mt-1 text-xs text-indigo-700">
         {secrets.myScore ? "Your rating is in. " : ""}
         Group average: <span className="font-semibold">{summary}</span>
       </p>
