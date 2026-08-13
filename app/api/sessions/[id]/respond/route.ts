@@ -273,7 +273,7 @@ export async function POST(
       typeof v === "string" ? v.slice(0, cap) : undefined;
     const ELEMENT_KINDS = [
       "rect", "rrect", "ellipse", "triangle", "diamond", "cloud",
-      "line", "arrow", "text", "sticky", "stamp", "table", "conn",
+      "line", "arrow", "text", "sticky", "stamp", "art", "table", "conn",
     ];
     const cellArray = (v: unknown) =>
       Array.isArray(v)
@@ -325,6 +325,7 @@ export async function POST(
         if (t !== undefined) el.t = t;
         if (k === "text") el.fs = num(e.fs, 8, 200, 24);
         if (k === "stamp") el.ch = str(e.ch, 8) ?? "⭐";
+        if (k === "art") el.art = str(e.art, 24) ?? "eye_open";
         if (k === "table") {
           el.rows = Math.round(num(e.rows, 1, 8, 3));
           el.cols = Math.round(num(e.cols, 1, 8, 3));

@@ -3,6 +3,7 @@
 // session report (strokesToDataUrl + inline). One renderer → the board and every
 // export stay identical. Coordinates are normalized 0..1 and scaled to VIEW_*.
 import type { Stroke, WBAnchor } from "@/components/useSessionState";
+import { artPiece } from "./artPieces";
 
 export const VIEW_W = 800;
 export const VIEW_H = 600;
@@ -250,6 +251,9 @@ function elementToSvgRaw(el: Stroke, byId: Map<string, Stroke>): string {
     }
     case "stamp":
       return `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="${Math.min(BW, BH).toFixed(1)}">${esc(el.ch ?? "⭐")}</text>`;
+    case "art":
+      // Hand-drawn face part etc., scaled to the box via a nested viewBox.
+      return `<svg x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${BW.toFixed(1)}" height="${BH.toFixed(1)}" viewBox="0 0 100 100" preserveAspectRatio="none" overflow="visible">${artPiece(el.art, stroke, el.f ?? null)}</svg>`;
     case "table": {
       const rows = Math.max(1, el.rows ?? 3);
       const cols = Math.max(1, el.cols ?? 3);

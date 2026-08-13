@@ -11,6 +11,7 @@ import {
   sortByZ,
   resolveEnd,
 } from "@/lib/whiteboard";
+import { ART_GROUPS, artPiece } from "@/lib/artPieces";
 
 const COLORS = [
   "#0f172a", "#64748b", "#ffffff", "#e11d48", "#f97316", "#f59e0b",
@@ -69,6 +70,7 @@ type Tool =
   | "cloud"
   | "sticky"
   | "stamp"
+  | "art"
   | "table";
 
 // Tools that create an element by dragging a bounding box / segment.
@@ -151,6 +153,8 @@ export function Whiteboard({
   const [fontSize, setFontSize] = useState(24);
   const [stamp, setStamp] = useState(stampsFlat[0]);
   const [stampOpen, setStampOpen] = useState(false);
+  const [artId, setArtId] = useState<string>(ART_GROUPS[0].items[0]);
+  const [artOpen, setArtOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false); // "＋ Add" object dropdown
   const [shapeMenu, setShapeMenu] = useState(false);
   const [tableRows, setTableRows] = useState(3);
@@ -408,6 +412,13 @@ export function Whiteboard({
       capture();
       const hit = hitObject(pt, 0.02); // forgiving snap → connects to ANY object type
       setConnDraft({ a: hit ? { id: hit.id } : { x: pt[0], y: pt[1] }, x: pt[0], y: pt[1] });
+      return;
+    }
+    if (tool === "art") {
+      const id = uid();
+      create({ id, mine: true, k: "art", x: pt[0] - 0.06, y: pt[1] - 0.06, bw: 0.12, bh: 0.12, art: artId, c: color, f: fill });
+      setTool("select");
+      setSelectedIds(new Set([id]));
       return;
     }
     if (tool === "text" || tool === "sticky" || tool === "stamp") {
@@ -790,6 +801,57 @@ export function Whiteboard({
                 </div>
               )}
             </div>
+            {/* art / face-parts dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                title="Place a face part / art piece"
+                onClick={() => {
+                  setTool("art");
+                  setArtOpen((v) => !v);
+                  setStampOpen(false);
+                  setShapeMenu(false);
+                }}
+                className={`flex items-center gap-1 rounded-md border px-2 py-1 text-sm leading-none ${
+                  tool === "art" ? "border-indigo-500 bg-indigo-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                }`}
+              >
+                <svg viewBox="0 0 100 100" className="h-4 w-4">
+                  <g dangerouslySetInnerHTML={{ __html: artPiece(artId, "#0f172a", null) }} />
+                </svg>
+                Face ▾
+              </button>
+              {artOpen && (
+                <div className="absolute z-10 mt-1 max-h-72 w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
+                  {ART_GROUPS.map((g) => (
+                    <div key={g.label} className="mb-1">
+                      <p className="px-1 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        {g.label}
+                      </p>
+                      <div className="grid grid-cols-6 gap-0.5">
+                        {g.items.map((a) => (
+                          <button
+                            key={a}
+                            type="button"
+                            title={a}
+                            onClick={() => {
+                              setArtId(a);
+                              setTool("art");
+                              setArtOpen(false);
+                            }}
+                            className={`rounded p-1 hover:bg-slate-100 ${artId === a ? "bg-indigo-50 ring-1 ring-indigo-300" : ""}`}
+                          >
+                            <svg viewBox="0 0 100 100" className="h-7 w-7">
+                              <g dangerouslySetInnerHTML={{ __html: artPiece(a, "#0f172a", null) }} />
+                            </svg>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -906,7 +968,7 @@ export function Whiteboard({
                 onChange={(e) => {
                   const v = Number(e.target.value);
                   setFontSize(v);
-                  if (selected && !!selected.k && selected.k !== "conn" && selected.k !== "stamp") {
+                  if (selected && !!selected.k && selected.k !== "conn" && selected.k !== "stamp" && selected.k !== "art") {
                     setPending((p) => ({ ...p, [selected.id]: { ...p[selected.id], fs: v } }));
                     onElementUpdate({ id: selected.id, fs: v });
                   }
@@ -1367,7 +1429,7 @@ export function Whiteboard({
         hit={hitObject}
         onEdit={(el, pt) => {
           setSelectedIds(new Set([el.id]));
-          if (el.k === "conn" || el.k === "stamp") return;
+          if (el.k === "conn" || el.k === "stamp" || el.k === "art") return;
           if (el.k === "table") {
             const b = boxOf(el);
             const cols = el.cols ?? 3;
@@ -1412,12 +1474,14 @@ const KIND_ICONS: Record<string, string> = {
 function elLabel(e: Stroke): string {
   if (!e.k) return "Pen stroke";
   if (e.k === "stamp") return "Stamp";
+  if (e.k === "art") return (e.art ?? "art").replace(/_/g, " ");
   if ((e.k === "text" || e.k === "sticky") && e.t?.trim()) return e.t.trim().slice(0, 24);
   return KIND_NAMES[e.k] ?? e.k;
 }
 function elIcon(e: Stroke): string {
   if (!e.k) return "✎";
   if (e.k === "stamp") return e.ch ?? "★";
+  if (e.k === "art") return "🙂";
   return KIND_ICONS[e.k] ?? "◆";
 }
 
