@@ -334,6 +334,10 @@ export interface ActivityPayload {
       pushedToName: string | null; // facilitator-only: pre-assigned reader
       author: string | null; // facilitator-only
       text: string | null; // facilitator (all) or this door's reader while open
+      // Familiarity-score summary for this door (persists after scoring stops).
+      scoreCount: number;
+      scoreAvg: number | null;
+      scoreDist: number[]; // count per rating 1..5
     }[];
   };
   // video (synchronized playback)
@@ -1330,6 +1334,33 @@ export function buildActivityPayload(
           )?.score ?? null)
         : null;
 
+    // Per-door score aggregates (persist after a round stops / a door seals).
+    const scoresByDoor = new Map<string, number[]>();
+    for (const r of scoreResponseRows) {
+      try {
+        const o = JSON.parse(r.value) as { s?: number; d?: string };
+        const s = Number(o.s) || 0;
+        const d = typeof o.d === "string" ? o.d : "";
+        if (d && s >= 1 && s <= 5) {
+          const list = scoresByDoor.get(d) ?? [];
+          list.push(s);
+          scoresByDoor.set(d, list);
+        }
+      } catch {
+        /* skip */
+      }
+    }
+    const doorSummary = (id: string) => {
+      const list = scoresByDoor.get(id) ?? [];
+      const dist = [0, 0, 0, 0, 0];
+      list.forEach((s) => (dist[s - 1] += 1));
+      return {
+        scoreCount: list.length,
+        scoreAvg: list.length ? list.reduce((a, b) => a + b, 0) / list.length : null,
+        scoreDist: dist,
+      };
+    };
+
     payload.secrets = {
       phase,
       submittedCount: secretRows.length,
@@ -1388,6 +1419,7 @@ export function buildActivityPayload(
           pushedToName: facilitatorView ? (d.meta.pn ?? null) : null,
           author: facilitatorView ? (d.row.name ?? "Facilitator") : null,
           text: textVisible ? (d.meta.t ?? null) : null,
+          ...doorSummary(d.row.id),
         };
       }),
     };

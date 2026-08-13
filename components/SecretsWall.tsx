@@ -160,6 +160,14 @@ export function SecretsWall({
             <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-900">
               {d.text}
             </p>
+            {d.scoreCount > 0 && (
+              <div className="mt-2">
+                <p className="mb-1 text-xs font-semibold text-slate-600">
+                  Familiarity: avg {d.scoreAvg?.toFixed(1)} · {d.scoreCount} rated
+                </p>
+                <ScoreBar dist={d.scoreDist} count={d.scoreCount} />
+              </div>
+            )}
             <div className="mt-2 flex flex-wrap gap-2">
               {secrets.scoreEnabled && secrets.scoringDoorId !== d.id && (
                 <button
@@ -234,6 +242,36 @@ export function SecretsWall({
           </p>
         )}
       </div>
+
+      {/* End-of-activity familiarity summary — every door that was rated. */}
+      {secrets.scoreEnabled && doors.some((d) => d.scoreCount > 0) && (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Familiarity summary
+          </p>
+          {secrets.scoreAnchors.length === 5 && (
+            <LikertLegend anchors={secrets.scoreAnchors} className="mb-3" />
+          )}
+          <ul className="flex flex-col gap-2.5">
+            {doors
+              .filter((d) => d.scoreCount > 0)
+              .map((d) => (
+                <li key={d.id} className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-slate-700">
+                      Door #{d.index}
+                      {d.author ? ` · ${d.author}` : ""}
+                    </span>
+                    <span className="text-slate-500 tabular-nums">
+                      avg {d.scoreAvg?.toFixed(1)} · {d.scoreCount} rated
+                    </span>
+                  </div>
+                  <ScoreBar dist={d.scoreDist} count={d.scoreCount} />
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
 
       {/* Facilitator: return an open pick to the wall, or reclose submissions */}
       {canModerate && !present && !readOnly && (
@@ -597,6 +635,26 @@ function DoorCell({
             </button>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// A slim stacked distribution bar (one segment per 1–5 rating).
+function ScoreBar({ dist, count }: { dist: number[]; count: number }) {
+  if (!count) return null;
+  return (
+    <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+      {dist.map((c, i) =>
+        c > 0 ? (
+          <div
+            key={i}
+            style={{
+              width: `${(c / count) * 100}%`,
+              backgroundColor: LIKERT_COLORS[i] ?? "#4f46e5",
+            }}
+          />
+        ) : null
       )}
     </div>
   );

@@ -253,6 +253,9 @@ export interface ActivityState {
       pushedToName: string | null;
       author: string | null;
       text: string | null;
+      scoreCount: number;
+      scoreAvg: number | null;
+      scoreDist: number[];
     }[];
   };
   video?: {

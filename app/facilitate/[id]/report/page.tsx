@@ -220,7 +220,10 @@ function activityLines(a: ActivityState): string[] {
     return s.doors.map(
       (d) =>
         `#${d.index} [${d.status}]${d.readerName ? ` read by ${d.readerName}` : ""}: ` +
-        `${d.text ?? "(secret)"}${d.author ? ` — ${d.author}` : ""}`
+        `${d.text ?? "(secret)"}${d.author ? ` — ${d.author}` : ""}` +
+        (d.scoreCount > 0
+          ? ` · familiarity avg ${d.scoreAvg?.toFixed(1)} (${d.scoreCount} rated)`
+          : "")
     );
   }
   if (a.kind === "whiteboard") {
