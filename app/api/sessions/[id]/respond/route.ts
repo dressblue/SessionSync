@@ -75,7 +75,11 @@ export async function POST(
   if (!activity) {
     return NextResponse.json({ error: "No open activity" }, { status: 409 });
   }
-  if (participantId === null && activity.kind !== "whiteboard") {
+  if (
+    participantId === null &&
+    activity.kind !== "whiteboard" &&
+    activity.kind !== "blocks"
+  ) {
     return NextResponse.json(
       { error: "Only participants can respond to this activity" },
       { status: 403 }
@@ -595,9 +599,12 @@ export async function POST(
     const value = typeof body?.value === "string" ? body.value.trim() : "";
     // One answer per (participant, block); re-submitting replaces it and an
     // empty value clears it. column_index = block index → logged per block.
+    // IS NOT DISTINCT FROM so the facilitator's own (NULL participant) row is
+    // matched too — the facilitator can also answer each block.
     await query(
       `DELETE FROM activity_responses
-       WHERE activity_id = $1 AND participant_id = $2 AND column_index = $3`,
+       WHERE activity_id = $1 AND participant_id IS NOT DISTINCT FROM $2
+         AND column_index = $3`,
       [activity.id, participantId, bi]
     );
     if (value) {

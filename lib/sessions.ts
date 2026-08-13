@@ -1154,7 +1154,9 @@ export function buildActivityPayload(
       value: r.value,
       name: r.name ?? "Facilitator",
       participantId: r.participant_id,
-      mine: !!viewerParticipantId && r.participant_id === viewerParticipantId,
+      mine:
+        (!!viewerParticipantId && r.participant_id === viewerParticipantId) ||
+        (facilitatorView && r.participant_id === null),
     }));
     return payload;
   }
