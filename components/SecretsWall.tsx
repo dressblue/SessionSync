@@ -406,9 +406,17 @@ function TurnBanner({
     );
   }
 
-  // Participant view of whose turn it is.
+  // Participant view of whose turn it is. It's-your-turn-to-pick glows rose;
+  // once they've selected (or it isn't their turn) it returns to the calm blue.
+  const myTurnToPick = secrets.iAmActiveReader && myOpenIndex == null;
   return (
-    <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-800">
+    <div
+      className={`rounded-xl p-3 text-sm ${
+        myTurnToPick
+          ? "border-2 border-rose-400 bg-rose-50 text-rose-800 ring-2 ring-rose-200"
+          : "border border-indigo-200 bg-indigo-50 text-indigo-800"
+      }`}
+    >
       {secrets.iAmActiveReader ? (
         myOpenIndex != null ? (
           <strong>You have selected Door {myOpenIndex} — read it below.</strong>
