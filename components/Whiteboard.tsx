@@ -71,6 +71,7 @@ type Tool =
   | "sticky"
   | "stamp"
   | "art"
+  | "poly"
   | "table";
 
 // Tools that create an element by dragging a bounding box / segment.
@@ -83,9 +84,10 @@ type DrawKind =
   | "triangle"
   | "diamond"
   | "cloud"
+  | "poly"
   | "table";
 
-const SHAPE_TOOLS: Tool[] = ["rect", "rrect", "ellipse", "triangle", "diamond", "cloud"];
+const SHAPE_TOOLS: Tool[] = ["rect", "rrect", "ellipse", "triangle", "diamond", "cloud", "poly"];
 const SHAPE_ICON: Record<string, string> = {
   rect: "▭",
   rrect: "▢",
@@ -93,7 +95,16 @@ const SHAPE_ICON: Record<string, string> = {
   triangle: "△",
   diamond: "◇",
   cloud: "☁",
+  poly: "⬠",
 };
+// A fresh polygon starts as a pentagon (unit coords); drag its vertices to sculpt.
+const DEFAULT_POLY: [number, number][] = [
+  [0.5, 0.03],
+  [0.97, 0.38],
+  [0.79, 0.97],
+  [0.21, 0.97],
+  [0.03, 0.38],
+];
 // Objects offered by the Objects-panel "＋ Add" menu (a stamp entry, using the
 // currently-picked emoji, is appended at render time).
 const ADD_ITEMS: { kind: Tool; label: string; icon: string }[] = [
@@ -190,6 +201,7 @@ export function Whiteboard({
     | { mode: "resize"; id: string; ax: number; ay: number } // box corner: opposite corner fixed
     | { mode: "endpoint"; id: string; fx: number; fy: number; moving: "a" | "b" } // line endpoint
     | { mode: "rotate"; id: string; cx: number; cy: number } // spin about box center
+    | { mode: "vertex"; id: string; i: number; box: { x: number; y: number; bw: number; bh: number }; pts: [number, number][] } // sculpt a poly vertex
     | null
   >(null);
   const erasing = useRef(false);
@@ -212,6 +224,17 @@ export function Whiteboard({
     if (!selected) return;
     setPending((p) => ({ ...p, [selected.id]: { ...p[selected.id], ...patch } }));
     onElementUpdate({ id: selected.id, ...patch });
+  };
+  // Pick a line colour — and, if the selected shape has a pattern fill, re-ink
+  // that pattern to the new colour too (so "change colour" recolours patterns).
+  const pickColor = (c: string) => {
+    setColor(c);
+    if (!selected) return;
+    const patch: Record<string, unknown> = { c };
+    if (typeof selected.f === "string" && selected.f.startsWith("p:")) {
+      patch.f = `p:${selected.f.split(":")[1] || "dots"}:${c}`;
+    }
+    applyToSelected(patch);
   };
   const interactive = canDraw;
 
@@ -509,6 +532,16 @@ export function Whiteboard({
       setPending((p) => ({ ...p, [d.id]: { ...p[d.id], rot } }));
       return;
     }
+    if (drag.current?.mode === "vertex") {
+      const pt = toPoint(e);
+      const d = drag.current;
+      const clamp = (v: number) => Math.min(1, Math.max(0, v));
+      const ux = clamp(d.box.bw ? (pt[0] - d.box.x) / d.box.bw : 0);
+      const uy = clamp(d.box.bh ? (pt[1] - d.box.y) / d.box.bh : 0);
+      const next = d.pts.map((p, idx) => (idx === d.i ? [ux, uy] : p)) as [number, number][];
+      setPending((p) => ({ ...p, [d.id]: { ...p[d.id], pts: next } }));
+      return;
+    }
     // Idle hover in select mode → outline the object under the cursor so it's
     // clear what will be grabbed (borderless text/no-fill shapes are hard to see).
     if (tool === "select") {
@@ -544,7 +577,19 @@ export function Whiteboard({
       } else {
         const x = Math.min(d.x0, d.x1);
         const y = Math.min(d.y0, d.y1);
-        await create({ id, mine: true, k: d.k, x, y, bw: Math.abs(dx), bh: Math.abs(dy), c: color, f: fill, sw: width });
+        await create({
+          id,
+          mine: true,
+          k: d.k,
+          x,
+          y,
+          bw: Math.abs(dx),
+          bh: Math.abs(dy),
+          c: color,
+          f: fill,
+          sw: width,
+          ...(d.k === "poly" ? { pts: DEFAULT_POLY } : {}),
+        });
       }
       setSelectedIds(new Set([id]));
       return;
@@ -664,6 +709,23 @@ export function Whiteboard({
       setPending((p) => ({ ...p, [id]: { ...p[id], g: undefined } }));
       onElementUpdate({ id, g: "" });
     }
+  }
+
+  // Poly vertex editing: insert a point after `afterIdx`, or remove point `i`.
+  function addVertex(id: string, afterIdx: number, unit: [number, number]) {
+    const el = byId.get(id);
+    if (!el?.pts) return;
+    const pts = [...el.pts];
+    pts.splice(afterIdx + 1, 0, unit);
+    setPending((p) => ({ ...p, [id]: { ...p[id], pts } }));
+    onElementUpdate({ id, pts });
+  }
+  function removeVertex(id: string, i: number) {
+    const el = byId.get(id);
+    if (!el?.pts || el.pts.length <= 3) return;
+    const pts = el.pts.filter((_, idx) => idx !== i);
+    setPending((p) => ({ ...p, [id]: { ...p[id], pts } }));
+    onElementUpdate({ id, pts });
   }
 
   const toolBtn = (t: Tool, label: string, title: string) => (
@@ -861,10 +923,7 @@ export function Whiteboard({
                 <button
                   key={c}
                   type="button"
-                  onClick={() => {
-                    setColor(c);
-                    applyToSelected({ c });
-                  }}
+                  onClick={() => pickColor(c)}
                   className={`h-6 w-6 shrink-0 rounded-full border-2 shadow ${color === c ? "border-indigo-500 scale-110" : "border-white"}`}
                   style={{ backgroundColor: c }}
                   title={`Line ${c}`}
@@ -881,10 +940,7 @@ export function Whiteboard({
                 <input
                   type="color"
                   value={color}
-                  onChange={(e) => {
-                    setColor(e.target.value);
-                    applyToSelected({ c: e.target.value });
-                  }}
+                  onChange={(e) => pickColor(e.target.value)}
                   className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                 />
               </label>
@@ -1074,7 +1130,7 @@ export function Whiteboard({
               const el: Stroke =
                 draft.k === "line" || draft.k === "arrow"
                   ? { id: "draft", mine: true, k: draft.k, x: draft.x0, y: draft.y0, bw: draft.x1 - draft.x0, bh: draft.y1 - draft.y0, c: color, sw: width }
-                  : { id: "draft", mine: true, k: draft.k, x: Math.min(draft.x0, draft.x1), y: Math.min(draft.y0, draft.y1), bw: Math.abs(draft.x1 - draft.x0), bh: Math.abs(draft.y1 - draft.y0), c: color, f: fill, sw: width, ...(draft.k === "table" ? { rows: tableRows, cols: tableCols } : {}) };
+                  : { id: "draft", mine: true, k: draft.k, x: Math.min(draft.x0, draft.x1), y: Math.min(draft.y0, draft.y1), bw: Math.abs(draft.x1 - draft.x0), bh: Math.abs(draft.y1 - draft.y0), c: color, f: fill, sw: width, ...(draft.k === "table" ? { rows: tableRows, cols: tableCols } : {}), ...(draft.k === "poly" ? { pts: DEFAULT_POLY } : {}) };
               return <g opacity={0.85} dangerouslySetInnerHTML={{ __html: elementToSvg(el, byId) }} />;
             })()}
           {/* Connector draft */}
@@ -1184,6 +1240,58 @@ export function Whiteboard({
               const cxN = b.x + b.bw / 2;
               const cyN = b.y + b.bh / 2;
               const rotY = b.y - 0.06; // rotation handle sits above the box
+              // Poly: draggable vertices + edge "add" points, plus a rotate handle.
+              if (selected.k === "poly" && selected.pts && selected.pts.length >= 3) {
+                const pts = selected.pts;
+                const box = { x: b.x, y: b.y, bw: b.bw, bh: b.bh };
+                const vx = (p: [number, number]) => (b.x + p[0] * b.bw) * VIEW_W;
+                const vy = (p: [number, number]) => (b.y + p[1] * b.bh) * VIEW_H;
+                return (
+                  <g>
+                    <line x1={cxN * VIEW_W} y1={b.y * VIEW_H} x2={cxN * VIEW_W} y2={rotY * VIEW_H} stroke="#6366f1" strokeWidth={1.5} />
+                    <circle cx={cxN * VIEW_W} cy={rotY * VIEW_H} r={7} fill="#fff" stroke="#6366f1" strokeWidth={2} style={{ cursor: "grab" }} onPointerDown={(e) => startHandle(e, { mode: "rotate", id, cx: cxN, cy: cyN })} />
+                    {/* edge midpoints — click to add a vertex */}
+                    {pts.map((p, i) => {
+                      const n = pts[(i + 1) % pts.length];
+                      const mid: [number, number] = [(p[0] + n[0]) / 2, (p[1] + n[1]) / 2];
+                      return (
+                        <circle
+                          key={`m${i}`}
+                          cx={vx(mid)}
+                          cy={vy(mid)}
+                          r={4.5}
+                          fill="#ffffff"
+                          stroke="#22c55e"
+                          strokeWidth={2}
+                          style={{ cursor: "copy" }}
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            addVertex(id, i, mid);
+                          }}
+                        />
+                      );
+                    })}
+                    {/* vertices — drag to sculpt, double-click to remove */}
+                    {pts.map((p, i) => (
+                      <circle
+                        key={`v${i}`}
+                        cx={vx(p)}
+                        cy={vy(p)}
+                        r={7}
+                        fill="#6366f1"
+                        stroke="#fff"
+                        strokeWidth={1.5}
+                        style={{ cursor: "move" }}
+                        onPointerDown={(e) => startHandle(e, { mode: "vertex", id, i, box, pts })}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          removeVertex(id, i);
+                        }}
+                      />
+                    ))}
+                  </g>
+                );
+              }
               return (
                 <g>
                   {handle(b.x, b.y, { mode: "resize", id, ax: b.x + b.bw, ay: b.y + b.bh }, "tl")}
@@ -1429,7 +1537,7 @@ export function Whiteboard({
         hit={hitObject}
         onEdit={(el, pt) => {
           setSelectedIds(new Set([el.id]));
-          if (el.k === "conn" || el.k === "stamp" || el.k === "art") return;
+          if (el.k === "conn" || el.k === "stamp" || el.k === "art" || el.k === "poly") return;
           if (el.k === "table") {
             const b = boxOf(el);
             const cols = el.cols ?? 3;

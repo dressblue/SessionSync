@@ -85,6 +85,7 @@ export interface Stroke {
     | "sticky"
     | "stamp"
     | "art"
+    | "poly"
     | "table"
     | "conn";
   x?: number;
@@ -97,6 +98,7 @@ export interface Stroke {
   fs?: number; // font size (text)
   ch?: string; // stamp emoji
   art?: string; // art-piece id (face parts etc.) for k="art"
+  pts?: [number, number][]; // poly vertices in unit (0..1) box space, for k="poly"
   rows?: number; // table rows
   cols?: number; // table columns
   cells?: string[]; // table cell text, row-major

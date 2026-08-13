@@ -273,8 +273,16 @@ export async function POST(
       typeof v === "string" ? v.slice(0, cap) : undefined;
     const ELEMENT_KINDS = [
       "rect", "rrect", "ellipse", "triangle", "diamond", "cloud",
-      "line", "arrow", "text", "sticky", "stamp", "art", "table", "conn",
+      "line", "arrow", "text", "sticky", "stamp", "art", "poly", "table", "conn",
     ];
+    // Sanitize a polygon's vertex list: up to 64 points, each clamped to 0..1.
+    const ptsArray = (v: unknown): [number, number][] =>
+      Array.isArray(v)
+        ? (v as unknown[]).slice(0, 64).map((p) => {
+            const a = Array.isArray(p) ? (p as unknown[]) : [];
+            return [num(a[0], 0, 1, 0), num(a[1], 0, 1, 0)] as [number, number];
+          })
+        : [];
     const cellArray = (v: unknown) =>
       Array.isArray(v)
         ? (v as unknown[]).slice(0, 64).map((c) => (typeof c === "string" ? c.slice(0, 120) : ""))
@@ -326,6 +334,10 @@ export async function POST(
         if (k === "text") el.fs = num(e.fs, 8, 200, 24);
         if (k === "stamp") el.ch = str(e.ch, 8) ?? "⭐";
         if (k === "art") el.art = str(e.art, 24) ?? "eye_open";
+        if (k === "poly") {
+          const p = ptsArray(e.pts);
+          el.pts = p.length >= 3 ? p : [[0.5, 0], [1, 1], [0, 1]];
+        }
         if (k === "table") {
           el.rows = Math.round(num(e.rows, 1, 8, 3));
           el.cols = Math.round(num(e.cols, 1, 8, 3));
@@ -392,6 +404,10 @@ export async function POST(
         patch.rot = ((u.rot % 360) + 360) % 360;
       if ("g" in u) patch.g = str(u.g, 40) || null; // "" / null clears the group
       if ("cells" in u) patch.cells = cellArray(u.cells);
+      if ("pts" in u && Array.isArray(u.pts)) {
+        const p = ptsArray(u.pts);
+        if (p.length >= 3) patch.pts = p;
+      }
       const value = JSON.stringify({ ...cur, ...patch });
       if (value.length > 4000) {
         return NextResponse.json({ error: "Element too large" }, { status: 400 });

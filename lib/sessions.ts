@@ -144,6 +144,7 @@ export interface Stroke {
   fs?: number;
   ch?: string;
   art?: string;
+  pts?: [number, number][];
   rows?: number;
   cols?: number;
   cells?: string[];
