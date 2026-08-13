@@ -240,6 +240,35 @@ export function Whiteboard({
     }
     applyToSelected(patch);
   };
+  // Inline-rename state for the Objects list (double-click a row's label).
+  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+  const commitRename = () => {
+    if (!renaming) return;
+    const nm = renaming.value.trim().slice(0, 40);
+    setPending((p) => ({ ...p, [renaming.id]: { ...p[renaming.id], nm: nm || undefined } }));
+    onElementUpdate({ id: renaming.id, nm: nm || null });
+    setRenaming(null);
+  };
+  // Duplicate an object (from the Objects list): clone it with a fresh id,
+  // nudged slightly and brought to the top, then select the copy.
+  const duplicateId = async (id: string) => {
+    const cur = byId.get(id);
+    if (!cur) return;
+    const D = 0.02;
+    const maxZ = Math.max(0, ...elements.map((e) => e.z ?? 0));
+    const { mine, ...rest } = cur; // eslint-disable-line @typescript-eslint/no-unused-vars
+    const copy = { ...(rest as Stroke), id: uid(), mine: true, z: maxZ + 1 } as Stroke;
+    if (typeof copy.x === "number") copy.x = Math.min(0.98, copy.x + D);
+    if (typeof copy.y === "number") copy.y = Math.min(0.98, copy.y + D);
+    if (copy.p) copy.p = copy.p.map(([px, py]) => [px + D, py + D]);
+    if (copy.a && typeof copy.a.x === "number")
+      copy.a = { ...copy.a, x: copy.a.x + D, y: (copy.a.y ?? 0) + D };
+    if (copy.b && typeof copy.b.x === "number")
+      copy.b = { ...copy.b, x: copy.b.x + D, y: (copy.b.y ?? 0) + D };
+    await create(copy);
+    setTool("select");
+    setSelectedIds(new Set([copy.id]));
+  };
   // Mirror each selected element horizontally about its own box centre — lets a
   // single asymmetric piece (an eye, ear, brow) be placed twice as a L/R pair.
   const flipSelected = () => {
@@ -1646,7 +1675,42 @@ export function Whiteboard({
                     }`}
                   >
                     <span className="w-4 shrink-0 text-center">{elIcon(e)}</span>
-                    <span className="min-w-0 flex-1 truncate">{elLabel(e)}</span>
+                    {renaming?.id === e.id ? (
+                      <input
+                        autoFocus
+                        value={renaming.value}
+                        onClick={(ev) => ev.stopPropagation()}
+                        onChange={(ev) => setRenaming({ id: e.id, value: ev.target.value })}
+                        onBlur={commitRename}
+                        onKeyDown={(ev) => {
+                          if (ev.key === "Enter") commitRename();
+                          if (ev.key === "Escape") setRenaming(null);
+                        }}
+                        className="min-w-0 flex-1 rounded border border-indigo-300 px-1 py-0 text-xs"
+                      />
+                    ) : (
+                      <span
+                        className="min-w-0 flex-1 truncate"
+                        title="Double-click to rename"
+                        onDoubleClick={(ev) => {
+                          ev.stopPropagation();
+                          setRenaming({ id: e.id, value: e.nm ?? elLabel(e) });
+                        }}
+                      >
+                        {elLabel(e)}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        duplicateId(e.id);
+                      }}
+                      title="Duplicate"
+                      className="shrink-0 px-0.5 text-slate-400 hover:text-indigo-600"
+                    >
+                      ⧉
+                    </button>
                     <button
                       type="button"
                       onClick={(ev) => {
@@ -1747,6 +1811,7 @@ const KIND_ICONS: Record<string, string> = {
   line: "╱", arrow: "↗", text: "T", sticky: "▤", table: "▦", conn: "⛓",
 };
 function elLabel(e: Stroke): string {
+  if (e.nm?.trim()) return e.nm.trim();
   if (!e.k) return "Pen stroke";
   if (e.k === "stamp") return "Stamp";
   if (e.k === "art") return (e.art ?? "art").replace(/_/g, " ");

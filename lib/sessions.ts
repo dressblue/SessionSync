@@ -152,6 +152,7 @@ export interface Stroke {
   z?: number;
   rot?: number;
   fx?: boolean; // horizontal mirror about the element's box center
+  nm?: string; // optional custom name shown in the Objects list
   g?: string;
   arrow?: boolean;
   dash?: boolean;

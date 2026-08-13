@@ -19,7 +19,7 @@ const LIP = PART("lips-v2");
 const BROW = PART("brows-v1");
 const EAR = PART("ears-v1");
 const LASH = PART("lashes-v1");
-const FACE = PART("faces-v1");
+const FACE = PART("faces-v2");
 const HAIR = PART("hair-v1");
 
 export const FACE_PIECE_GROUPS: { label: string; items: FacePiece[] }[] = [
@@ -115,6 +115,24 @@ export const FACE_PIECE_GROUPS: { label: string; items: FacePiece[] }[] = [
       { id: "lip_content", label: "Content", url: LIP("lip_content") },
       { id: "lip_pout", label: "Pout", url: LIP("lip_pout") },
       { id: "lip_loving", label: "Loving", url: LIP("lip_loving") },
+      { id: "lip_full", label: "Full", url: LIP("lip_full") },
+      { id: "lip_wide_smile", label: "Beaming smile", url: LIP("lip_wide_smile") },
+      { id: "lip_half_smile", label: "Half smile", url: LIP("lip_half_smile") },
+      { id: "lip_o", label: "Round O", url: LIP("lip_o") },
+      { id: "lip_whistle", label: "Whistle", url: LIP("lip_whistle") },
+      { id: "lip_sneer", label: "Sneer", url: LIP("lip_sneer") },
+      { id: "lip_disgust", label: "Disgust", url: LIP("lip_disgust") },
+      { id: "lip_worried", label: "Worried", url: LIP("lip_worried") },
+      { id: "lip_belly_laugh", label: "Belly laugh", url: LIP("lip_belly_laugh") },
+      { id: "lip_yawn", label: "Yawn", url: LIP("lip_yawn") },
+      { id: "lip_pressed_smile", label: "Pressed smile", url: LIP("lip_pressed_smile") },
+      { id: "lip_downcast", label: "Downcast", url: LIP("lip_downcast") },
+      { id: "lip_lick", label: "Licking", url: LIP("lip_lick") },
+      { id: "lip_smug", label: "Smug", url: LIP("lip_smug") },
+      { id: "lip_blow_kiss", label: "Blow kiss", url: LIP("lip_blow_kiss") },
+      { id: "lip_grimace", label: "Grimace", url: LIP("lip_grimace") },
+      { id: "lip_surprised_o", label: "Surprised", url: LIP("lip_surprised_o") },
+      { id: "lip_relaxed_open", label: "Relaxed open", url: LIP("lip_relaxed_open") },
     ],
   },
   {
@@ -195,6 +213,32 @@ export const FACE_PIECE_GROUPS: { label: string; items: FacePiece[] }[] = [
       { id: "hair_updo", label: "Updo", url: HAIR("hair_updo") },
       { id: "hair_pigtails", label: "Pigtails", url: HAIR("hair_pigtails") },
       { id: "hair_shoulder_layered", label: "Layered", url: HAIR("hair_shoulder_layered") },
+      { id: "hair_high_top_fade", label: "High-top fade", url: HAIR("hair_high_top_fade") },
+      { id: "hair_cornrows", label: "Cornrows", url: HAIR("hair_cornrows") },
+      { id: "hair_waves_360", label: "360 waves", url: HAIR("hair_waves_360") },
+      { id: "hair_twists", label: "Twists", url: HAIR("hair_twists") },
+      { id: "hair_taper_curls", label: "Taper curls", url: HAIR("hair_taper_curls") },
+      { id: "hair_undercut", label: "Undercut", url: HAIR("hair_undercut") },
+      { id: "hair_quiff", label: "Quiff", url: HAIR("hair_quiff") },
+      { id: "hair_caesar", label: "Caesar", url: HAIR("hair_caesar") },
+      { id: "hair_afro_tall", label: "Tall afro", url: HAIR("hair_afro_tall") },
+      { id: "hair_locs_long", label: "Long locs", url: HAIR("hair_locs_long") },
+      { id: "hair_flat_top", label: "Flat top", url: HAIR("hair_flat_top") },
+      { id: "hair_curtain", label: "Curtains", url: HAIR("hair_curtain") },
+      { id: "hair_man_ponytail", label: "Man ponytail", url: HAIR("hair_man_ponytail") },
+      { id: "hair_knotless", label: "Knotless braids", url: HAIR("hair_knotless") },
+      { id: "hair_bantu", label: "Bantu knots", url: HAIR("hair_bantu") },
+      { id: "hair_afro_puff", label: "Afro puff", url: HAIR("hair_afro_puff") },
+      { id: "hair_curly_bob", label: "Curly bob", url: HAIR("hair_curly_bob") },
+      { id: "hair_wavy_lob", label: "Wavy lob", url: HAIR("hair_wavy_lob") },
+      { id: "hair_space_buns", label: "Space buns", url: HAIR("hair_space_buns") },
+      { id: "hair_french_braid", label: "French braid", url: HAIR("hair_french_braid") },
+      { id: "hair_half_up", label: "Half up", url: HAIR("hair_half_up") },
+      { id: "hair_shag", label: "Shag + bangs", url: HAIR("hair_shag") },
+      { id: "hair_twa", label: "TWA coily", url: HAIR("hair_twa") },
+      { id: "hair_finger_waves", label: "Finger waves", url: HAIR("hair_finger_waves") },
+      { id: "hair_side_braid", label: "Side braid", url: HAIR("hair_side_braid") },
+      { id: "hair_sleek_pony", label: "Sleek ponytail", url: HAIR("hair_sleek_pony") },
     ],
   },
 ];

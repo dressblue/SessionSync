@@ -107,6 +107,7 @@ export interface Stroke {
   z?: number; // layer order (higher = front)
   rot?: number; // rotation in degrees about the element's box center
   fx?: boolean; // horizontal mirror about the element's box center
+  nm?: string; // optional custom name shown in the Objects list
   g?: string; // group id — elements sharing a `g` select/move/delete together
   arrow?: boolean; // connector arrowhead
   dash?: boolean; // connector dashed line

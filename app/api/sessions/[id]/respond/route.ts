@@ -353,6 +353,10 @@ export async function POST(
         }
       }
       if (typeof e.z === "number" && isFinite(e.z)) el.z = e.z;
+      if (typeof e.rot === "number" && isFinite(e.rot)) el.rot = ((e.rot % 360) + 360) % 360;
+      if (e.fx) el.fx = true;
+      const nm = str(e.nm, 40);
+      if (nm) el.nm = nm;
       const g = str(e.g, 40);
       if (g) el.g = g;
       const value = JSON.stringify(el);
@@ -411,6 +415,7 @@ export async function POST(
       if ("rot" in u && typeof u.rot === "number" && isFinite(u.rot))
         patch.rot = ((u.rot % 360) + 360) % 360;
       if ("fx" in u) patch.fx = !!u.fx;
+      if ("nm" in u) patch.nm = str(u.nm, 40) || null; // "" / null clears the name
       if ("g" in u) patch.g = str(u.g, 40) || null; // "" / null clears the group
       if ("cells" in u) patch.cells = cellArray(u.cells);
       if ("pts" in u && Array.isArray(u.pts)) {
