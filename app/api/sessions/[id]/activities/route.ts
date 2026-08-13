@@ -511,6 +511,10 @@ export async function POST(
       ? labels
       : (Array.from({ length: n }, () => "") as string[]);
     config = { blocks: n, blockLabels };
+  } else if (kind === "secrets") {
+    // Wall of anonymous secrets. Members submit during the collect phase; the
+    // facilitator opens the wall (phase = select) and names a reader per turn.
+    config = { phase: "collect", activeReaderId: null };
   } else {
     return NextResponse.json({ error: "Unknown activity kind" }, { status: 400 });
   }

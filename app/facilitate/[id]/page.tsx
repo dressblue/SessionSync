@@ -48,6 +48,7 @@ const TOOL_BADGES: Record<string, string> = {
   slides: "Slides",
   checklist: "Checklist",
   blocks: "Blocks",
+  secrets: "Secrets",
 };
 
 // Compact delete affordance (replaces the word "Delete" to save row space).
@@ -129,6 +130,7 @@ function Console() {
     | "slides"
     | "checklist"
     | "blocks"
+    | "secrets"
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
@@ -563,7 +565,8 @@ function Console() {
     } else if (toolKind === "blocks") {
       body.blockLabels = toolBlockLabels.map((l) => l.trim());
       body.blocks = toolBlockLabels.length;
-    } else if (toolKind !== "whiteboard") body.items = list;
+    } else if (toolKind !== "whiteboard" && toolKind !== "secrets")
+      body.items = list;
     if (toolKind === "likert") body.anchorSet = toolAnchorSet;
     const ok = await api(
       editingToolId
@@ -1413,6 +1416,7 @@ function Console() {
                             <option value="slides">Slides (play deck pages)</option>
                             <option value="checklist">Checklist (statements × options)</option>
                             <option value="blocks">Blocks (one question, N fields)</option>
+                            <option value="secrets">Secrets (anonymous wall)</option>
                           </select>
                           <button
                             type="button"

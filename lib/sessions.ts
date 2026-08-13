@@ -49,7 +49,8 @@ export type ActivityKind =
   | "survey"
   | "slides"
   | "checklist"
-  | "blocks";
+  | "blocks"
+  | "secrets";
 
 export interface ActivityRow {
   id: string;
@@ -296,6 +297,32 @@ export interface ActivityPayload {
     participantId: string | null;
     mine: boolean;
   }[];
+  // secrets — anonymous secrets on a wall of doors. Collect phase: each member
+  // (and optionally the facilitator) submits one secret only the facilitator can
+  // read with its author. Selection phase: the facilitator names an active
+  // reader who picks an available door; its text opens privately to that reader
+  // (author hidden) + the facilitator, then the facilitator seals it.
+  secrets?: {
+    phase: "collect" | "select";
+    submittedCount: number;
+    mySubmitted: boolean;
+    myText: string | null; // the viewer's own secret (author sees their own)
+    activeReaderId: string | null; // whose turn to pick (participant id)
+    activeReaderName: string | null;
+    iAmActiveReader: boolean;
+    facilitatorReading: boolean; // a door is open to the facilitator
+    doors: {
+      id: string;
+      index: number; // stable door number on the wall
+      status: "available" | "opened" | "sealed";
+      mine: boolean; // the viewer authored this one (never sent to others)
+      selectableByMe: boolean; // the active reader may pick this door now
+      readerName: string | null; // who opened/sealed it (shown on the wall)
+      pushedToName: string | null; // facilitator-only: pre-assigned reader
+      author: string | null; // facilitator-only
+      text: string | null; // facilitator (all) or this door's reader while open
+    }[];
+  };
   // video (synchronized playback)
   video?: {
     provider: "youtube" | "video";
@@ -697,7 +724,7 @@ export interface ActivityConfig {
   options?: string[];
   columns?: string[];
   items?: string[];
-  phase?: "collect" | "rate";
+  phase?: "collect" | "rate" | "select";
   scale?: number;
   richItems?: RichItem[];
   revealed?: number;
@@ -720,6 +747,8 @@ export interface ActivityConfig {
   // blocks — number of answer blocks (1–10) + optional per-block titles
   blocks?: number;
   blockLabels?: string[];
+  // secrets — collect/select phase + whose turn to pick a door
+  activeReaderId?: string | null;
 }
 
 export function parseActivityConfig(activity: ActivityRow): ActivityConfig {
@@ -800,7 +829,10 @@ export function buildActivityPayload(
     prompt: activity.prompt,
   };
   if (activity.step_tool_id) payload.stepToolId = activity.step_tool_id;
-  if (config.phase) payload.phase = config.phase;
+  // secrets carries its own phase inside payload.secrets ("select" isn't a
+  // collect/rate phase); every other tool exposes phase at the top level.
+  if (config.phase && config.phase !== "select" && activity.kind !== "secrets")
+    payload.phase = config.phase;
 
   // Hidden entries stay visible (flagged) to facilitators, disappear for
   // participants; highlights are visible to everyone.
@@ -1158,6 +1190,105 @@ export function buildActivityPayload(
         (!!viewerParticipantId && r.participant_id === viewerParticipantId) ||
         (facilitatorView && r.participant_id === null),
     }));
+    return payload;
+  }
+  if (activity.kind === "secrets") {
+    const phase = config.phase === "select" ? "select" : "collect";
+    const activeReaderId =
+      typeof config.activeReaderId === "string" ? config.activeReaderId : null;
+    type Meta = {
+      t?: string;
+      r?: string | null;
+      rn?: string | null;
+      p?: string | null;
+      pn?: string | null;
+    };
+    const parse = (v: string): Meta => {
+      try {
+        return JSON.parse(v) as Meta;
+      } catch {
+        return {};
+      }
+    };
+    // Every response row is a secret. created_at order → stable door numbers.
+    const secretRows = responseRows.map((r, i) => ({
+      row: r,
+      meta: parse(r.value),
+      index: i + 1,
+      status: ((r.column_index ?? 0) === 2
+        ? "sealed"
+        : (r.column_index ?? 0) === 1
+          ? "opened"
+          : "available") as "available" | "opened" | "sealed",
+    }));
+
+    // If any available door was pushed to the active reader, that reader may
+    // only open one of those.
+    const pushedToReader = secretRows.filter(
+      (d) => d.status === "available" && d.meta.p && d.meta.p === activeReaderId
+    );
+    const iAmActiveReader =
+      !!viewerParticipantId && viewerParticipantId === activeReaderId;
+
+    const activeReaderName = activeReaderId
+      ? (responseRows.find((r) => r.participant_id === activeReaderId)?.name ??
+        secretRows.find((d) => d.meta.r === activeReaderId)?.meta.rn ??
+        null)
+      : null;
+
+    const own = secretRows.find(
+      (d) =>
+        (!!viewerParticipantId && d.row.participant_id === viewerParticipantId) ||
+        (facilitatorView && d.row.participant_id === null && !viewerParticipantId)
+    );
+
+    payload.secrets = {
+      phase,
+      submittedCount: secretRows.length,
+      mySubmitted: !!own,
+      myText: own ? (own.meta.t ?? null) : null,
+      activeReaderId,
+      activeReaderName,
+      iAmActiveReader,
+      facilitatorReading: secretRows.some(
+        (d) => d.status === "opened" && d.meta.r === "facilitator"
+      ),
+      doors: secretRows.map((d) => {
+        const mineDoor =
+          (!!viewerParticipantId &&
+            d.row.participant_id === viewerParticipantId) ||
+          (facilitatorView &&
+            d.row.participant_id === null &&
+            !viewerParticipantId);
+        // The active reader may open an available door that isn't their own,
+        // honouring a push constraint if one applies to them.
+        const selectableByMe =
+          phase === "select" &&
+          iAmActiveReader &&
+          d.status === "available" &&
+          !mineDoor &&
+          (pushedToReader.length === 0 ||
+            pushedToReader.some((p) => p.row.id === d.row.id));
+        // Text is private: the facilitator sees all; a reader sees the door
+        // they personally opened. Authors are only ever shown to the facilitator.
+        const textVisible =
+          facilitatorView ||
+          (d.status !== "available" &&
+            !!viewerParticipantId &&
+            d.meta.r === viewerParticipantId);
+        return {
+          id: d.row.id,
+          index: d.index,
+          status: d.status,
+          mine: mineDoor,
+          selectableByMe,
+          readerName: d.status === "available" ? null : (d.meta.rn ?? null),
+          pushedToName: facilitatorView ? (d.meta.pn ?? null) : null,
+          author: facilitatorView ? (d.row.name ?? "Facilitator") : null,
+          text: textVisible ? (d.meta.t ?? null) : null,
+        };
+      }),
+    };
     return payload;
   }
 

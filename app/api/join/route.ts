@@ -44,16 +44,43 @@ export async function POST(req: Request) {
   if (windowErr) {
     return NextResponse.json({ error: windowErr }, { status: 403 });
   }
-  // Rejoining with the same name reclaims the existing identity (reconnect or
-  // device switch) instead of creating a roster duplicate.
+  // Names must be unique within a session so the facilitator can identify every
+  // player (essential for flow-controlled tools like Secrets). A name already
+  // held by an ONLINE participant is rejected — pick another. A stale/offline
+  // seat with the same name is treated as the same person reconnecting and is
+  // reclaimed (device switch, dropped tab) rather than duplicated.
   const trimmed = name.slice(0, 80).trim();
-  const existing = await query<{ id: string }>(
-    `SELECT id FROM participants WHERE session_id = $1 AND lower(name) = lower($2)`,
+  const existing = await query<{
+    id: string;
+    last_seen: string;
+    removed_at: string | null;
+  }>(
+    `SELECT id, last_seen, removed_at FROM participants
+     WHERE session_id = $1 AND lower(name) = lower($2)
+     ORDER BY last_seen DESC LIMIT 1`,
     [session.id, trimmed]
   );
+  // Slightly wider than the 12s online window so a mid-heartbeat reload of the
+  // same tab still reads as "in use" rather than a hijack opportunity.
+  const NAME_BUSY_MS = 20_000;
+  const prior = existing.rows[0];
+  if (
+    prior &&
+    !prior.removed_at &&
+    Date.now() - new Date(prior.last_seen).getTime() < NAME_BUSY_MS
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "That name is already in use in this session — please choose a different name.",
+        nameTaken: true,
+      },
+      { status: 409 }
+    );
+  }
   let participantId: string;
-  if (existing.rows[0]) {
-    participantId = existing.rows[0].id;
+  if (prior) {
+    participantId = prior.id;
     // Rejoining reclaims the seat — and clears any facilitator termination, so
     // a re-joined participant isn't immediately booted by the removed check.
     await query(

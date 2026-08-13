@@ -61,7 +61,8 @@ type Kind =
   | "impact4"
   | "survey"
   | "checklist"
-  | "blocks";
+  | "blocks"
+  | "secrets";
 type Sourcing = "facilitator" | "participants";
 
 const KIND_LABEL: Record<string, string> = {
@@ -85,6 +86,7 @@ const KIND_LABEL: Record<string, string> = {
   survey: "Survey",
   checklist: "Checklist",
   blocks: "Blocks",
+  secrets: "Secrets",
 };
 
 // Facilitator's activity station: up to two activities run side by side
@@ -257,7 +259,7 @@ export function ActivityConsole({
     } else if (kind === "blocks") {
       body.blockLabels = blockLabels.map((l) => l.trim());
       body.blocks = blockLabels.length;
-    } else if (kind !== "whiteboard") {
+    } else if (kind !== "whiteboard" && kind !== "secrets") {
       body.items = list;
     }
     if (kind === "likert") body.anchorSet = anchorSet;
@@ -619,6 +621,7 @@ export function ActivityConsole({
                 ["survey", "Survey"],
                 ["checklist", "Checklist"],
                 ["blocks", "Blocks"],
+                ["secrets", "Secrets"],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -705,7 +708,9 @@ export function ActivityConsole({
                                       ? "Please enter the topic of the checklist"
                                       : kind === "blocks"
                                         ? "Question, e.g. What five things have you learned?"
-                                        : "Prompt, e.g. Answer both questions below"
+                                        : kind === "secrets"
+                                          ? "Prompt, e.g. Share a secret only the group will hear"
+                                          : "Prompt, e.g. Answer both questions below"
               }
               maxLength={300}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -1122,7 +1127,14 @@ export function ActivityConsole({
               </div>
             ) : kind === "workflow" ? (
               <WorkflowBuilder value={graph} onChange={setGraph} height={360} />
-            ) : kind === "whiteboard" ? null : (kind === "vote" ||
+            ) : kind === "whiteboard" ? null : kind === "secrets" ? (
+              <p className="text-[11px] text-slate-400">
+                Everyone submits one anonymous secret (only you see the author).
+                Then open the wall and name a reader per turn — they pick a door,
+                read it privately, and perform it as the author. Requires each
+                participant to be logged in on their own device.
+              </p>
+            ) : (kind === "vote" ||
                 kind === "likert") &&
               sourcing === "participants" ? (
               <p className="text-[11px] text-slate-400">

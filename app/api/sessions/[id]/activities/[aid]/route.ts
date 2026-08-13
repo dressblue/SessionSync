@@ -312,6 +312,120 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ ok: true });
   }
 
+  // Secrets — facilitator flow control:
+  //   { action:"phase", value:"select"|"collect" }  open / reclose the wall
+  //   { action:"setReader", participantId|null }     whose turn to pick
+  //   { action:"push", secretId, participantId|null } pre-assign a door
+  //   { action:"open", secretId }                     facilitator reads it
+  //   { action:"seal", secretId }                     mark revealed → lock
+  //   { action:"reset", secretId }                    return a door to the wall
+  if (body?.secrets && typeof body.secrets === "object") {
+    const res = await query<ActivityRow>(
+      `SELECT * FROM activities WHERE id = $1 AND session_id = $2 AND status = 'open'`,
+      [aid, id]
+    );
+    const activity = res.rows[0];
+    if (!activity || activity.kind !== "secrets") {
+      return NextResponse.json({ error: "No secrets activity" }, { status: 404 });
+    }
+    let config: { phase?: string; activeReaderId?: string | null } = {};
+    try {
+      config = JSON.parse(activity.config);
+    } catch {
+      /* rebuilt below */
+    }
+    const s = body.secrets as {
+      action?: string;
+      value?: string;
+      secretId?: string;
+      participantId?: string | null;
+    };
+    const nameFor = async (pid: string) => {
+      const r = await query<{ name: string }>(
+        `SELECT name FROM participants
+         WHERE id = $1 AND session_id = $2 AND removed_at IS NULL`,
+        [pid, id]
+      );
+      return r.rows[0]?.name ?? null;
+    };
+    const patchDoor = async (
+      secretId: string,
+      fn: (v: Record<string, unknown>) => Record<string, unknown>,
+      status?: number
+    ) => {
+      const row = await query<{ value: string; column_index: number | null }>(
+        `SELECT value, column_index FROM activity_responses
+         WHERE id = $1 AND activity_id = $2`,
+        [secretId, aid]
+      );
+      if (!row.rows[0]) return false;
+      let v: Record<string, unknown> = {};
+      try {
+        v = JSON.parse(row.rows[0].value);
+      } catch {
+        /* empty */
+      }
+      const next = fn(v);
+      if (typeof status === "number") {
+        await query(
+          `UPDATE activity_responses SET value = $1, column_index = $2 WHERE id = $3`,
+          [JSON.stringify(next), status, secretId]
+        );
+      } else {
+        await query(`UPDATE activity_responses SET value = $1 WHERE id = $2`, [
+          JSON.stringify(next),
+          secretId,
+        ]);
+      }
+      return true;
+    };
+
+    if (s.action === "phase") {
+      config.phase = s.value === "select" ? "select" : "collect";
+      if (config.phase === "collect") config.activeReaderId = null;
+    } else if (s.action === "setReader") {
+      const pid = typeof s.participantId === "string" ? s.participantId : null;
+      config.activeReaderId = pid && (await nameFor(pid)) ? pid : null;
+    } else if (s.action === "push" && typeof s.secretId === "string") {
+      const pid = typeof s.participantId === "string" ? s.participantId : null;
+      const pn = pid ? await nameFor(pid) : null;
+      const ok = await patchDoor(s.secretId, (v) => ({ ...v, p: pid, pn }));
+      if (!ok) return NextResponse.json({ error: "Door not found" }, { status: 404 });
+    } else if (s.action === "open" && typeof s.secretId === "string") {
+      const ok = await patchDoor(
+        s.secretId,
+        (v) => ({ ...v, r: "facilitator", rn: "Facilitator" }),
+        1
+      );
+      if (!ok) return NextResponse.json({ error: "Door not found" }, { status: 404 });
+    } else if (s.action === "seal" && typeof s.secretId === "string") {
+      const ok = await patchDoor(s.secretId, (v) => v, 2);
+      if (!ok) return NextResponse.json({ error: "Door not found" }, { status: 404 });
+    } else if (s.action === "reset" && typeof s.secretId === "string") {
+      const ok = await patchDoor(
+        s.secretId,
+        (v) => {
+          const { r, rn, ...rest } = v as Record<string, unknown> & {
+            r?: unknown;
+            rn?: unknown;
+          };
+          void r;
+          void rn;
+          return rest;
+        },
+        0
+      );
+      if (!ok) return NextResponse.json({ error: "Door not found" }, { status: 404 });
+    } else {
+      return NextResponse.json({ error: "Unknown secrets action" }, { status: 400 });
+    }
+    await query(`UPDATE activities SET config = $1 WHERE id = $2`, [
+      JSON.stringify(config),
+      aid,
+    ]);
+    return NextResponse.json({ ok: true });
+  }
+
   // Presentation controls: reveal count, wheel spotlight, whiteboard clear.
   if (
     typeof body?.reveal === "number" ||

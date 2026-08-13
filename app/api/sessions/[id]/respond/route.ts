@@ -78,7 +78,8 @@ export async function POST(
   if (
     participantId === null &&
     activity.kind !== "whiteboard" &&
-    activity.kind !== "blocks"
+    activity.kind !== "blocks" &&
+    activity.kind !== "secrets"
   ) {
     return NextResponse.json(
       { error: "Only participants can respond to this activity" },
@@ -105,6 +106,7 @@ export async function POST(
     statements?: { text: string; mode?: "single" | "multi" }[];
     displayOnly?: boolean;
     blocks?: number;
+    activeReaderId?: string | null;
   } = {};
   try {
     config = JSON.parse(activity.config);
@@ -615,6 +617,105 @@ export async function POST(
       );
     }
     return NextResponse.json({ ok: true });
+  }
+
+  // Secrets — a wall of anonymous doors. Each row is one secret:
+  //   participant_id = author (NULL for a facilitator-authored secret)
+  //   column_index   = status: 0 available, 1 opened (a reader is viewing), 2 sealed
+  //   value          = JSON { t: text, r: readerId, rn: readerName, p: pushedTo, pn }
+  if (activity.kind === "secrets") {
+    const phase = config.phase === "select" ? "select" : "collect";
+
+    // Author submits / replaces their one secret (collect phase only).
+    if (typeof body?.submit === "string") {
+      if (phase !== "collect") {
+        return NextResponse.json(
+          { error: "Submissions are closed" },
+          { status: 409 }
+        );
+      }
+      const text = body.submit.trim();
+      // One secret per author; re-submitting replaces it, empty clears it.
+      // IS NOT DISTINCT FROM matches the facilitator's own NULL-participant row.
+      await query(
+        `DELETE FROM activity_responses
+         WHERE activity_id = $1 AND participant_id IS NOT DISTINCT FROM $2`,
+        [activity.id, participantId]
+      );
+      if (text) {
+        await query(
+          `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+           VALUES ($1, $2, $3, 0, $4)`,
+          [randomUUID(), activity.id, participantId, JSON.stringify({ t: text.slice(0, 800) })]
+        );
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // The active reader opens a door (select phase). Guards: it's this
+    // participant's turn, the door is available, not their own, and — if any
+    // door was pushed to them — only a pushed door.
+    if (typeof body?.selectDoor === "string") {
+      if (phase !== "select") {
+        return NextResponse.json({ error: "The wall isn't open yet" }, { status: 409 });
+      }
+      if (!participantId || participantId !== config.activeReaderId) {
+        return NextResponse.json(
+          { error: "It isn't your turn to pick" },
+          { status: 403 }
+        );
+      }
+      const all = await query<{
+        id: string;
+        participant_id: string | null;
+        column_index: number | null;
+        value: string;
+      }>(
+        `SELECT id, participant_id, column_index, value
+         FROM activity_responses WHERE activity_id = $1`,
+        [activity.id]
+      );
+      const parse = (v: string) => {
+        try {
+          return JSON.parse(v) as { p?: string | null };
+        } catch {
+          return {} as { p?: string | null };
+        }
+      };
+      const available = all.rows.filter((r) => (r.column_index ?? 0) === 0);
+      const pushedToMe = available.filter(
+        (r) => parse(r.value).p === participantId
+      );
+      const door = available.find((r) => r.id === body.selectDoor);
+      if (!door) {
+        return NextResponse.json({ error: "That door isn't available" }, { status: 409 });
+      }
+      if (door.participant_id === participantId) {
+        return NextResponse.json(
+          { error: "You can't pick your own secret" },
+          { status: 403 }
+        );
+      }
+      if (pushedToMe.length > 0 && !pushedToMe.some((r) => r.id === door.id)) {
+        return NextResponse.json(
+          { error: "Only your assigned door can be opened" },
+          { status: 403 }
+        );
+      }
+      const prev = parse(door.value) as Record<string, unknown>;
+      const readerName =
+        (typeof body?.name === "string" && body.name.trim()) || "Reader";
+      await query(
+        `UPDATE activity_responses SET column_index = 1, value = $1 WHERE id = $2`,
+        [
+          JSON.stringify({ ...prev, r: participantId, rn: readerName.slice(0, 80) }),
+          door.id,
+        ]
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    return NextResponse.json({ error: "Unknown secrets action" }, { status: 400 });
   }
 
   // Collect phase (participant-sourced vote/likert): suggestions land in the

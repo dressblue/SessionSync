@@ -23,6 +23,7 @@ const VALID_KINDS = [
   "survey",
   "checklist",
   "blocks",
+  "secrets",
 ];
 
 const str = (v: unknown, max = 2000) =>

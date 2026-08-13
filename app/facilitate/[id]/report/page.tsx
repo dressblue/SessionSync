@@ -44,6 +44,7 @@ const KIND_LABEL: Record<string, string> = {
   slides: "Slides",
   checklist: "Checklist",
   blocks: "Blocks",
+  secrets: "Secrets",
 };
 
 function strokesToDataUrl(strokes: Stroke[]): string {
@@ -212,6 +213,15 @@ function activityLines(a: ActivityState): string[] {
         ? `${title}: ${forB.map((r) => `${r.value} — ${r.name}`).join("; ")}`
         : `${title}: (no answers)`;
     });
+  }
+  if (a.kind === "secrets") {
+    const s = a.secrets;
+    if (!s) return ["Secrets"];
+    return s.doors.map(
+      (d) =>
+        `#${d.index} [${d.status}]${d.readerName ? ` read by ${d.readerName}` : ""}: ` +
+        `${d.text ?? "(secret)"}${d.author ? ` — ${d.author}` : ""}`
+    );
   }
   if (a.kind === "whiteboard") {
     return [`Shared whiteboard with ${a.strokes?.length ?? 0} objects`];

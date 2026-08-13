@@ -33,7 +33,8 @@ export type ActivityKind =
   | "survey"
   | "slides"
   | "checklist"
-  | "blocks";
+  | "blocks"
+  | "secrets";
 
 export interface RichItem {
   title: string;
@@ -223,6 +224,28 @@ export interface ActivityState {
     participantId: string | null;
     mine: boolean;
   }[];
+  // secrets — anonymous secrets on a wall of doors (see lib/sessions.ts).
+  secrets?: {
+    phase: "collect" | "select";
+    submittedCount: number;
+    mySubmitted: boolean;
+    myText: string | null;
+    activeReaderId: string | null;
+    activeReaderName: string | null;
+    iAmActiveReader: boolean;
+    facilitatorReading: boolean;
+    doors: {
+      id: string;
+      index: number;
+      status: "available" | "opened" | "sealed";
+      mine: boolean;
+      selectableByMe: boolean;
+      readerName: string | null;
+      pushedToName: string | null;
+      author: string | null;
+      text: string | null;
+    }[];
+  };
   video?: {
     provider: "youtube" | "video";
     ref: string;

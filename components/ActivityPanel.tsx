@@ -15,6 +15,7 @@ import { WordCloud } from "./WordCloud";
 import { SurveyBoard } from "./SurveyBoard";
 import { ChecklistBoard } from "./ChecklistBoard";
 import { BlocksBoard } from "./BlocksBoard";
+import { SecretsWall } from "./SecretsWall";
 import { CardSort } from "./CardSort";
 import { ImpactBoard } from "./ImpactBoard";
 import { WorkflowBuilder } from "./WorkflowBuilder";
@@ -1220,6 +1221,25 @@ export function ActivityPanel({
           participantId={participantId}
           present={presentation}
           onSubmit={(block, value) => send({ block, value }, "POST", false)}
+        />
+      </div>
+    );
+  }
+
+  if (activity.kind === "secrets") {
+    if (!activity.secrets) return null;
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Secrets")}
+        <SecretsWall
+          secrets={activity.secrets}
+          canModerate={canModerate}
+          participantId={participantId}
+          roster={roster}
+          present={presentation}
+          onSubmit={(text) => send({ submit: text }, "POST", false)}
+          onSelectDoor={(doorId) => send({ selectDoor: doorId }, "POST", false)}
+          onManage={(b) => manage({ secrets: b })}
         />
       </div>
     );
