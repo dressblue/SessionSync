@@ -497,6 +497,11 @@ export async function POST(
       );
     }
     config = { columns, statements, displayOnly: !!body?.displayOnly };
+  } else if (kind === "blocks") {
+    // One question with N numbered answer blocks (1–10, default 3). Participants
+    // place one answer per block; logged per block.
+    const n = Math.min(10, Math.max(1, Math.floor(Number(body?.blocks) || 3)));
+    config = { blocks: n };
   } else {
     return NextResponse.json({ error: "Unknown activity kind" }, { status: 400 });
   }

@@ -48,7 +48,8 @@ export type ActivityKind =
   | "impact4"
   | "survey"
   | "slides"
-  | "checklist";
+  | "checklist"
+  | "blocks";
 
 export interface ActivityRow {
   id: string;
@@ -278,6 +279,18 @@ export interface ActivityPayload {
     id: string;
     s: number; // statement index
     selected: number[]; // chosen column indices
+    name: string;
+    participantId: string | null;
+    mine: boolean;
+  }[];
+  // blocks — one question with N numbered answer blocks; each participant may
+  // place one answer per block. Logged per block so the facilitator sees who
+  // answered where.
+  blockCount?: number;
+  blockResponses?: {
+    id: string;
+    block: number; // block index 0..N-1
+    value: string;
     name: string;
     participantId: string | null;
     mine: boolean;
@@ -703,6 +716,8 @@ export interface ActivityConfig {
   showMap?: boolean;
   // wordcloud — facilitator-bumped layout seed (re-shuffle control)
   shuffle?: number;
+  // blocks — number of numbered answer blocks (1–10)
+  blocks?: number;
 }
 
 export function parseActivityConfig(activity: ActivityRow): ActivityConfig {
@@ -1122,6 +1137,24 @@ export function buildActivityPayload(
         mine: !!viewerParticipantId && r.participant_id === viewerParticipantId,
       };
     });
+    return payload;
+  }
+  if (activity.kind === "blocks") {
+    payload.blockCount = Math.min(
+      10,
+      Math.max(1, (config as { blocks?: number }).blocks ?? 3)
+    );
+    // Full response set to everyone so the per-block log renders for the
+    // facilitator (with names), the projector, and each participant (own answers
+    // flagged `mine` to pre-fill their inputs).
+    payload.blockResponses = responseRows.map((r) => ({
+      id: r.id,
+      block: r.column_index ?? 0,
+      value: r.value,
+      name: r.name ?? "Facilitator",
+      participantId: r.participant_id,
+      mine: !!viewerParticipantId && r.participant_id === viewerParticipantId,
+    }));
     return payload;
   }
 

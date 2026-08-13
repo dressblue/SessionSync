@@ -32,7 +32,8 @@ export type ActivityKind =
   | "impact4"
   | "survey"
   | "slides"
-  | "checklist";
+  | "checklist"
+  | "blocks";
 
 export interface RichItem {
   title: string;
@@ -123,6 +124,16 @@ export interface ActivityState {
     id: string;
     s: number;
     selected: number[];
+    name: string;
+    participantId: string | null;
+    mine: boolean;
+  }[];
+  // blocks — one question, N numbered answer blocks; logged per block.
+  blockCount?: number;
+  blockResponses?: {
+    id: string;
+    block: number;
+    value: string;
     name: string;
     participantId: string | null;
     mine: boolean;
@@ -261,6 +272,7 @@ export interface StepTool {
   endPage?: number;
   statements?: { text: string; mode: "single" | "multi" }[];
   displayOnly?: boolean;
+  blocks?: number;
 }
 
 export interface VideoState {

@@ -10,6 +10,7 @@ import { CardSort } from "@/components/CardSort";
 import { ImpactBoard } from "@/components/ImpactBoard";
 import { SurveyBoard } from "@/components/SurveyBoard";
 import { ChecklistBoard } from "@/components/ChecklistBoard";
+import { BlocksBoard } from "@/components/BlocksBoard";
 import { LIKERT_COLORS, anchorLabels } from "@/lib/likert";
 
 interface ReportData {
@@ -42,6 +43,7 @@ const KIND_LABEL: Record<string, string> = {
   survey: "Survey",
   slides: "Slides",
   checklist: "Checklist",
+  blocks: "Blocks",
 };
 
 function strokesToDataUrl(strokes: Stroke[]): string {
@@ -197,6 +199,16 @@ function activityLines(a: ActivityState): string[] {
         `${si + 1}. ${st.text}`,
         `  ${columns.map((c, ci) => `${c}: ${counts[ci]}`).join(" · ")}`,
       ];
+    });
+  }
+  if (a.kind === "blocks") {
+    const n = a.blockCount ?? 3;
+    const resp = a.blockResponses ?? [];
+    return Array.from({ length: n }, (_, i) => {
+      const forB = resp.filter((r) => r.block === i);
+      return forB.length
+        ? `Block ${i + 1}: ${forB.map((r) => `${r.value} — ${r.name}`).join("; ")}`
+        : `Block ${i + 1}: (no answers)`;
     });
   }
   if (a.kind === "whiteboard") {
@@ -719,6 +731,15 @@ export default function ReportPage() {
                     canAnswer={false}
                     showResults
                     onAnswer={() => {}}
+                  />
+                </div>
+              ) : a.kind === "blocks" ? (
+                <div className="mt-2">
+                  <BlocksBoard
+                    blockCount={a.blockCount ?? 3}
+                    responses={a.blockResponses ?? []}
+                    canModerate={false}
+                    readOnly
                   />
                 </div>
               ) : (

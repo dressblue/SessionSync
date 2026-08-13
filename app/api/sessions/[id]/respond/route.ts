@@ -100,6 +100,7 @@ export async function POST(
     answerRevealed?: boolean;
     statements?: { text: string; mode?: "single" | "multi" }[];
     displayOnly?: boolean;
+    blocks?: number;
   } = {};
   try {
     config = JSON.parse(activity.config);
@@ -580,6 +581,30 @@ export async function POST(
         `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
          VALUES ($1, $2, $3, $4, $5)`,
         [randomUUID(), activity.id, participantId, si, JSON.stringify({ selected })]
+      );
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  if (activity.kind === "blocks") {
+    const n = Math.min(10, Math.max(1, config.blocks ?? 3));
+    const bi = Number(body?.block);
+    if (!Number.isInteger(bi) || bi < 0 || bi >= n) {
+      return NextResponse.json({ error: "Unknown block" }, { status: 400 });
+    }
+    const value = typeof body?.value === "string" ? body.value.trim() : "";
+    // One answer per (participant, block); re-submitting replaces it and an
+    // empty value clears it. column_index = block index → logged per block.
+    await query(
+      `DELETE FROM activity_responses
+       WHERE activity_id = $1 AND participant_id = $2 AND column_index = $3`,
+      [activity.id, participantId, bi]
+    );
+    if (value) {
+      await query(
+        `INSERT INTO activity_responses (id, activity_id, participant_id, column_index, value)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [randomUUID(), activity.id, participantId, bi, value.slice(0, 500)]
       );
     }
     return NextResponse.json({ ok: true });

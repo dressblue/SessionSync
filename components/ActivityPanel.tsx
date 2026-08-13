@@ -14,6 +14,7 @@ import { TimerDisplay } from "./TimerDisplay";
 import { WordCloud } from "./WordCloud";
 import { SurveyBoard } from "./SurveyBoard";
 import { ChecklistBoard } from "./ChecklistBoard";
+import { BlocksBoard } from "./BlocksBoard";
 import { CardSort } from "./CardSort";
 import { ImpactBoard } from "./ImpactBoard";
 import { WorkflowBuilder } from "./WorkflowBuilder";
@@ -1202,6 +1203,22 @@ export function ActivityPanel({
             send({ statementIndex: si, selected }, "POST", false)
           }
           presentation={presentation}
+        />
+      </div>
+    );
+  }
+
+  if (activity.kind === "blocks") {
+    return (
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm p-6">
+        {header("Blocks")}
+        <BlocksBoard
+          blockCount={activity.blockCount ?? 3}
+          responses={activity.blockResponses ?? []}
+          canModerate={canModerate}
+          participantId={participantId}
+          present={presentation}
+          onSubmit={(block, value) => send({ block, value }, "POST", false)}
         />
       </div>
     );

@@ -59,7 +59,8 @@ type Kind =
   | "impact3"
   | "impact4"
   | "survey"
-  | "checklist";
+  | "checklist"
+  | "blocks";
 type Sourcing = "facilitator" | "participants";
 
 const KIND_LABEL: Record<string, string> = {
@@ -82,6 +83,7 @@ const KIND_LABEL: Record<string, string> = {
   impact4: "Impact 4",
   survey: "Survey",
   checklist: "Checklist",
+  blocks: "Blocks",
 };
 
 // Facilitator's activity station: up to two activities run side by side
@@ -147,6 +149,8 @@ export function ActivityConsole({
     ChecklistStatement[]
   >([newChecklistStatement()]);
   const [checklistDisplayOnly, setChecklistDisplayOnly] = useState(false);
+  // Blocks: one question, N numbered answer fields (1–10, default 3).
+  const [blocksCount, setBlocksCount] = useState(3);
   const [exhibitType, setExhibitType] = useState<"file" | "url" | "text">("file");
   const [exhibitFileId, setExhibitFileId] = useState("");
   const [exhibitUrl, setExhibitUrl] = useState("");
@@ -248,6 +252,8 @@ export function ActivityConsole({
         .map((s) => ({ text: s.text.trim(), mode: s.mode }))
         .filter((s) => s.text);
       body.displayOnly = checklistDisplayOnly;
+    } else if (kind === "blocks") {
+      body.blocks = blocksCount;
     } else if (kind !== "whiteboard") {
       body.items = list;
     }
@@ -273,6 +279,7 @@ export function ActivityConsole({
     setCorrectIndex(0);
     setSeedText("");
     setSurveyQuestions([newSurveyQuestion()]);
+    setBlocksCount(3);
   }
 
   // Carry a source activity's word list into the Push-an-activity form for a new
@@ -608,6 +615,7 @@ export function ActivityConsole({
                 ["impact4", "Impact 4"],
                 ["survey", "Survey"],
                 ["checklist", "Checklist"],
+                ["blocks", "Blocks"],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -692,7 +700,9 @@ export function ActivityConsole({
                                     ? "Topic, e.g. Name a risk (what each row is about)"
                                     : kind === "checklist"
                                       ? "Please enter the topic of the checklist"
-                                      : "Prompt, e.g. Answer both questions below"
+                                      : kind === "blocks"
+                                        ? "Question, e.g. What five things have you learned?"
+                                        : "Prompt, e.g. Answer both questions below"
               }
               maxLength={300}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -712,6 +722,28 @@ export function ActivityConsole({
                 onStatements={setChecklistStatements}
                 onDisplayOnly={setChecklistDisplayOnly}
               />
+            ) : kind === "blocks" ? (
+              <div className="flex flex-col gap-1.5">
+                <label className="flex items-center gap-2 text-sm text-slate-600">
+                  Answer blocks
+                  <select
+                    value={blocksCount}
+                    onChange={(e) => setBlocksCount(Number(e.target.value))}
+                    className="rounded-md border border-slate-300 px-2 py-1 text-sm bg-white"
+                  >
+                    {Array.from({ length: 10 }, (_, i) => i + 1).map((k) => (
+                      <option key={k} value={k}>
+                        {k}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="text-xs text-slate-400">
+                  Participants get {blocksCount} numbered field
+                  {blocksCount === 1 ? "" : "s"} — one answer per block; answers
+                  are logged per block.
+                </p>
+              </div>
             ) : kind === "impact1" ||
             kind === "impact2" ||
             kind === "impact3" ||

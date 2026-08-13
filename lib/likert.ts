@@ -29,6 +29,7 @@ export const LIKERT_ANCHOR_SETS: Record<string, string[]> = {
     "Very Satisfied",
   ],
   quality: ["Very Poor", "Poor", "Fair", "Good", "Excellent"],
+  rating: ["Very Poor", "Poor", "Average", "Good", "Very Good"],
   likelihood: [
     "Very Unlikely",
     "Unlikely",
@@ -74,6 +75,7 @@ const LIKERT_ANCHOR_TITLES: Record<string, string> = {
   frequency: "Frequency",
   satisfaction: "Satisfaction",
   quality: "Quality",
+  rating: "Rating",
   likelihood: "Likelihood",
   importance: "Importance",
   approval: "Approval",

@@ -46,6 +46,7 @@ const TOOL_BADGES: Record<string, string> = {
   survey: "Survey",
   slides: "Slides",
   checklist: "Checklist",
+  blocks: "Blocks",
 };
 
 // Compact delete affordance (replaces the word "Delete" to save row space).
@@ -126,6 +127,7 @@ function Console() {
     | "survey"
     | "slides"
     | "checklist"
+    | "blocks"
   >("vote");
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolList, setToolList] = useState("");
@@ -164,6 +166,7 @@ function Console() {
     ChecklistStatement[]
   >([newChecklistStatement()]);
   const [toolDisplayOnly, setToolDisplayOnly] = useState(false);
+  const [toolBlocks, setToolBlocks] = useState(3);
   const [decks, setDecks] = useState<
     { id: string; title: string; url: string; pageCount: number }[]
   >([]);
@@ -477,6 +480,7 @@ function Console() {
     setToolChecklistColumns(["", ""]);
     setToolChecklistStatements([newChecklistStatement()]);
     setToolDisplayOnly(false);
+    setToolBlocks(3);
   }
 
   async function saveTool(stepId: string) {
@@ -551,6 +555,8 @@ function Console() {
         .map((s) => ({ text: s.text.trim(), mode: s.mode }))
         .filter((s) => s.text);
       body.displayOnly = toolDisplayOnly;
+    } else if (toolKind === "blocks") {
+      body.blocks = toolBlocks;
     } else if (toolKind !== "whiteboard") body.items = list;
     if (toolKind === "likert") body.anchorSet = toolAnchorSet;
     const ok = await api(
@@ -617,6 +623,7 @@ function Console() {
         : [newChecklistStatement()]
     );
     setToolDisplayOnly(!!t.displayOnly);
+    setToolBlocks(t.blocks ?? 3);
   }
 
   function launchTool(tool: StepTool) {
@@ -648,6 +655,7 @@ function Console() {
       endPage: tool.endPage,
       statements: tool.statements,
       displayOnly: tool.displayOnly,
+      blocks: tool.blocks,
     });
   }
 
@@ -1393,7 +1401,28 @@ function Console() {
                             <option value="survey">Survey (questions + comments)</option>
                             <option value="slides">Slides (play deck pages)</option>
                             <option value="checklist">Checklist (statements × options)</option>
+                            <option value="blocks">Blocks (one question, N fields)</option>
                           </select>
+                          {toolKind === "blocks" && (
+                            <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                              Blocks
+                              <select
+                                value={toolBlocks}
+                                onChange={(e) =>
+                                  setToolBlocks(Number(e.target.value))
+                                }
+                                className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white"
+                              >
+                                {Array.from({ length: 10 }, (_, i) => i + 1).map(
+                                  (k) => (
+                                    <option key={k} value={k}>
+                                      {k}
+                                    </option>
+                                  )
+                                )}
+                              </select>
+                            </label>
+                          )}
                           <button
                             type="button"
                             onClick={() => openLibPicker(s.id)}
