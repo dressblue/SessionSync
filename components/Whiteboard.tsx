@@ -12,6 +12,7 @@ import {
   resolveEnd,
 } from "@/lib/whiteboard";
 import { ART_GROUPS, artPiece } from "@/lib/artPieces";
+import { FACE_PIECE_GROUPS } from "@/lib/facePieceAssets";
 
 const COLORS = [
   "#0f172a", "#64748b", "#ffffff", "#e11d48", "#f97316", "#f59e0b",
@@ -340,26 +341,30 @@ export function Whiteboard({
   }
 
   const [uploading, setUploading] = useState(false);
-  // Upload a pasted/dropped/picked image, then place it (true aspect ratio).
+  const [partsOpen, setPartsOpen] = useState(false);
+  // Place a hosted image at true aspect ratio (used by paste/drop and the
+  // AI face-part picker).
+  async function placeImageUrl(url: string, w = 0.24) {
+    const dims = await new Promise<{ w: number; h: number }>((res) => {
+      const im = new window.Image();
+      im.onload = () => res({ w: im.naturalWidth || 1, h: im.naturalHeight || 1 });
+      im.onerror = () => res({ w: 1, h: 1 });
+      im.src = url;
+    });
+    // On-screen aspect = (bw*VIEW_W)/(bh*VIEW_H) should equal dims.w/dims.h.
+    const bh = Math.min(0.8, w * (VIEW_W / VIEW_H) * (dims.h / dims.w));
+    const id = uid();
+    await create({ id, mine: true, k: "image", src: url, x: 0.4, y: 0.35, bw: w, bh });
+    setTool("select");
+    setSelectedIds(new Set([id]));
+  }
+  // Upload a pasted/dropped/picked image, then place it.
   async function placeImage(dataUrl: string) {
     if (!onPasteImage || uploading) return;
     setUploading(true);
     try {
       const url = await onPasteImage(dataUrl);
-      if (!url) return;
-      const dims = await new Promise<{ w: number; h: number }>((res) => {
-        const im = new window.Image();
-        im.onload = () => res({ w: im.naturalWidth || 1, h: im.naturalHeight || 1 });
-        im.onerror = () => res({ w: 1, h: 1 });
-        im.src = url;
-      });
-      const bw = 0.34;
-      // On-screen aspect = (bw*VIEW_W)/(bh*VIEW_H) should equal dims.w/dims.h.
-      const bh = Math.min(0.7, bw * (VIEW_W / VIEW_H) * (dims.h / dims.w));
-      const id = uid();
-      await create({ id, mine: true, k: "image", src: url, x: 0.33, y: 0.2, bw, bh });
-      setTool("select");
-      setSelectedIds(new Set([id]));
+      if (url) await placeImageUrl(url, 0.34);
     } finally {
       setUploading(false);
     }
@@ -968,6 +973,55 @@ export function Whiteboard({
                             <svg viewBox="0 0 100 100" className="h-7 w-7">
                               <g dangerouslySetInnerHTML={{ __html: artPiece(a, "#0f172a", null) }} />
                             </svg>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* AI face-part pieces (hand-drawn eyes etc., placed as images) */}
+            <div className="relative">
+              <button
+                type="button"
+                title="Drop a hand-drawn face part (eyes…)"
+                onClick={() => {
+                  setPartsOpen((v) => !v);
+                  setArtOpen(false);
+                  setStampOpen(false);
+                  setShapeMenu(false);
+                }}
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm leading-none hover:bg-slate-50"
+              >
+                👁️ Parts ▾
+              </button>
+              {partsOpen && (
+                <div className="absolute z-10 mt-1 max-h-80 w-72 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
+                  {FACE_PIECE_GROUPS.map((g) => (
+                    <div key={g.label} className="mb-1">
+                      <p className="px-1 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        {g.label}
+                      </p>
+                      <div className="grid grid-cols-4 gap-1">
+                        {g.items.map((piece) => (
+                          <button
+                            key={piece.id}
+                            type="button"
+                            title={piece.label}
+                            onClick={() => {
+                              setPartsOpen(false);
+                              placeImageUrl(piece.url);
+                            }}
+                            className="flex aspect-square items-center justify-center rounded border border-slate-100 bg-white p-0.5 hover:bg-slate-50"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={piece.url}
+                              alt={piece.label}
+                              className="max-h-full max-w-full object-contain"
+                              loading="lazy"
+                            />
                           </button>
                         ))}
                       </div>
