@@ -13,6 +13,8 @@ interface BlockResponse {
 
 interface Props {
   blockCount: number;
+  /** Optional per-block title; falls back to "Block N". */
+  labels?: string[];
   responses: BlockResponse[];
   /** Facilitator view — sees the per-block log with names. */
   canModerate: boolean;
@@ -31,6 +33,7 @@ interface Props {
 // answered where; the public projector shows the answers without names).
 export function BlocksBoard({
   blockCount,
+  labels,
   responses,
   canModerate,
   participantId,
@@ -40,6 +43,7 @@ export function BlocksBoard({
 }: Props) {
   const n = Math.min(10, Math.max(1, blockCount || 3));
   const blocks = Array.from({ length: n }, (_, i) => i);
+  const titleFor = (i: number) => labels?.[i]?.trim() || `Block ${i + 1}`;
   const mineFor = (i: number) =>
     responses.find((r) => r.block === i && r.mine)?.value ?? "";
   const byBlock = (i: number) => responses.filter((r) => r.block === i);
@@ -61,7 +65,7 @@ export function BlocksBoard({
           return (
             <div key={i}>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Block {i + 1}
+                {titleFor(i)}
               </label>
               <input
                 value={val}
@@ -76,7 +80,7 @@ export function BlocksBoard({
                   }
                 }}
                 maxLength={500}
-                placeholder={`Your answer for block ${i + 1}`}
+                placeholder={`Your answer for ${titleFor(i)}`}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
@@ -109,7 +113,7 @@ export function BlocksBoard({
                 present ? "text-sm" : "text-xs"
               }`}
             >
-              Block {i + 1}
+              {titleFor(i)}
               <span className="ml-1 font-normal normal-case text-slate-400">
                 · {rs.length}
               </span>

@@ -1214,6 +1214,7 @@ export function ActivityPanel({
         {header("Blocks")}
         <BlocksBoard
           blockCount={activity.blockCount ?? 3}
+          labels={activity.blockLabels}
           responses={activity.blockResponses ?? []}
           canModerate={canModerate}
           participantId={participantId}
@@ -1420,7 +1421,7 @@ export function ActivityPanel({
         {fivePoint && (
           <LikertLegend
             anchors={anchors}
-            className="mb-2 border-t border-slate-100 pt-3"
+            className="mb-2 justify-end border-t border-slate-100 pt-3"
           />
         )}
         {participantId && (

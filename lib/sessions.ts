@@ -283,10 +283,11 @@ export interface ActivityPayload {
     participantId: string | null;
     mine: boolean;
   }[];
-  // blocks — one question with N numbered answer blocks; each participant may
-  // place one answer per block. Logged per block so the facilitator sees who
-  // answered where.
+  // blocks — one question with N answer blocks (optional per-block titles);
+  // each participant may place one answer per block. Logged per block so the
+  // facilitator sees who answered where.
   blockCount?: number;
+  blockLabels?: string[];
   blockResponses?: {
     id: string;
     block: number; // block index 0..N-1
@@ -716,8 +717,9 @@ export interface ActivityConfig {
   showMap?: boolean;
   // wordcloud — facilitator-bumped layout seed (re-shuffle control)
   shuffle?: number;
-  // blocks — number of numbered answer blocks (1–10)
+  // blocks — number of answer blocks (1–10) + optional per-block titles
   blocks?: number;
+  blockLabels?: string[];
 }
 
 export function parseActivityConfig(activity: ActivityRow): ActivityConfig {
@@ -1140,10 +1142,9 @@ export function buildActivityPayload(
     return payload;
   }
   if (activity.kind === "blocks") {
-    payload.blockCount = Math.min(
-      10,
-      Math.max(1, (config as { blocks?: number }).blocks ?? 3)
-    );
+    const bc = config as { blocks?: number; blockLabels?: string[] };
+    payload.blockCount = Math.min(10, Math.max(1, bc.blocks ?? 3));
+    payload.blockLabels = Array.isArray(bc.blockLabels) ? bc.blockLabels : [];
     // Full response set to everyone so the per-block log renders for the
     // facilitator (with names), the projector, and each participant (own answers
     // flagged `mine` to pre-fill their inputs).

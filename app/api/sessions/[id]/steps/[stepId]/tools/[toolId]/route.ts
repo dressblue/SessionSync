@@ -130,6 +130,7 @@ export async function PATCH(
   if (Array.isArray(body?.statements)) config.statements = body.statements;
   if (typeof body?.displayOnly === "boolean") config.displayOnly = body.displayOnly;
   if (typeof body?.blocks === "number") config.blocks = body.blocks;
+  if (Array.isArray(body?.blockLabels)) config.blockLabels = body.blockLabels;
   await query(
     `UPDATE step_tools SET kind = $1, prompt = $2, config = $3
      WHERE id = $4

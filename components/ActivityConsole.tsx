@@ -15,6 +15,7 @@ import {
   newChecklistStatement,
   type ChecklistStatement,
 } from "./ChecklistBuilder";
+import { BlocksBuilder } from "./BlocksBuilder";
 import { LIKERT_ANCHOR_LABELS } from "@/lib/likert";
 
 interface Props {
@@ -149,8 +150,9 @@ export function ActivityConsole({
     ChecklistStatement[]
   >([newChecklistStatement()]);
   const [checklistDisplayOnly, setChecklistDisplayOnly] = useState(false);
-  // Blocks: one question, N numbered answer fields (1–10, default 3).
-  const [blocksCount, setBlocksCount] = useState(3);
+  // Blocks: one question + N answer fields (1–10, default 3), each an optional
+  // title. The labels list IS the block count.
+  const [blockLabels, setBlockLabels] = useState<string[]>(["", "", ""]);
   const [exhibitType, setExhibitType] = useState<"file" | "url" | "text">("file");
   const [exhibitFileId, setExhibitFileId] = useState("");
   const [exhibitUrl, setExhibitUrl] = useState("");
@@ -253,7 +255,8 @@ export function ActivityConsole({
         .filter((s) => s.text);
       body.displayOnly = checklistDisplayOnly;
     } else if (kind === "blocks") {
-      body.blocks = blocksCount;
+      body.blockLabels = blockLabels.map((l) => l.trim());
+      body.blocks = blockLabels.length;
     } else if (kind !== "whiteboard") {
       body.items = list;
     }
@@ -279,7 +282,7 @@ export function ActivityConsole({
     setCorrectIndex(0);
     setSeedText("");
     setSurveyQuestions([newSurveyQuestion()]);
-    setBlocksCount(3);
+    setBlockLabels(["", "", ""]);
   }
 
   // Carry a source activity's word list into the Push-an-activity form for a new
@@ -723,27 +726,7 @@ export function ActivityConsole({
                 onDisplayOnly={setChecklistDisplayOnly}
               />
             ) : kind === "blocks" ? (
-              <div className="flex flex-col gap-1.5">
-                <label className="flex items-center gap-2 text-sm text-slate-600">
-                  Answer blocks
-                  <select
-                    value={blocksCount}
-                    onChange={(e) => setBlocksCount(Number(e.target.value))}
-                    className="rounded-md border border-slate-300 px-2 py-1 text-sm bg-white"
-                  >
-                    {Array.from({ length: 10 }, (_, i) => i + 1).map((k) => (
-                      <option key={k} value={k}>
-                        {k}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <p className="text-xs text-slate-400">
-                  Participants get {blocksCount} numbered field
-                  {blocksCount === 1 ? "" : "s"} — one answer per block; answers
-                  are logged per block.
-                </p>
-              </div>
+              <BlocksBuilder labels={blockLabels} onChange={setBlockLabels} />
             ) : kind === "impact1" ||
             kind === "impact2" ||
             kind === "impact3" ||

@@ -19,6 +19,7 @@ import {
   newChecklistStatement,
   type ChecklistStatement,
 } from "@/components/ChecklistBuilder";
+import { BlocksBuilder } from "@/components/BlocksBuilder";
 import { Markdown } from "@/components/Markdown";
 import { ActivityConsole } from "@/components/ActivityConsole";
 import { Chat } from "@/components/Chat";
@@ -166,7 +167,11 @@ function Console() {
     ChecklistStatement[]
   >([newChecklistStatement()]);
   const [toolDisplayOnly, setToolDisplayOnly] = useState(false);
-  const [toolBlocks, setToolBlocks] = useState(3);
+  const [toolBlockLabels, setToolBlockLabels] = useState<string[]>([
+    "",
+    "",
+    "",
+  ]);
   const [decks, setDecks] = useState<
     { id: string; title: string; url: string; pageCount: number }[]
   >([]);
@@ -480,7 +485,7 @@ function Console() {
     setToolChecklistColumns(["", ""]);
     setToolChecklistStatements([newChecklistStatement()]);
     setToolDisplayOnly(false);
-    setToolBlocks(3);
+    setToolBlockLabels(["", "", ""]);
   }
 
   async function saveTool(stepId: string) {
@@ -556,7 +561,8 @@ function Console() {
         .filter((s) => s.text);
       body.displayOnly = toolDisplayOnly;
     } else if (toolKind === "blocks") {
-      body.blocks = toolBlocks;
+      body.blockLabels = toolBlockLabels.map((l) => l.trim());
+      body.blocks = toolBlockLabels.length;
     } else if (toolKind !== "whiteboard") body.items = list;
     if (toolKind === "likert") body.anchorSet = toolAnchorSet;
     const ok = await api(
@@ -623,7 +629,11 @@ function Console() {
         : [newChecklistStatement()]
     );
     setToolDisplayOnly(!!t.displayOnly);
-    setToolBlocks(t.blocks ?? 3);
+    setToolBlockLabels(
+      t.blockLabels && t.blockLabels.length
+        ? [...t.blockLabels]
+        : Array.from({ length: t.blocks ?? 3 }, () => "")
+    );
   }
 
   function launchTool(tool: StepTool) {
@@ -656,6 +666,7 @@ function Console() {
       statements: tool.statements,
       displayOnly: tool.displayOnly,
       blocks: tool.blocks,
+      blockLabels: tool.blockLabels,
     });
   }
 
@@ -1403,26 +1414,6 @@ function Console() {
                             <option value="checklist">Checklist (statements × options)</option>
                             <option value="blocks">Blocks (one question, N fields)</option>
                           </select>
-                          {toolKind === "blocks" && (
-                            <label className="flex items-center gap-1.5 text-xs text-slate-500">
-                              Blocks
-                              <select
-                                value={toolBlocks}
-                                onChange={(e) =>
-                                  setToolBlocks(Number(e.target.value))
-                                }
-                                className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white"
-                              >
-                                {Array.from({ length: 10 }, (_, i) => i + 1).map(
-                                  (k) => (
-                                    <option key={k} value={k}>
-                                      {k}
-                                    </option>
-                                  )
-                                )}
-                              </select>
-                            </label>
-                          )}
                           <button
                             type="button"
                             onClick={() => openLibPicker(s.id)}
@@ -1657,6 +1648,12 @@ function Console() {
                             onColumns={setToolChecklistColumns}
                             onStatements={setToolChecklistStatements}
                             onDisplayOnly={setToolDisplayOnly}
+                          />
+                        )}
+                        {toolKind === "blocks" && (
+                          <BlocksBuilder
+                            labels={toolBlockLabels}
+                            onChange={setToolBlockLabels}
                           />
                         )}
                         {(toolKind === "impact1" ||

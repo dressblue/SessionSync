@@ -128,8 +128,9 @@ export interface ActivityState {
     participantId: string | null;
     mine: boolean;
   }[];
-  // blocks — one question, N numbered answer blocks; logged per block.
+  // blocks — one question, N answer blocks (optional titles); logged per block.
   blockCount?: number;
+  blockLabels?: string[];
   blockResponses?: {
     id: string;
     block: number;
@@ -273,6 +274,7 @@ export interface StepTool {
   statements?: { text: string; mode: "single" | "multi" }[];
   displayOnly?: boolean;
   blocks?: number;
+  blockLabels?: string[];
 }
 
 export interface VideoState {

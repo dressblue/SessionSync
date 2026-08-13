@@ -120,6 +120,7 @@ export async function POST(
   if (Array.isArray(body?.statements)) config.statements = body.statements;
   if (typeof body?.displayOnly === "boolean") config.displayOnly = body.displayOnly;
   if (typeof body?.blocks === "number") config.blocks = body.blocks;
+  if (Array.isArray(body?.blockLabels)) config.blockLabels = body.blockLabels;
 
   const pos = await query<{ next: number }>(
     `SELECT COALESCE(MAX(position), -1) + 1 AS next FROM step_tools WHERE step_id = $1`,

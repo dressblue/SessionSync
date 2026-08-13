@@ -498,10 +498,19 @@ export async function POST(
     }
     config = { columns, statements, displayOnly: !!body?.displayOnly };
   } else if (kind === "blocks") {
-    // One question with N numbered answer blocks (1–10, default 3). Participants
-    // place one answer per block; logged per block.
-    const n = Math.min(10, Math.max(1, Math.floor(Number(body?.blocks) || 3)));
-    config = { blocks: n };
+    // One question with N answer blocks (1–10, default 3), each with an optional
+    // title. Participants place one answer per block; logged per block. The
+    // block count comes from the labels list when given, else the numeric field.
+    const labels = (Array.isArray(body?.blockLabels) ? body.blockLabels : [])
+      .map((l: unknown) => (typeof l === "string" ? l.trim().slice(0, 120) : ""))
+      .slice(0, 10);
+    const n = labels.length
+      ? labels.length
+      : Math.min(10, Math.max(1, Math.floor(Number(body?.blocks) || 3)));
+    const blockLabels = labels.length
+      ? labels
+      : (Array.from({ length: n }, () => "") as string[]);
+    config = { blocks: n, blockLabels };
   } else {
     return NextResponse.json({ error: "Unknown activity kind" }, { status: 400 });
   }

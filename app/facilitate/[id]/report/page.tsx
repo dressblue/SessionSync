@@ -203,12 +203,14 @@ function activityLines(a: ActivityState): string[] {
   }
   if (a.kind === "blocks") {
     const n = a.blockCount ?? 3;
+    const labels = a.blockLabels ?? [];
     const resp = a.blockResponses ?? [];
     return Array.from({ length: n }, (_, i) => {
+      const title = labels[i]?.trim() || `Block ${i + 1}`;
       const forB = resp.filter((r) => r.block === i);
       return forB.length
-        ? `Block ${i + 1}: ${forB.map((r) => `${r.value} — ${r.name}`).join("; ")}`
-        : `Block ${i + 1}: (no answers)`;
+        ? `${title}: ${forB.map((r) => `${r.value} — ${r.name}`).join("; ")}`
+        : `${title}: (no answers)`;
     });
   }
   if (a.kind === "whiteboard") {
@@ -737,6 +739,7 @@ export default function ReportPage() {
                 <div className="mt-2">
                   <BlocksBoard
                     blockCount={a.blockCount ?? 3}
+                    labels={a.blockLabels}
                     responses={a.blockResponses ?? []}
                     canModerate={false}
                     readOnly
