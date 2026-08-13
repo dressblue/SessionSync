@@ -77,9 +77,10 @@ export function SecretsWall({
         .map((d) => d.readerName as string)
     )
   );
+  const readSet = new Set(readNames.map((n) => n.toLowerCase()));
   const notYet = readers
     .map((r) => r.name)
-    .filter((n) => !readNames.some((rn) => rn.toLowerCase() === n.toLowerCase()));
+    .filter((n) => !readSet.has(n.toLowerCase()));
   const sealedCount = doors.filter((d) => d.status === "sealed").length;
 
   return (
@@ -92,6 +93,7 @@ export function SecretsWall({
           myOpenIndex={myOpenDoor?.index ?? null}
           canModerate={canModerate}
           readers={readers}
+          readSet={readSet}
           onManage={onManage}
         />
       )}
@@ -193,6 +195,7 @@ export function SecretsWall({
             present={present}
             canModerate={canModerate}
             readers={readers}
+            readSet={readSet}
             onSelectDoor={onSelectDoor}
             onManage={onManage}
           />
@@ -364,6 +367,7 @@ function TurnBanner({
   myOpenIndex,
   canModerate,
   readers,
+  readSet,
   onManage,
 }: {
   secrets: Secrets;
@@ -371,6 +375,7 @@ function TurnBanner({
   myOpenIndex: number | null;
   canModerate: boolean;
   readers: RosterEntry[];
+  readSet: Set<string>;
   onManage?: (body: Record<string, unknown>) => void;
 }) {
   const pickedIndex = secrets.activeReaderDoorIndex;
@@ -388,12 +393,17 @@ function TurnBanner({
           className="rounded-lg border border-indigo-300 bg-white px-2 py-1 text-sm"
         >
           <option value="">— no one —</option>
-          {readers.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.name}
-              {r.online ? "" : " (offline)"}
-            </option>
-          ))}
+          {readers.map((r) => {
+            const done = readSet.has(r.name.toLowerCase());
+            return (
+              <option key={r.id} value={r.id}>
+                {done ? "✓ " : "• "}
+                {r.name}
+                {done ? " (read)" : " — not yet"}
+                {r.online ? "" : " · offline"}
+              </option>
+            );
+          })}
         </select>
         {activeReaderName && (
           <span className="text-sm text-indigo-700">
@@ -443,6 +453,7 @@ function DoorCell({
   present,
   canModerate,
   readers,
+  readSet,
   onSelectDoor,
   onManage,
 }: {
@@ -450,6 +461,7 @@ function DoorCell({
   present: boolean;
   canModerate: boolean;
   readers: RosterEntry[];
+  readSet: Set<string>;
   onSelectDoor?: (doorId: string) => void;
   onManage?: (body: Record<string, unknown>) => void;
 }) {
@@ -525,11 +537,16 @@ function DoorCell({
                   {door.pushedToName ? `pushed → ${door.pushedToName}` : "Push to…"}
                 </option>
                 {door.pushedToName && <option value="">— clear push —</option>}
-                {readers.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
+                {readers.map((r) => {
+                  const done = readSet.has(r.name.toLowerCase());
+                  return (
+                    <option key={r.id} value={r.id}>
+                      {done ? "✓ " : "• "}
+                      {r.name}
+                      {done ? " (read)" : " — not yet"}
+                    </option>
+                  );
+                })}
               </select>
               <button
                 onClick={() => onManage?.({ action: "open", secretId: door.id })}
