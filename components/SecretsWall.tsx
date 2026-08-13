@@ -212,15 +212,11 @@ export function SecretsWall({
         <div className="flex flex-wrap items-center gap-4">
           {openDoors.length > 0 && (
             <button
-              onClick={() =>
-                openDoors.forEach((d) =>
-                  onManage?.({ action: "reset", secretId: d.id })
-                )
-              }
+              onClick={() => onManage?.({ action: "returnPick" })}
               className="text-xs font-medium text-amber-700 underline hover:text-amber-900"
-              title="Send the opened door back to the wall (unread) so the same reader can pick a different one"
+              title="Send the opened door back to the wall (unread), reshuffle the wall, and let the same reader pick a different one"
             >
-              ↩ Return their pick to the wall (let them choose again)
+              ↩ Return their pick &amp; reshuffle (let them choose again)
             </button>
           )}
           <button

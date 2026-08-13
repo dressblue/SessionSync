@@ -328,7 +328,11 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (!activity || activity.kind !== "secrets") {
       return NextResponse.json({ error: "No secrets activity" }, { status: 404 });
     }
-    let config: { phase?: string; activeReaderId?: string | null } = {};
+    let config: {
+      phase?: string;
+      activeReaderId?: string | null;
+      shuffle?: number;
+    } = {};
     try {
       config = JSON.parse(activity.config);
     } catch {
@@ -403,6 +407,35 @@ export async function PATCH(req: Request, ctx: Ctx) {
       if (!ok) return NextResponse.json({ error: "Door not found" }, { status: 404 });
       // Sealing ends the turn — clear the active reader back to "no one".
       config.activeReaderId = null;
+    } else if (s.action === "returnPick") {
+      // Return every opened (unsealed) door to the wall — reader stays active —
+      // and reshuffle the wall so the returned secret can't be spotted again.
+      const opened = await query<{ id: string; value: string }>(
+        `SELECT id, value FROM activity_responses
+         WHERE activity_id = $1 AND column_index = 1`,
+        [aid]
+      );
+      for (const row of opened.rows) {
+        let v: Record<string, unknown> = {};
+        try {
+          v = JSON.parse(row.value);
+        } catch {
+          /* empty */
+        }
+        const { r, rn, ...rest } = v as Record<string, unknown> & {
+          r?: unknown;
+          rn?: unknown;
+        };
+        void r;
+        void rn;
+        await query(
+          `UPDATE activity_responses SET value = $1, column_index = 0 WHERE id = $2`,
+          [JSON.stringify(rest), row.id]
+        );
+      }
+      config.shuffle = (typeof config.shuffle === "number" ? config.shuffle : 0) + 1;
+    } else if (s.action === "shuffle") {
+      config.shuffle = (typeof config.shuffle === "number" ? config.shuffle : 0) + 1;
     } else if (s.action === "reset" && typeof s.secretId === "string") {
       const ok = await patchDoor(
         s.secretId,

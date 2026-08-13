@@ -1213,8 +1213,23 @@ export function buildActivityPayload(
         return {};
       }
     };
-    // Every response row is a secret. created_at order → stable door numbers.
-    const secretRows = responseRows.map((r, i) => ({
+    // Every response row is a secret. Door numbers follow creation order until
+    // the facilitator reshuffles (config.shuffle bumps), after which doors are
+    // re-ordered deterministically by a hash of their id + the shuffle seed —
+    // so a returned secret lands in a new position on the wall.
+    const seed = typeof config.shuffle === "number" ? config.shuffle : 0;
+    const hashOrder = (s: string) => {
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0;
+      return h;
+    };
+    const orderedRows =
+      seed > 0
+        ? [...responseRows].sort(
+            (a, b) => hashOrder(`${a.id}:${seed}`) - hashOrder(`${b.id}:${seed}`)
+          )
+        : responseRows;
+    const secretRows = orderedRows.map((r, i) => ({
       row: r,
       meta: parse(r.value),
       index: i + 1,
