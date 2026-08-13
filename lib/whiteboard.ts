@@ -122,16 +122,50 @@ function multiText(
     .join("");
 }
 
-// Render one element to an SVG fragment string, then rotate it about its box
-// center if `rot` is set (pen strokes and connectors aren't box-anchored, so
-// they're left unrotated).
+// A fill can be a solid colour, "none", or a pattern token "p:<type>:<color>".
+// fillRef returns what an element's `fill=` attribute should point at; a
+// patterned element also emits its own inline <pattern> def (unique by id).
+export function fillRef(f: string | null | undefined, id: string): string {
+  if (!f) return "none";
+  if (f.startsWith("p:")) return `url(#pat_${esc(id)})`;
+  return esc(f);
+}
+export const FILL_PATTERNS = ["dots", "stripes", "grid", "cross", "checker"] as const;
+function patternTile(pid: string, type: string, color: string): string {
+  const c = esc(color || "#64748b");
+  const w = `<rect width="100%" height="100%" fill="#ffffff"/>`;
+  switch (type) {
+    case "dots":
+      return `<pattern id="${pid}" width="10" height="10" patternUnits="userSpaceOnUse">${w}<circle cx="5" cy="5" r="2" fill="${c}"/></pattern>`;
+    case "stripes":
+      return `<pattern id="${pid}" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">${w}<rect width="4" height="8" fill="${c}"/></pattern>`;
+    case "grid":
+      return `<pattern id="${pid}" width="12" height="12" patternUnits="userSpaceOnUse">${w}<path d="M12 0H0V12" fill="none" stroke="${c}" stroke-width="1.2"/></pattern>`;
+    case "cross":
+      return `<pattern id="${pid}" width="8" height="8" patternUnits="userSpaceOnUse">${w}<path d="M0 0L8 8M8 0L0 8" stroke="${c}" stroke-width="1"/></pattern>`;
+    case "checker":
+      return `<pattern id="${pid}" width="12" height="12" patternUnits="userSpaceOnUse">${w}<rect width="6" height="6" fill="${c}"/><rect x="6" y="6" width="6" height="6" fill="${c}"/></pattern>`;
+    default:
+      return `<pattern id="${pid}" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="10" fill="${c}"/></pattern>`;
+  }
+}
+function patternDefsFor(el: Stroke): string {
+  if (!el.f || !el.f.startsWith("p:")) return "";
+  const parts = el.f.split(":");
+  return `<defs>${patternTile(`pat_${el.id}`, parts[1] || "dots", parts[2] || "#64748b")}</defs>`;
+}
+
+// Render one element to an SVG fragment string, prepend any pattern-fill def,
+// then rotate it about its box center if `rot` is set (pen strokes and
+// connectors aren't box-anchored, so they're left unrotated).
 export function elementToSvg(el: Stroke, byId: Map<string, Stroke>): string {
   const raw = elementToSvgRaw(el, byId);
-  if (!el.rot || !el.k || el.k === "conn") return raw;
+  const defs = patternDefsFor(el);
+  if (!el.rot || !el.k || el.k === "conn") return defs + raw;
   const b = boxOf(el);
   const cx = (b.x + b.bw / 2) * VIEW_W;
   const cy = (b.y + b.bh / 2) * VIEW_H;
-  return `<g transform="rotate(${el.rot.toFixed(1)} ${cx.toFixed(1)} ${cy.toFixed(1)})">${raw}</g>`;
+  return `${defs}<g transform="rotate(${el.rot.toFixed(1)} ${cx.toFixed(1)} ${cy.toFixed(1)})">${raw}</g>`;
 }
 
 // Render one element to an SVG fragment string (VIEW_W×VIEW_H coordinate space).
@@ -155,7 +189,7 @@ function elementToSvgRaw(el: Stroke, byId: Map<string, Stroke>): string {
   const Y = b.y * H;
   const BW = b.bw * W;
   const BH = b.bh * H;
-  const fill = el.f ? esc(el.f) : "none";
+  const fill = fillRef(el.f, el.id);
   const cx = X + BW / 2;
   const cy = Y + BH / 2;
   const labelFs = el.fs ?? 15; // shape labels honor the element's font size
@@ -208,9 +242,9 @@ function elementToSvgRaw(el: Stroke, byId: Map<string, Stroke>): string {
     case "text":
       return multiText(X, Y + (el.fs ?? 24) / 2, el.t ?? "", stroke, el.fs ?? 24, BW || 300, "start");
     case "sticky": {
-      const bg = el.f ?? "#fde68a";
+      const bg = el.f ? fillRef(el.f, el.id) : "#fde68a";
       return (
-        `<rect x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${BW.toFixed(1)}" height="${BH.toFixed(1)}" rx="4" fill="${esc(bg)}" stroke="#0000001a" stroke-width="1"/>` +
+        `<rect x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${BW.toFixed(1)}" height="${BH.toFixed(1)}" rx="4" fill="${bg}" stroke="#0000001a" stroke-width="1"/>` +
         (el.t ? multiText(cx, cy, el.t, "#1f2937", 14, BW * 0.86) : "")
       );
     }

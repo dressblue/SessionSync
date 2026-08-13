@@ -319,7 +319,7 @@ export async function POST(
           c: str(e.c, 20) ?? "#0f172a",
           sw: num(e.sw, 0.5, 20, 3),
         };
-        const f = str(e.f, 20);
+        const f = str(e.f, 40); // colour or pattern token "p:type:#rrggbb"
         if (f) el.f = f;
         const t = str(e.t, 500);
         if (t !== undefined) el.t = t;
@@ -384,7 +384,7 @@ export async function POST(
       if ("bh" in u) patch.bh = num(u.bh, -1, 1, 0.1);
       if ("t" in u) patch.t = str(u.t, 500) ?? "";
       if ("c" in u) patch.c = str(u.c, 20) ?? cur.c;
-      if ("f" in u) patch.f = str(u.f, 20) ?? null;
+      if ("f" in u) patch.f = str(u.f, 40) ?? null;
       if ("fs" in u) patch.fs = num(u.fs, 8, 200, 24);
       if ("z" in u && typeof u.z === "number" && isFinite(u.z)) patch.z = u.z;
       if ("rot" in u && typeof u.rot === "number" && isFinite(u.rot))

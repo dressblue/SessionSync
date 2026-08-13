@@ -23,6 +23,24 @@ const FILLS: (string | null)[] = [
   "#ddd6fe", "#f5d0fe", "#fbcfe8", "#e5e7eb", "#fca5a5", "#fdba74",
 ];
 const WIDTHS = [2, 4, 7];
+// Pattern fills (stored as "p:<type>:<color>"); CSS previews for the picker.
+const PATTERN_TYPES = ["dots", "stripes", "grid", "cross", "checker"] as const;
+const patternPreview = (type: string, c: string): string => {
+  switch (type) {
+    case "dots":
+      return `radial-gradient(${c} 22%, transparent 24%) 0 0/6px 6px`;
+    case "stripes":
+      return `repeating-linear-gradient(45deg, ${c} 0 2px, #fff 2px 5px)`;
+    case "grid":
+      return `repeating-linear-gradient(0deg, ${c} 0 1px, #fff 1px 6px), repeating-linear-gradient(90deg, ${c} 0 1px, transparent 1px 6px)`;
+    case "cross":
+      return `repeating-linear-gradient(45deg, ${c} 0 1px, transparent 1px 5px), repeating-linear-gradient(-45deg, ${c} 0 1px, #fff 1px 5px)`;
+    case "checker":
+      return `conic-gradient(${c} 25%, #fff 0 50%, ${c} 0 75%, #fff 0) 0 0/8px 8px`;
+    default:
+      return c;
+  }
+};
 const STAMP_GROUPS: { label: string; items: string[] }[] = [
   { label: "People", items: ["🙂", "😀", "🧍", "🧍‍♀️", "👥", "👨‍👩‍👧", "🧑‍🏫", "🧑‍💼", "👷", "👮", "🧑‍⚕️", "🙋", "👶", "🧑‍🍳", "🕺", "🧑‍🌾"] },
   { label: "Buildings", items: ["🏠", "🏡", "🏢", "🏫", "🏥", "🏪", "🏦", "⛪", "🕌", "🏭", "🏛️", "🏗️", "🏨", "🏰", "🗼", "⛺", "🚪", "🪑"] },
@@ -845,6 +863,26 @@ export function Whiteboard({
                   className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                 />
               </label>
+              {/* pattern fills — inked with the current line color */}
+              <span className="shrink-0 pl-1 text-[10px] uppercase text-slate-400">
+                pat
+              </span>
+              {PATTERN_TYPES.map((pt) => {
+                const token = `p:${pt}:${color}`;
+                return (
+                  <button
+                    key={pt}
+                    type="button"
+                    onClick={() => {
+                      setFill(token);
+                      applyToSelected({ f: token });
+                    }}
+                    className={`h-6 w-6 shrink-0 rounded-md border-2 ${fill === token ? "border-indigo-500" : "border-slate-200"}`}
+                    style={{ background: patternPreview(pt, color), backgroundColor: "#fff" }}
+                    title={`${pt} fill`}
+                  />
+                );
+              })}
             </div>
             {/* width */}
             <div className="ml-1 flex items-center gap-1">
