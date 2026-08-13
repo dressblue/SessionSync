@@ -859,7 +859,9 @@ export function buildActivityPayload(
     return [...counts].map(([id, count]) => ({ id, count }));
   };
 
-  if (config.phase === "collect") {
+  // Secrets has its own "collect" phase handled in its dedicated branch below —
+  // this early return is only for vote/likert participant-sourced suggestions.
+  if (config.phase === "collect" && activity.kind !== "secrets") {
     const collectRows = responseRows.filter(
       (r) => r.column_index === COLLECT_COLUMN
     );

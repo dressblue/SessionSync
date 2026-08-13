@@ -1784,6 +1784,15 @@ function Console() {
                             )}
                           </div>
                         )}
+                        {toolKind === "secrets" && (
+                          <p className="text-[11px] text-slate-400">
+                            Everyone submits one anonymous secret (only you see
+                            the author). Then open the wall and name a reader per
+                            turn — they pick a door, read it privately, and
+                            perform it as the author. Needs each participant
+                            logged in on their own device.
+                          </p>
+                        )}
                         {toolKind !== "whiteboard" &&
                           toolKind !== "exhibit" &&
                           toolKind !== "video" &&
@@ -1796,6 +1805,8 @@ function Console() {
                           toolKind !== "survey" &&
                           toolKind !== "checklist" &&
                           toolKind !== "slides" &&
+                          toolKind !== "blocks" &&
+                          toolKind !== "secrets" &&
                           !(
                             (toolKind === "vote" || toolKind === "likert") &&
                             toolSourced
