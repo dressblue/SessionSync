@@ -20,6 +20,7 @@ interface Props {
   onClear: () => void;
   onShareToggle: (peerId: string) => void;
   onPresent: (participantId: string | null) => void;
+  onPasteImage?: (dataUrl: string) => Promise<string | null>;
 }
 
 // A read-only snapshot of a canvas (a peer's / presented / gallery build).
@@ -57,6 +58,7 @@ export function BuildStudio({
   onClear,
   onShareToggle,
   onPresent,
+  onPasteImage,
 }: Props) {
   const [enlarged, setEnlarged] = useState<string | null>(null);
 
@@ -108,6 +110,7 @@ export function BuildStudio({
           onElementUpdate={onElementUpdate}
           onUndo={onUndo}
           onClear={onClear}
+          onPasteImage={onPasteImage}
         />
       )}
 

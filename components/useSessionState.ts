@@ -86,6 +86,7 @@ export interface Stroke {
     | "stamp"
     | "art"
     | "poly"
+    | "image"
     | "table"
     | "conn";
   x?: number;
@@ -98,6 +99,7 @@ export interface Stroke {
   fs?: number; // font size (text)
   ch?: string; // stamp emoji
   art?: string; // art-piece id (face parts etc.) for k="art"
+  src?: string; // image URL for k="image"
   pts?: [number, number][]; // poly vertices in unit (0..1) box space, for k="poly"
   rows?: number; // table rows
   cols?: number; // table columns

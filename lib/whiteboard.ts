@@ -254,6 +254,10 @@ function elementToSvgRaw(el: Stroke, byId: Map<string, Stroke>): string {
     case "art":
       // Hand-drawn face part etc., scaled to the box via a nested viewBox.
       return `<svg x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${BW.toFixed(1)}" height="${BH.toFixed(1)}" viewBox="0 0 100 100" preserveAspectRatio="none" overflow="visible">${artPiece(el.art, stroke, el.f ?? null)}</svg>`;
+    case "image":
+      return el.src
+        ? `<image href="${esc(el.src)}" x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${BW.toFixed(1)}" height="${BH.toFixed(1)}" preserveAspectRatio="xMidYMid meet"/>`
+        : "";
     case "poly": {
       // A sculptable polygon: vertices are unit (0..1) coords within the box.
       const pts = (el.pts && el.pts.length >= 2 ? el.pts : [[0.5, 0], [1, 1], [0, 1]]) as [number, number][];

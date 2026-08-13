@@ -132,6 +132,8 @@ interface Props {
   onClear: () => void;
   /** Override the emoji bucket (the "Build" tool passes a themed set). */
   stampGroups?: { label: string; items: string[] }[];
+  /** Upload a pasted/dropped image (data URL) → returns a hosted URL, or null. */
+  onPasteImage?: (dataUrl: string) => Promise<string | null>;
 }
 
 const uid = () =>
@@ -153,6 +155,7 @@ export function Whiteboard({
   onUndo,
   onClear,
   stampGroups,
+  onPasteImage,
 }: Props) {
   const stampGroupsUsed = stampGroups ?? STAMP_GROUPS;
   const stampsFlat = stampGroupsUsed.flatMap((g) => g.items);
@@ -335,6 +338,65 @@ export function Whiteboard({
     if (!el.k) await onStroke({ id, ...rest });
     else await onElement({ id, ...rest });
   }
+
+  const [uploading, setUploading] = useState(false);
+  // Upload a pasted/dropped/picked image, then place it (true aspect ratio).
+  async function placeImage(dataUrl: string) {
+    if (!onPasteImage || uploading) return;
+    setUploading(true);
+    try {
+      const url = await onPasteImage(dataUrl);
+      if (!url) return;
+      const dims = await new Promise<{ w: number; h: number }>((res) => {
+        const im = new window.Image();
+        im.onload = () => res({ w: im.naturalWidth || 1, h: im.naturalHeight || 1 });
+        im.onerror = () => res({ w: 1, h: 1 });
+        im.src = url;
+      });
+      const bw = 0.34;
+      // On-screen aspect = (bw*VIEW_W)/(bh*VIEW_H) should equal dims.w/dims.h.
+      const bh = Math.min(0.7, bw * (VIEW_W / VIEW_H) * (dims.h / dims.w));
+      const id = uid();
+      await create({ id, mine: true, k: "image", src: url, x: 0.33, y: 0.2, bw, bh });
+      setTool("select");
+      setSelectedIds(new Set([id]));
+    } finally {
+      setUploading(false);
+    }
+  }
+  // Read the first image out of a file list / clipboard and place it.
+  function readAndPlace(files: FileList | File[] | null | undefined) {
+    const list = files ? Array.from(files) : [];
+    const img = list.find((f) => f.type.startsWith("image/"));
+    if (!img) return;
+    const r = new FileReader();
+    r.onload = () => {
+      if (typeof r.result === "string") placeImage(r.result);
+    };
+    r.readAsDataURL(img);
+  }
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Paste an image from the clipboard (Cmd/Ctrl-V) onto the board.
+  useEffect(() => {
+    if (!interactive || !onPasteImage) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const it of Array.from(items)) {
+        if (it.type.startsWith("image/")) {
+          const f = it.getAsFile();
+          if (f) {
+            e.preventDefault();
+            readAndPlace([f]);
+          }
+          return;
+        }
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interactive, onPasteImage, uploading]);
 
   // Supplemental "drop it on the board" path (the Objects-panel ＋ Add menu):
   // place a ready-made object at a cascading centre position, select it, and
@@ -914,6 +976,30 @@ export function Whiteboard({
                 </div>
               )}
             </div>
+            {/* image upload (paste/drop also work) */}
+            {onPasteImage && (
+              <>
+                <button
+                  type="button"
+                  title="Add an image (or paste / drop one onto the canvas)"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm leading-none hover:bg-slate-50 disabled:opacity-40"
+                >
+                  {uploading ? "…" : "🖼"}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    readAndPlace(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+              </>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -1024,7 +1110,7 @@ export function Whiteboard({
                 onChange={(e) => {
                   const v = Number(e.target.value);
                   setFontSize(v);
-                  if (selected && !!selected.k && selected.k !== "conn" && selected.k !== "stamp" && selected.k !== "art") {
+                  if (selected && !!selected.k && selected.k !== "conn" && selected.k !== "stamp" && selected.k !== "art" && selected.k !== "image") {
                     setPending((p) => ({ ...p, [selected.id]: { ...p[selected.id], fs: v } }));
                     onElementUpdate({ id: selected.id, fs: v });
                   }
@@ -1106,6 +1192,15 @@ export function Whiteboard({
           onPointerMove={pointerMove}
           onPointerUp={pointerUp}
           onPointerLeave={pointerUp}
+          onDragOver={onPasteImage ? (e) => e.preventDefault() : undefined}
+          onDrop={
+            onPasteImage
+              ? (e) => {
+                  e.preventDefault();
+                  readAndPlace(e.dataTransfer?.files);
+                }
+              : undefined
+          }
         >
           {/* Static picture — one shared renderer for board + report. */}
           <g
@@ -1537,7 +1632,7 @@ export function Whiteboard({
         hit={hitObject}
         onEdit={(el, pt) => {
           setSelectedIds(new Set([el.id]));
-          if (el.k === "conn" || el.k === "stamp" || el.k === "art" || el.k === "poly") return;
+          if (el.k === "conn" || el.k === "stamp" || el.k === "art" || el.k === "poly" || el.k === "image") return;
           if (el.k === "table") {
             const b = boxOf(el);
             const cols = el.cols ?? 3;
@@ -1583,6 +1678,7 @@ function elLabel(e: Stroke): string {
   if (!e.k) return "Pen stroke";
   if (e.k === "stamp") return "Stamp";
   if (e.k === "art") return (e.art ?? "art").replace(/_/g, " ");
+  if (e.k === "image") return "Image";
   if ((e.k === "text" || e.k === "sticky") && e.t?.trim()) return e.t.trim().slice(0, 24);
   return KIND_NAMES[e.k] ?? e.k;
 }
@@ -1590,6 +1686,7 @@ function elIcon(e: Stroke): string {
   if (!e.k) return "✎";
   if (e.k === "stamp") return e.ch ?? "★";
   if (e.k === "art") return "🙂";
+  if (e.k === "image") return "🖼";
   return KIND_ICONS[e.k] ?? "◆";
 }
 

@@ -106,6 +106,22 @@ export function ActivityPanel({
     }
   }
 
+  // Upload a pasted/dropped image to the session's Blob store; returns its URL.
+  async function uploadImage(dataUrl: string): Promise<string | null> {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/build-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(moderationHeaders ?? {}) },
+        body: JSON.stringify({ participantId, dataUrl }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return typeof data?.url === "string" ? data.url : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function moderate(entryId: string, body: Record<string, boolean>) {
     if (!moderationHeaders || busy) return;
     setBusy(true);
@@ -1114,6 +1130,7 @@ export function ActivityPanel({
           onElementUpdate={(elUpdate) => send({ elUpdate }, "POST", false)}
           onUndo={(entryId) => send({ entryId }, "DELETE")}
           onClear={() => manage({ clear: true })}
+          onPasteImage={uploadImage}
         />
       </div>
     );
@@ -1137,6 +1154,7 @@ export function ActivityPanel({
           onClear={() => send({ clearMine: true }, "POST", false)}
           onShareToggle={(peerId) => send({ shareToggle: peerId }, "POST", false)}
           onPresent={(pid) => manage({ build: { action: "present", participantId: pid } })}
+          onPasteImage={uploadImage}
         />
       </div>
     );

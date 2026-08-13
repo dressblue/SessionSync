@@ -273,7 +273,7 @@ export async function POST(
       typeof v === "string" ? v.slice(0, cap) : undefined;
     const ELEMENT_KINDS = [
       "rect", "rrect", "ellipse", "triangle", "diamond", "cloud",
-      "line", "arrow", "text", "sticky", "stamp", "art", "poly", "table", "conn",
+      "line", "arrow", "text", "sticky", "stamp", "art", "poly", "image", "table", "conn",
     ];
     // Sanitize a polygon's vertex list: up to 64 points, each clamped to 0..1.
     const ptsArray = (v: unknown): [number, number][] =>
@@ -337,6 +337,14 @@ export async function POST(
         if (k === "poly") {
           const p = ptsArray(e.pts);
           el.pts = p.length >= 3 ? p : [[0.5, 0], [1, 1], [0, 1]];
+        }
+        if (k === "image") {
+          const src = str(e.src, 600);
+          // Only allow https image URLs (e.g. our Blob CDN) — never data: URIs.
+          if (!src || !/^https:\/\//.test(src)) {
+            return NextResponse.json({ error: "Invalid image" }, { status: 400 });
+          }
+          el.src = src;
         }
         if (k === "table") {
           el.rows = Math.round(num(e.rows, 1, 8, 3));
