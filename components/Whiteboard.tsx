@@ -1005,7 +1005,7 @@ export function Whiteboard({
                 }}
                 className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm leading-none hover:bg-slate-50"
               >
-                👁️ Parts ▾
+                🧑 Face kit ▾
               </button>
               {partsOpen && (
                 <div className="absolute z-10 mt-1 max-h-80 w-72 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">

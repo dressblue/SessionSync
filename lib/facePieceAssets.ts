@@ -14,13 +14,37 @@ const HOST = "https://jz2zdu0bh6nu10tq.public.blob.vercel-storage.com/build-asse
 const EYE = (id: string) => `${HOST}/eyes-v2/${id}.png`;
 // noses/lips/brows/ears/lashes each live in their own v1 folder.
 const PART = (dir: string) => (id: string) => `${HOST}/${dir}/${id}.png`;
-const NOSE = PART("noses-v1");
-const LIP = PART("lips-v1");
+const NOSE = PART("noses-v2");
+const LIP = PART("lips-v2");
 const BROW = PART("brows-v1");
 const EAR = PART("ears-v1");
 const LASH = PART("lashes-v1");
+const FACE = PART("faces-v1");
+const HAIR = PART("hair-v1");
 
 export const FACE_PIECE_GROUPS: { label: string; items: FacePiece[] }[] = [
+  {
+    // Base head shapes to drop first (lightly-guided outlines); build features
+    // on top, then add a hairstyle from the Hair group.
+    label: "Face shapes",
+    items: [
+      { id: "face_oval", label: "Oval", url: FACE("face_oval") },
+      { id: "face_round", label: "Round", url: FACE("face_round") },
+      { id: "face_square", label: "Square", url: FACE("face_square") },
+      { id: "face_heart", label: "Heart", url: FACE("face_heart") },
+      { id: "face_oblong", label: "Oblong", url: FACE("face_oblong") },
+      { id: "face_diamond", label: "Diamond", url: FACE("face_diamond") },
+      { id: "face_triangle", label: "Triangle", url: FACE("face_triangle") },
+      { id: "face_inverted", label: "Inverted", url: FACE("face_inverted") },
+      { id: "face_rectangle", label: "Rectangle", url: FACE("face_rectangle") },
+      { id: "face_pear", label: "Pear", url: FACE("face_pear") },
+      { id: "face_rounded_square", label: "Rounded square", url: FACE("face_rounded_square") },
+      { id: "face_soft_oval", label: "Soft oval", url: FACE("face_soft_oval") },
+      { id: "face_wide", label: "Wide", url: FACE("face_wide") },
+      { id: "face_narrow", label: "Narrow", url: FACE("face_narrow") },
+      { id: "face_egg", label: "Egg", url: FACE("face_egg") },
+    ],
+  },
   {
     label: "Eyes",
     items: [
@@ -139,6 +163,38 @@ export const FACE_PIECE_GROUPS: { label: string; items: FacePiece[] }[] = [
       { id: "lash_short", label: "Short", url: LASH("lash_short") },
       { id: "lash_clustered", label: "Clustered", url: LASH("lash_clustered") },
       { id: "lash_curled", label: "Curled", url: LASH("lash_curled") },
+    ],
+  },
+  {
+    // Wig-style hair — hair mass with an open face gap; drop over a face shape.
+    label: "Hair",
+    items: [
+      { id: "hair_buzz", label: "Buzz", url: HAIR("hair_buzz") },
+      { id: "hair_crew", label: "Crew", url: HAIR("hair_crew") },
+      { id: "hair_fade", label: "Fade", url: HAIR("hair_fade") },
+      { id: "hair_sidepart_m", label: "Side part", url: HAIR("hair_sidepart_m") },
+      { id: "hair_slickback", label: "Slick-back", url: HAIR("hair_slickback") },
+      { id: "hair_curly_short_m", label: "Short curly", url: HAIR("hair_curly_short_m") },
+      { id: "hair_afro_m", label: "Afro (med)", url: HAIR("hair_afro_m") },
+      { id: "hair_manbun", label: "Man bun", url: HAIR("hair_manbun") },
+      { id: "hair_dreads", label: "Dreadlocks", url: HAIR("hair_dreads") },
+      { id: "hair_receding", label: "Receding", url: HAIR("hair_receding") },
+      { id: "hair_spiky", label: "Spiky", url: HAIR("hair_spiky") },
+      { id: "hair_mohawk", label: "Mohawk", url: HAIR("hair_mohawk") },
+      { id: "hair_pompadour", label: "Pompadour", url: HAIR("hair_pompadour") },
+      { id: "hair_long_straight", label: "Long straight", url: HAIR("hair_long_straight") },
+      { id: "hair_long_wavy", label: "Long wavy", url: HAIR("hair_long_wavy") },
+      { id: "hair_bob", label: "Bob", url: HAIR("hair_bob") },
+      { id: "hair_pixie", label: "Pixie", url: HAIR("hair_pixie") },
+      { id: "hair_ponytail", label: "Ponytail", url: HAIR("hair_ponytail") },
+      { id: "hair_bun", label: "Bun", url: HAIR("hair_bun") },
+      { id: "hair_braids", label: "Box braids", url: HAIR("hair_braids") },
+      { id: "hair_curly_long", label: "Long curly", url: HAIR("hair_curly_long") },
+      { id: "hair_afro_f", label: "Afro (large)", url: HAIR("hair_afro_f") },
+      { id: "hair_bangs", label: "Bangs", url: HAIR("hair_bangs") },
+      { id: "hair_updo", label: "Updo", url: HAIR("hair_updo") },
+      { id: "hair_pigtails", label: "Pigtails", url: HAIR("hair_pigtails") },
+      { id: "hair_shoulder_layered", label: "Layered", url: HAIR("hair_shoulder_layered") },
     ],
   },
 ];
