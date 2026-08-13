@@ -11,7 +11,7 @@ import {
   sortByZ,
   resolveEnd,
 } from "@/lib/whiteboard";
-import { ART_GROUPS, artPiece } from "@/lib/artPieces";
+import { ART_GROUPS } from "@/lib/artPieces";
 import { FACE_PIECE_GROUPS } from "@/lib/facePieceAssets";
 
 const COLORS = [
@@ -43,16 +43,19 @@ const patternPreview = (type: string, c: string): string => {
       return c;
   }
 };
+// One consolidated icon set (no per-theme buckets). Doubled breadth.
 const STAMP_GROUPS: { label: string; items: string[] }[] = [
-  { label: "People", items: ["🙂", "😀", "🧍", "🧍‍♀️", "👥", "👨‍👩‍👧", "🧑‍🏫", "🧑‍💼", "👷", "👮", "🧑‍⚕️", "🙋", "👶", "🧑‍🍳", "🕺", "🧑‍🌾"] },
-  { label: "Buildings", items: ["🏠", "🏡", "🏢", "🏫", "🏥", "🏪", "🏦", "⛪", "🕌", "🏭", "🏛️", "🏗️", "🏨", "🏰", "🗼", "⛺", "🚪", "🪑"] },
-  { label: "Nature", items: ["🌳", "🌲", "🌴", "🌵", "🌱", "🌿", "🍀", "🌸", "🌷", "🌻", "🌊", "⛰️", "🏔️", "🌋", "🏞️", "🪨", "🔥", "💧", "❄️", "🍂"] },
-  { label: "Weather", items: ["☀️", "🌤️", "⛅", "☁️", "🌧️", "⛈️", "🌩️", "🌈", "⭐", "🌙", "💨", "🌪️"] },
-  { label: "Transport", items: ["🚗", "🚕", "🚙", "🚌", "🚚", "🚛", "🚓", "🚑", "🚒", "🚲", "🛵", "🏍️", "✈️", "🚀", "⛵", "🚢", "🚂", "🚦", "🛣️", "🅿️", "⚓", "🛑"] },
-  { label: "Animals", items: ["🐶", "🐱", "🐴", "🐄", "🐖", "🐑", "🐔", "🐟", "🐝", "🦋", "🐢", "🦉", "🐕", "🐈", "🐰", "🦆"] },
-  { label: "Objects", items: ["💻", "📱", "🖥️", "⌨️", "🖨️", "📷", "☎️", "📞", "✉️", "📧", "📅", "🕐", "🔔", "🔑", "🔒", "💡", "🔦", "🧰", "🔧", "📦", "🎁", "🛒", "💰", "💵", "📈", "📉", "📊", "📋", "📌", "📎", "✏️", "🖊️", "📖", "🎓", "🏆", "⚙️"] },
-  { label: "Symbols", items: ["❤️", "⭐", "✅", "❌", "⚠️", "❓", "❗", "➕", "➖", "🚩", "🏁", "🎯", "💬", "💭", "🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "⚫", "⚪", "⬆️", "⬇️", "⬅️", "➡️", "🔁", "♻️", "🆗", "🚫"] },
-  { label: "Food", items: ["🍎", "🍞", "🍕", "🍔", "🍟", "☕", "🍺", "🥗", "🍰", "🍦", "🍩", "🥤", "🍌", "🥕"] },
+  { label: "Faces & feelings", items: ["🙂", "😀", "😃", "😄", "😁", "😊", "🥰", "😍", "😘", "😌", "😎", "🤓", "🧐", "🙃", "😉", "😇", "🥳", "🤩", "😐", "😑", "😶", "🙄", "😏", "😴", "😪", "🥱", "😔", "😞", "😟", "😕", "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "😱", "😨", "😰", "😥", "😳", "🤯", "😬", "🤔", "🤨", "😅", "😆", "🤣", "😂", "😷", "🤢", "🤮", "🥶", "🥵"] },
+  { label: "People", items: ["🧍", "🧍‍♀️", "🧑", "👩", "👨", "🧒", "👶", "👴", "👵", "👥", "👨‍👩‍👧", "👨‍👩‍👧‍👦", "🧑‍🏫", "🧑‍💼", "👷", "👮", "🧑‍⚕️", "🧑‍🍳", "🧑‍🌾", "🧑‍🔧", "🧑‍🚒", "🧑‍✈️", "🕵️", "💂", "🙋", "🙆", "🙅", "🤷", "🤦", "💁", "🙇", "🧑‍🎓", "🧑‍🎤", "🕺", "💃", "🚶", "🏃"] },
+  { label: "Body & hearts", items: ["👍", "👎", "👌", "✌️", "🤞", "🤟", "🤘", "👏", "🙌", "🙏", "🤝", "💪", "✋", "🖐️", "👋", "🤚", "👉", "👈", "👆", "👇", "✊", "👊", "🫶", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "💔", "❣️", "💕", "💞", "💗", "💓", "💖", "🫂", "🫀", "🧠", "👁️", "👀", "👣"] },
+  { label: "Buildings & places", items: ["🏠", "🏡", "🏢", "🏫", "🏥", "🏪", "🏦", "⛪", "🕌", "🛕", "🕍", "🏭", "🏛️", "🏗️", "🏨", "🏰", "🏯", "🗼", "🗽", "⛲", "⛺", "🏕️", "🏖️", "🚪", "🪟", "🛏️", "🛋️", "🚽", "🚿", "🪑", "🧱", "🪜", "🏙️", "🌉", "🎪", "⛩️"] },
+  { label: "Nature", items: ["🌳", "🌲", "🌴", "🌵", "🌱", "🌿", "🍀", "☘️", "🎋", "🎍", "🌾", "🌸", "🌷", "🌹", "🌻", "🌼", "🌺", "💐", "🍄", "🌰", "🍁", "🍂", "🍃", "🌊", "⛰️", "🏔️", "🗻", "🌋", "🏞️", "🏜️", "🏝️", "🪨", "🔥", "💧", "💦", "❄️", "⛄", "🌙", "⭐", "🌟", "✨", "☄️", "🪐", "🌍"] },
+  { label: "Weather", items: ["☀️", "🌤️", "⛅", "🌥️", "☁️", "🌦️", "🌧️", "⛈️", "🌩️", "🌨️", "🌈", "🌙", "🌛", "🌜", "💨", "🌪️", "🌫️", "🌬️", "⚡", "🌡️"] },
+  { label: "Transport & travel", items: ["🚗", "🚕", "🚙", "🚐", "🚌", "🚎", "🚚", "🚛", "🚜", "🚓", "🚑", "🚒", "🚲", "🛴", "🛵", "🏍️", "🚨", "✈️", "🛩️", "🚁", "🚀", "🛸", "⛵", "🚤", "🛥️", "🚢", "⛴️", "🚂", "🚆", "🚊", "🚉", "🚦", "🚥", "🛣️", "🛤️", "🅿️", "⚓", "🛑", "🧭", "🗺️", "🧳"] },
+  { label: "Animals", items: ["🐶", "🐕", "🐱", "🐈", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐗", "🐴", "🦄", "🐝", "🐛", "🦋", "🐌", "🐞", "🐢", "🐍", "🦎", "🐙", "🦑", "🦀", "🐠", "🐟", "🐬", "🐳", "🐋", "🦅", "🦉", "🦆", "🐔", "🐧", "🕊️", "🐿️", "🦔", "🐑", "🐄", "🐖"] },
+  { label: "Food & drink", items: ["🍎", "🍏", "🍊", "🍋", "🍌", "🍉", "🍇", "🍓", "🫐", "🍑", "🍍", "🥭", "🥥", "🥝", "🍅", "🥕", "🌽", "🥦", "🥔", "🍞", "🥐", "🥖", "🧀", "🥚", "🍳", "🥞", "🧇", "🥓", "🍔", "🍟", "🍕", "🌭", "🌮", "🌯", "🥗", "🍝", "🍜", "🍣", "🍦", "🍩", "🍪", "🎂", "🍰", "🍫", "🍬", "☕", "🍵", "🥤", "🍺", "🍷", "🥂"] },
+  { label: "Activities & objects", items: ["💻", "📱", "🖥️", "⌨️", "🖨️", "📷", "📸", "🎥", "📺", "🎮", "🕹️", "☎️", "📞", "✉️", "📧", "📅", "📆", "🕐", "⏰", "⏳", "🔔", "🔑", "🗝️", "🔒", "🔓", "💡", "🔦", "🕯️", "🧰", "🔧", "🔨", "🪛", "🪚", "📦", "🎁", "🛒", "💰", "💵", "💳", "📈", "📉", "📊", "📋", "📌", "📎", "✏️", "🖊️", "🖌️", "🎨", "📖", "📚", "🎓", "🏆", "🥇", "⚽", "🏀", "🎸", "🎵", "⚙️"] },
+  { label: "Symbols", items: ["❤️", "⭐", "✅", "❌", "⚠️", "❓", "❗", "➕", "➖", "✖️", "➗", "🟰", "♾️", "🚩", "🏁", "🏳️", "🎯", "💬", "💭", "🗯️", "🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "🟤", "⚫", "⚪", "🔺", "🔻", "🔶", "🔷", "⬆️", "⬇️", "⬅️", "➡️", "↗️", "↘️", "↖️", "↙️", "🔁", "🔄", "♻️", "🆗", "🆕", "🔝", "🚫", "⛔", "✔️", "☑️", "〽️"] },
 ];
 
 type Tool =
@@ -168,8 +171,9 @@ export function Whiteboard({
   const [fontSize, setFontSize] = useState(24);
   const [stamp, setStamp] = useState(stampsFlat[0]);
   const [stampOpen, setStampOpen] = useState(false);
-  const [artId, setArtId] = useState<string>(ART_GROUPS[0].items[0]);
-  const [artOpen, setArtOpen] = useState(false);
+  // Legacy vector art tool: no longer offered in the toolbar (superseded by the
+  // AI Face kit), but existing boards may still contain `art` elements.
+  const [artId] = useState<string>(ART_GROUPS[0].items[0]);
   const [addOpen, setAddOpen] = useState(false); // "＋ Add" object dropdown
   const [shapeMenu, setShapeMenu] = useState(false);
   const [tableRows, setTableRows] = useState(3);
@@ -1017,57 +1021,8 @@ export function Whiteboard({
                 </div>
               )}
             </div>
-            {/* art / face-parts dropdown */}
-            <div className="relative">
-              <button
-                type="button"
-                title="Place a face part / art piece"
-                onClick={() => {
-                  setTool("art");
-                  setArtOpen((v) => !v);
-                  setStampOpen(false);
-                  setShapeMenu(false);
-                }}
-                className={`flex items-center gap-1 rounded-md border px-2 py-1 text-sm leading-none ${
-                  tool === "art" ? "border-indigo-500 bg-indigo-50" : "border-slate-200 bg-white hover:bg-slate-50"
-                }`}
-              >
-                <svg viewBox="0 0 100 100" className="h-4 w-4">
-                  <g dangerouslySetInnerHTML={{ __html: artPiece(artId, "#0f172a", null) }} />
-                </svg>
-                Face ▾
-              </button>
-              {artOpen && (
-                <div className="absolute z-10 mt-1 max-h-72 w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
-                  {ART_GROUPS.map((g) => (
-                    <div key={g.label} className="mb-1">
-                      <p className="px-1 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                        {g.label}
-                      </p>
-                      <div className="grid grid-cols-6 gap-0.5">
-                        {g.items.map((a) => (
-                          <button
-                            key={a}
-                            type="button"
-                            title={a}
-                            onClick={() => {
-                              setArtId(a);
-                              setTool("art");
-                              setArtOpen(false);
-                            }}
-                            className={`rounded p-1 hover:bg-slate-100 ${artId === a ? "bg-indigo-50 ring-1 ring-indigo-300" : ""}`}
-                          >
-                            <svg viewBox="0 0 100 100" className="h-7 w-7">
-                              <g dangerouslySetInnerHTML={{ __html: artPiece(a, "#0f172a", null) }} />
-                            </svg>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* (The old vector "Face ▾" art picker was removed — the AI Face kit
+                below supersedes it.) */}
             {/* AI face-part pieces (hand-drawn eyes etc., placed as images) */}
             <div className="relative">
               <button
@@ -1075,7 +1030,6 @@ export function Whiteboard({
                 title="Drop a hand-drawn face part (eyes…)"
                 onClick={() => {
                   setPartsOpen((v) => !v);
-                  setArtOpen(false);
                   setStampOpen(false);
                   setShapeMenu(false);
                 }}

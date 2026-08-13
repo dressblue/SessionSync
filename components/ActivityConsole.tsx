@@ -17,7 +17,6 @@ import {
 } from "./ChecklistBuilder";
 import { BlocksBuilder } from "./BlocksBuilder";
 import { LIKERT_ANCHOR_LABELS } from "@/lib/likert";
-import { BUILD_TOPICS } from "@/lib/buildTopics";
 
 interface Props {
   sessionId: string;
@@ -745,27 +744,12 @@ export function ActivityConsole({
             ) : kind === "blocks" ? (
               <BlocksBuilder labels={blockLabels} onChange={setBlockLabels} />
             ) : kind === "build" ? (
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-slate-500">
-                  Build topic (seeds the piece bucket + prompt)
-                </label>
-                <select
-                  value={buildTopicSel}
-                  onChange={(e) => setBuildTopicSel(e.target.value)}
-                  className="rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white"
-                >
-                  {BUILD_TOPICS.map((t) => (
-                    <option key={t.key} value={t.key}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-slate-400">
-                  Each participant builds privately on their own canvas; you can
-                  present any build to the room. Prompt above overrides the
-                  topic&apos;s default.
-                </p>
-              </div>
+              <p className="text-[11px] text-slate-400">
+                Each participant builds privately on their own canvas from one
+                shared set of pieces (icons + the Face kit) — no theme to pick.
+                Use the Prompt above to tell them what to build; you can present
+                any build to the room.
+              </p>
             ) : kind === "impact1" ||
             kind === "impact2" ||
             kind === "impact3" ||

@@ -93,18 +93,18 @@ export function BuildStudio({
     <div className="flex flex-col gap-4">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
-          Build · {build.topicLabel}
+          Build
         </p>
-        <p className="text-sm text-slate-700">{build.prompt}</p>
+        {build.prompt && <p className="text-sm text-slate-700">{build.prompt}</p>}
       </div>
 
-      {/* The builder's own canvas (facilitator builds too) */}
+      {/* The builder's own canvas (facilitator builds too). One consolidated
+          icon set + the Face kit — no theme to choose. */}
       {canBuild && (
         <Whiteboard
           strokes={build.myElements}
           canDraw
           canModerate={false}
-          stampGroups={build.pieces}
           onStroke={onStroke}
           onElement={onElement}
           onElementUpdate={onElementUpdate}

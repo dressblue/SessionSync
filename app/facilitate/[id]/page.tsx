@@ -25,7 +25,6 @@ import { ActivityConsole } from "@/components/ActivityConsole";
 import { Chat } from "@/components/Chat";
 import { SpotlightBanner } from "@/components/SpotlightMessage";
 import { LIKERT_ANCHOR_LABELS } from "@/lib/likert";
-import { BUILD_TOPICS } from "@/lib/buildTopics";
 import { shareOrigin } from "@/lib/appOrigin";
 
 const TOOL_BADGES: Record<string, string> = {
@@ -1826,27 +1825,12 @@ function Console() {
                           </div>
                         )}
                         {toolKind === "build" && (
-                          <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-semibold text-slate-500">
-                              Build topic (seeds the piece bucket + prompt)
-                            </label>
-                            <select
-                              value={toolTopic}
-                              onChange={(e) => setToolTopic(e.target.value)}
-                              className="rounded-md border border-slate-300 px-2 py-1.5 text-xs bg-white"
-                            >
-                              {BUILD_TOPICS.map((t) => (
-                                <option key={t.key} value={t.key}>
-                                  {t.label}
-                                </option>
-                              ))}
-                            </select>
-                            <p className="text-[11px] text-slate-400">
-                              Each participant builds privately; you can present
-                              any build to the room. Optional prompt below
-                              overrides the topic&apos;s default.
-                            </p>
-                          </div>
+                          <p className="text-[11px] text-slate-400">
+                            Each participant builds privately from one shared set
+                            of pieces (icons + the Face kit) — no theme to pick.
+                            The optional prompt below tells them what to build;
+                            you can present any build to the room.
+                          </p>
                         )}
                         {toolKind !== "whiteboard" &&
                           toolKind !== "exhibit" &&
