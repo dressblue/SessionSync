@@ -440,7 +440,7 @@ export async function POST(
       stroke.c.length <= 20 &&
       typeof stroke?.w === "number" &&
       stroke.w >= 1 &&
-      stroke.w <= 16 &&
+      stroke.w <= 60 && // wider allowance for brushes (highlighter/airbrush)
       points.length >= 2 &&
       points.length <= 800 &&
       points.every(
@@ -452,14 +452,23 @@ export async function POST(
     if (!valid) {
       return NextResponse.json({ error: "Invalid stroke" }, { status: 400 });
     }
-    const value = JSON.stringify({
+    const BRUSHES = ["pen", "marker", "airbrush", "chalk", "crayon", "spray"];
+    const TEXTURES = ["smooth", "rough", "chalk", "spray"];
+    const strokeVal: Record<string, unknown> = {
       c: stroke.c,
       w: stroke.w,
       p: points.map((pt: [number, number]) => [
         Math.round(pt[0] * 1000) / 1000,
         Math.round(pt[1] * 1000) / 1000,
       ]),
-    });
+    };
+    if (typeof stroke.br === "string" && BRUSHES.includes(stroke.br) && stroke.br !== "pen")
+      strokeVal.br = stroke.br;
+    if (typeof stroke.soft === "number" && isFinite(stroke.soft) && stroke.soft > 0)
+      strokeVal.soft = Math.min(4, Math.max(0, stroke.soft));
+    if (typeof stroke.tex === "string" && TEXTURES.includes(stroke.tex) && stroke.tex !== "smooth")
+      strokeVal.tex = stroke.tex;
+    const value = JSON.stringify(strokeVal);
     if (value.length > 30_000) {
       return NextResponse.json({ error: "Stroke too large" }, { status: 400 });
     }

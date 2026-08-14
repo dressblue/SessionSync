@@ -25,7 +25,17 @@ const FILLS: (string | null)[] = [
   "#d9f99d", "#bbf7d0", "#a7f3d0", "#a5f3fc", "#bfdbfe", "#c7d2fe",
   "#ddd6fe", "#f5d0fe", "#fbcfe8", "#e5e7eb", "#fca5a5", "#fdba74",
 ];
-const WIDTHS = [2, 4, 7];
+const WIDTHS = [2, 4, 7, 12, 22];
+// Paint brushes: each seeds a feathering + texture default the user can then
+// tune. `br` also drives the stroke's opacity/feel in the renderer.
+const BRUSHES: { id: string; label: string; soft: number; tex: string }[] = [
+  { id: "pen", label: "✏️ Pen", soft: 0, tex: "smooth" },
+  { id: "marker", label: "🖍 Marker", soft: 0, tex: "smooth" },
+  { id: "airbrush", label: "💨 Airbrush", soft: 3, tex: "smooth" },
+  { id: "chalk", label: "▨ Chalk", soft: 0, tex: "chalk" },
+  { id: "crayon", label: "◍ Crayon", soft: 0, tex: "rough" },
+  { id: "spray", label: "✷ Spray", soft: 1, tex: "spray" },
+];
 // Pattern fills (stored as "p:<type>:<color>"); CSS previews for the picker.
 const PATTERN_TYPES = ["dots", "stripes", "grid", "cross", "checker"] as const;
 const patternPreview = (type: string, c: string): string => {
@@ -169,6 +179,11 @@ export function Whiteboard({
   const [color, setColor] = useState(COLORS[0]);
   const [fill, setFill] = useState<string | null>(null);
   const [width, setWidth] = useState(WIDTHS[1]);
+  // Brush: base kind (opacity/feel), plus feathering + texture the user can tune.
+  const [brush, setBrush] = useState<string>("pen");
+  const [feather, setFeather] = useState(0); // 0..4 edge softness
+  const [texture, setTexture] = useState<string>("smooth");
+  const [brushOpen, setBrushOpen] = useState(false);
   const [fontSize, setFontSize] = useState(24);
   const [stamp, setStamp] = useState(stampsFlat[0]);
   const [stampOpen, setStampOpen] = useState(false);
@@ -234,6 +249,7 @@ export function Whiteboard({
   // optimistically, so the palette also recolours a placed object.
   const applyToSelected = (patch: Record<string, unknown>) => {
     if (!selected) return;
+    snapshot([selected.id]);
     setPending((p) => ({ ...p, [selected.id]: { ...p[selected.id], ...patch } }));
     onElementUpdate({ id: selected.id, ...patch });
   };
@@ -253,6 +269,7 @@ export function Whiteboard({
   const commitRename = () => {
     if (!renaming) return;
     const nm = renaming.value.trim().slice(0, 40);
+    snapshot([renaming.id]);
     setPending((p) => ({ ...p, [renaming.id]: { ...p[renaming.id], nm: nm || undefined } }));
     onElementUpdate({ id: renaming.id, nm: nm || null });
     setRenaming(null);
@@ -290,6 +307,7 @@ export function Whiteboard({
   // Mirror each selected element horizontally about its own box centre — lets a
   // single asymmetric piece (an eye, ear, brow) be placed twice as a L/R pair.
   const flipSelected = () => {
+    snapshot([...selectedIds]);
     for (const id of selectedIds) {
       const cur = byId.get(id);
       if (!cur || !cur.k || cur.k === "conn") continue;
@@ -391,8 +409,67 @@ export function Whiteboard({
     }
   }
 
+  // --- Multi-step undo history --------------------------------------------
+  // Each entry is either a just-created id (undo = delete it) or a set of
+  // pre-change element snapshots (undo = restore them, recreating if deleted).
+  type Hist = { created: string } | { snaps: Stroke[] };
+  const history = useRef<Hist[]>([]);
+  const recording = useRef(true); // paused while an undo is being applied
+  const [histLen, setHistLen] = useState(0);
+  const pushHist = (item: Hist) => {
+    if (!recording.current) return;
+    history.current.push(item);
+    if (history.current.length > 60) history.current.shift();
+    setHistLen(history.current.length);
+  };
+  // Snapshot the current state of some elements BEFORE they change.
+  const snapshot = (ids: string[]) => {
+    const snaps = ids
+      .map((id) => byId.get(id))
+      .filter((e): e is Stroke => !!e)
+      .map((e) => ({ ...e }));
+    if (snaps.length) pushHist({ snaps });
+  };
+  async function undo() {
+    const item = history.current.pop();
+    setHistLen(history.current.length);
+    if (!item) return;
+    recording.current = false;
+    try {
+      if ("created" in item) {
+        const id = item.created;
+        onUndo(id);
+        setLocalEls((prev) => prev.filter((e) => e.id !== id));
+        setPending((p) => {
+          const n = { ...p };
+          delete n[id];
+          return n;
+        });
+        setSelectedIds((prev) => {
+          if (!prev.has(id)) return prev;
+          const n = new Set(prev);
+          n.delete(id);
+          return n;
+        });
+      } else {
+        for (const el of item.snaps) {
+          if (byId.has(el.id)) {
+            setPending((p) => ({ ...p, [el.id]: { ...el } }));
+            const { id, mine, ...rest } = el; // eslint-disable-line @typescript-eslint/no-unused-vars
+            onElementUpdate({ id, ...rest });
+          } else {
+            await create(el); // was deleted/erased → recreate it
+          }
+        }
+      }
+    } finally {
+      recording.current = true;
+    }
+  }
+
   async function create(el: Stroke) {
     setLocalEls((prev) => [...prev, el]);
+    pushHist({ created: el.id });
     const { id, mine, ...rest } = el; // eslint-disable-line @typescript-eslint/no-unused-vars
     if (!el.k) await onStroke({ id, ...rest });
     else await onElement({ id, ...rest });
@@ -548,6 +625,7 @@ export function Whiteboard({
       const moveIds = keep ? [...selectedIds] : grp;
       if (!keep) setSelectedIds(new Set(grp));
       capture();
+      snapshot(moveIds); // remember pre-move positions for Undo
       drag.current = {
         mode: "move",
         ids: moveIds
@@ -697,7 +775,16 @@ export function Whiteboard({
       const d = drawing;
       setDrawing(null);
       if (d.length > 1)
-        await create({ id: uid(), mine: true, c: color, w: width, p: points.slice(0, 800) });
+        await create({
+          id: uid(),
+          mine: true,
+          c: color,
+          w: width,
+          p: points.slice(0, 800),
+          ...(brush !== "pen" ? { br: brush } : {}),
+          ...(feather > 0 ? { soft: feather } : {}),
+          ...(texture !== "smooth" ? { tex: texture } : {}),
+        });
       return;
     }
     if (draft) {
@@ -785,6 +872,7 @@ export function Whiteboard({
       const n = (el?.rows ?? 3) * (el?.cols ?? 3);
       const cells = Array.from({ length: n }, (_, i) => (el?.cells ?? [])[i] ?? "");
       cells[cell] = value;
+      snapshot([id]);
       setPending((p) => ({ ...p, [id]: { ...p[id], cells } }));
       onElementUpdate({ id, cells });
       return;
@@ -796,11 +884,13 @@ export function Whiteboard({
       setSelectedIds(new Set());
       return;
     }
+    if (!isNew) snapshot([id]); // new elements are undone by their create entry
     setPending((p) => ({ ...p, [id]: { ...p[id], t: value } }));
     onElementUpdate({ id, t: value });
   }
 
   function removeId(id: string) {
+    snapshot([id]); // remember it so Undo can bring it back
     onUndo(id);
     setLocalEls((prev) => prev.filter((e) => e.id !== id));
     setSelectedIds((prev) => {
@@ -814,6 +904,7 @@ export function Whiteboard({
   function startHandle(e: React.PointerEvent, d: NonNullable<typeof drag.current>) {
     e.stopPropagation();
     svgRef.current?.setPointerCapture?.(e.pointerId);
+    if ("id" in d) snapshot([d.id]); // resize/rotate/endpoint/vertex → undoable
     drag.current = d;
   }
 
@@ -848,6 +939,7 @@ export function Whiteboard({
       if (z > mx) mx = z;
     }
     const z = dir === "front" ? mx + 1 : mn - 1;
+    snapshot([id]);
     setPending((p) => ({ ...p, [id]: { ...p[id], z } }));
     onElementUpdate({ id, z });
   }
@@ -858,6 +950,7 @@ export function Whiteboard({
 
   // Group the selected elements under a fresh id (or ungroup them).
   function groupSelected() {
+    snapshot([...selectedIds]);
     const gid = uid().slice(0, 12);
     for (const id of selectedIds) {
       setPending((p) => ({ ...p, [id]: { ...p[id], g: gid } }));
@@ -865,6 +958,7 @@ export function Whiteboard({
     }
   }
   function ungroupSelected() {
+    snapshot([...selectedIds]);
     for (const id of selectedIds) {
       setPending((p) => ({ ...p, [id]: { ...p[id], g: undefined } }));
       onElementUpdate({ id, g: "" });
@@ -875,6 +969,7 @@ export function Whiteboard({
   function addVertex(id: string, afterIdx: number, unit: [number, number]) {
     const el = byId.get(id);
     if (!el?.pts) return;
+    snapshot([id]);
     const pts = [...el.pts];
     pts.splice(afterIdx + 1, 0, unit);
     setPending((p) => ({ ...p, [id]: { ...p[id], pts } }));
@@ -883,6 +978,7 @@ export function Whiteboard({
   function removeVertex(id: string, i: number) {
     const el = byId.get(id);
     if (!el?.pts || el.pts.length <= 3) return;
+    snapshot([id]);
     const pts = el.pts.filter((_, idx) => idx !== i);
     setPending((p) => ({ ...p, [id]: { ...p[id], pts } }));
     onElementUpdate({ id, pts });
@@ -912,7 +1008,88 @@ export function Whiteboard({
         <>
           <div className="flex flex-wrap items-center gap-1.5">
             {toolBtn("select", "▷", "Select / move")}
+            <button
+              type="button"
+              onClick={undo}
+              disabled={histLen === 0}
+              title="Undo the last action (click repeatedly to step back)"
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm leading-none hover:bg-slate-50 disabled:opacity-40"
+            >
+              ↶ Undo
+            </button>
             {toolBtn("pen", "✎", "Pen")}
+            {/* Brush picker — color/feather/texture for painting */}
+            <div className="relative">
+              <button
+                type="button"
+                title="Brush — pick a paint brush, feathering and texture"
+                onClick={() => {
+                  setTool("pen");
+                  setBrushOpen((v) => !v);
+                  setStampOpen(false);
+                  setShapeMenu(false);
+                }}
+                className={`rounded-md border px-2 py-1 text-sm leading-none ${
+                  tool === "pen" && brush !== "pen"
+                    ? "border-indigo-500 bg-indigo-50"
+                    : "border-slate-200 bg-white hover:bg-slate-50"
+                }`}
+              >
+                🖌 Brush ▾
+              </button>
+              {brushOpen && (
+                <div className="absolute z-10 mt-1 w-56 rounded-lg border border-slate-200 bg-white p-2 text-xs shadow-lg">
+                  <p className="mb-1 font-semibold uppercase tracking-wide text-slate-400">Brush</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {BRUSHES.map((b) => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => {
+                          setBrush(b.id);
+                          setFeather(b.soft);
+                          setTexture(b.tex);
+                          setTool("pen");
+                        }}
+                        className={`rounded border px-1.5 py-1 text-left ${
+                          brush === b.id ? "border-indigo-400 bg-indigo-50" : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        {b.label}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="mt-2 block font-semibold uppercase tracking-wide text-slate-400">
+                    Feather · {feather}
+                  </label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={4}
+                    step={1}
+                    value={feather}
+                    onChange={(e) => setFeather(Number(e.target.value))}
+                    className="w-full"
+                  />
+                  <p className="mt-2 font-semibold uppercase tracking-wide text-slate-400">Texture</p>
+                  <div className="mt-0.5 grid grid-cols-2 gap-1">
+                    {["smooth", "rough", "chalk", "spray"].map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setTexture(t)}
+                        className={`rounded border px-1.5 py-1 capitalize ${
+                          texture === t ? "border-indigo-400 bg-indigo-50" : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-[10px] text-slate-400">Color &amp; size use the pickers on the right.</p>
+                </div>
+              )}
+            </div>
             {toolBtn("eraser", "⌫", "Eraser — click or drag over anything to remove it")}
             {toolBtn("text", "T", "Text")}
             {toolBtn("line", "╱", "Line")}

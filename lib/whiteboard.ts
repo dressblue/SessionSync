@@ -156,6 +156,35 @@ function patternDefsFor(el: Stroke): string {
   return `<defs>${patternTile(`pat_${el.id}`, parts[1] || "dots", parts[2] || "#64748b")}</defs>`;
 }
 
+// Brush effects for a freehand stroke: `soft` feathers the edge (Gaussian blur)
+// and `tex` roughens it (turbulence displacement). Returns a <defs> filter and
+// the `filter="…"` attribute to hang on the path (empty for a plain pen).
+function brushFilter(el: Stroke, sw: number): { defs: string; attr: string } {
+  const soft = el.soft ?? 0;
+  const tex = el.tex;
+  const textured = tex === "rough" || tex === "chalk" || tex === "spray";
+  if (soft <= 0 && !textured) return { defs: "", attr: "" };
+  const id = `bf_${el.id}`;
+  let inner = "";
+  let src = "SourceGraphic";
+  if (textured) {
+    const freq = tex === "spray" ? 0.34 : tex === "chalk" ? 0.09 : 0.05;
+    const scale = tex === "spray" ? sw * 1.6 : tex === "chalk" ? sw * 0.7 : sw * 0.55;
+    const ttype = tex === "chalk" ? "fractalNoise" : "turbulence";
+    inner += `<feTurbulence type="${ttype}" baseFrequency="${freq}" numOctaves="2" seed="7" result="n"/>`;
+    inner += `<feDisplacementMap in="SourceGraphic" in2="n" scale="${scale.toFixed(1)}" xChannelSelector="R" yChannelSelector="G" result="d"/>`;
+    src = "d";
+  }
+  if (soft > 0) inner += `<feGaussianBlur in="${src}" stdDeviation="${(soft * 1.4).toFixed(2)}"/>`;
+  return {
+    defs: `<defs><filter id="${id}" x="-40%" y="-40%" width="180%" height="180%">${inner}</filter></defs>`,
+    attr: ` filter="url(#${id})"`,
+  };
+}
+const BRUSH_OPACITY: Record<string, number> = {
+  marker: 0.4, airbrush: 0.75, spray: 0.85, chalk: 0.9, crayon: 0.95,
+};
+
 // Render one element to an SVG fragment string, prepend any pattern-fill def,
 // then rotate and/or mirror it about its box center (pen strokes and
 // connectors aren't box-anchored, so they're left untransformed).
@@ -182,13 +211,16 @@ function elementToSvgRaw(el: Stroke, byId: Map<string, Stroke>): string {
   const stroke = el.c ?? "#0f172a";
   const sw = el.sw ?? el.w ?? 3;
 
-  // Freehand pen (legacy: no `k`).
+  // Freehand pen / brush (no `k`). Brushes add color-opacity, feathering, texture.
   if (!el.k) {
     if (!el.p || el.p.length === 0) return "";
     const d = el.p
       .map((pt, i) => `${i === 0 ? "M" : "L"}${(pt[0] * W).toFixed(1)},${(pt[1] * H).toFixed(1)}`)
       .join(" ");
-    return `<path d="${d}" stroke="${esc(stroke)}" stroke-width="${sw}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+    const op = BRUSH_OPACITY[el.br ?? "pen"] ?? 1;
+    const { defs, attr } = brushFilter(el, sw);
+    const opAttr = op < 1 ? ` opacity="${op}"` : "";
+    return `${defs}<path d="${d}" stroke="${esc(stroke)}" stroke-width="${sw}" fill="none" stroke-linecap="round" stroke-linejoin="round"${opAttr}${attr}/>`;
   }
 
   const b = boxOf(el);

@@ -133,6 +133,9 @@ export interface Stroke {
   c?: string;
   w?: number;
   p?: [number, number][];
+  br?: string; // brush kind (pen / marker / airbrush / chalk / crayon / spray)
+  soft?: number; // brush feathering (edge blur), 0..4
+  tex?: string; // brush texture (smooth / rough / chalk / spray)
   k?: string;
   x?: number;
   y?: number;
