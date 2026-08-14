@@ -1017,8 +1017,7 @@ export function Whiteboard({
             >
               ↶ Undo
             </button>
-            {toolBtn("pen", "✎", "Pen")}
-            {/* Brush picker — color/feather/texture for painting */}
+            {/* Brush picker — the paint/pen tool (color/feather/texture) */}
             <div className="relative">
               <button
                 type="button"
@@ -1030,7 +1029,7 @@ export function Whiteboard({
                   setShapeMenu(false);
                 }}
                 className={`rounded-md border px-2 py-1 text-sm leading-none ${
-                  tool === "pen" && brush !== "pen"
+                  tool === "pen"
                     ? "border-indigo-500 bg-indigo-50"
                     : "border-slate-200 bg-white hover:bg-slate-50"
                 }`}
