@@ -1086,7 +1086,47 @@ export function Whiteboard({
                       </button>
                     ))}
                   </div>
-                  <p className="mt-1.5 text-[10px] text-slate-400">Color &amp; size use the pickers on the right.</p>
+                  <p className="mt-2 font-semibold uppercase tracking-wide text-slate-400">Color</p>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                    {COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        title={c}
+                        onClick={() => pickColor(c)}
+                        style={{ background: c }}
+                        className={`h-5 w-5 rounded-full border ${
+                          color === c ? "ring-2 ring-indigo-500 ring-offset-1" : "border-slate-300"
+                        }`}
+                      />
+                    ))}
+                    <input
+                      type="color"
+                      value={/^#[0-9a-fA-F]{6}$/.test(color) ? color : "#0f172a"}
+                      onChange={(e) => pickColor(e.target.value)}
+                      title="Custom color"
+                      className="h-5 w-6 cursor-pointer rounded border border-slate-300 bg-white p-0"
+                    />
+                  </div>
+                  <p className="mt-2 font-semibold uppercase tracking-wide text-slate-400">Size</p>
+                  <div className="mt-0.5 flex items-center gap-1">
+                    {WIDTHS.map((w) => (
+                      <button
+                        key={w}
+                        type="button"
+                        title={`${w}px`}
+                        onClick={() => setWidth(w)}
+                        className={`flex h-7 w-7 items-center justify-center rounded border ${
+                          width === w ? "border-indigo-400 bg-indigo-50" : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span
+                          className="rounded-full bg-slate-700"
+                          style={{ width: Math.min(18, w + 2), height: Math.min(18, w + 2) }}
+                        />
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
